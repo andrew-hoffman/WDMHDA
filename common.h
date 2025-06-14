@@ -1,0 +1,480 @@
+/********************************************************************************
+**    Copyright (c) 1998-1999 Microsoft Corporation. All Rights Reserved.
+**
+**       Portions Copyright (c) 1998-1999 Intel Corporation
+**
+********************************************************************************/
+
+#ifndef _COMMON_H_
+#define _COMMON_H_
+
+#include "shared.h"
+
+/*****************************************************************************
+ * Defines for HD Audio
+ *****************************************************************************/
+
+// Communication types
+#define HDA_UNINITALIZED 0
+#define HDA_CORB_RIRB 1
+#define HDA_PIO 2
+
+// Widget types
+#define HDA_WIDGET_AUDIO_OUTPUT 0x0
+#define HDA_WIDGET_AUDIO_INPUT 0x1
+#define HDA_WIDGET_AUDIO_MIXER 0x2
+#define HDA_WIDGET_AUDIO_SELECTOR 0x3
+#define HDA_WIDGET_PIN_COMPLEX 0x4
+#define HDA_WIDGET_POWER_WIDGET 0x5
+#define HDA_WIDGET_VOLUME_KNOB 0x6
+#define HDA_WIDGET_BEEP_GENERATOR 0x7
+#define HDA_WIDGET_VENDOR_DEFINED 0xF
+
+// Pin definitions
+#define HDA_PIN_LINE_OUT 0x0
+#define HDA_PIN_SPEAKER 0x1
+#define HDA_PIN_HEADPHONE_OUT 0x2
+#define HDA_PIN_CD 0x3
+#define HDA_PIN_SPDIF_OUT 0x4
+#define HDA_PIN_DIGITAL_OTHER_OUT 0x5
+#define HDA_PIN_MODEM_LINE_SIDE 0x6
+#define HDA_PIN_MODEM_HANDSET_SIDE 0x7
+#define HDA_PIN_LINE_IN 0x8
+#define HDA_PIN_AUX 0x9
+#define HDA_PIN_MIC_IN 0xA
+#define HDA_PIN_TELEPHONY 0xB
+#define HDA_PIN_SPDIF_IN 0xC
+#define HDA_PIN_DIGITAL_OTHER_IN 0xD
+#define HDA_PIN_RESERVED 0xE
+#define HDA_PIN_OTHER 0xF
+
+// Node types
+#define HDA_OUTPUT_NODE 0x1
+#define HDA_INPUT_NODE 0x2
+
+/*****************************************************************************
+ * Structs
+ *****************************************************************************
+ */
+ 
+//                                              
+// Contains pin and node configuration 
+typedef struct
+{
+    // For nodes.
+    struct
+    {
+        BOOL	bNodeConfig;
+    } Nodes[NODEC_TOP_ELEMENT];
+
+    // For pins.
+    struct
+    {
+        BOOL	bPinConfig;
+        PWCHAR  sRegistryName;
+    } Pins[PINC_TOP_ELEMENT];
+} tHardwareConfig;
+
+//
+// We cache the AC97 registers.  Additionally, we want some default values
+// when the driver comes up first that are different from the HW default
+// values. The string in the structure is the name of the registry entry
+// that can be used instead of the hard coded default value.
+//
+typedef struct
+{
+    WORD    wCache;
+    WORD    wFlags;
+    PWCHAR  sRegistryName;
+    WORD    wWantedDefault;
+} tAC97Registers;
+
+/*****************************************************************************
+ * Structures
+ *****************************************************************************/
+
+
+// PCI device info structure (WDM style)
+typedef struct _PCI_DEVICE_INFO {
+    ULONG VendorId;
+    ULONG DeviceId;
+    ULONG BusNumber;
+    ULONG DeviceFunction;
+    PVOID MappedResources;
+} PCI_DEVICE_INFO, *PPCI_DEVICE_INFO;
+
+// HD Audio info structure (WDM style)
+typedef struct _HDA_DEVICE_EXTENSION {
+    // PCI device information
+    PCI_DEVICE_INFO PciInfo;
+
+    // Base addresses and stream information
+    ULONG Base;
+    ULONG InputStreamBase;
+    ULONG OutputStreamBase;
+    ULONG CommunicationType;
+    ULONG CodecNumber;
+    ULONG IsInitalizedUsefulOutput;
+    ULONG SelectedOutputNode;
+
+    // CORB/RIRB buffers
+    PULONG CorbMem;
+    ULONG CorbPointer;
+    ULONG CorbNumberOfEntries;
+    PULONG RirbMem;
+    ULONG RirbPointer;
+    ULONG RirbNumberOfEntries;
+
+    // Output buffer information
+    PULONG OutputBufferList;
+    ULONG SoundLength;
+    ULONG BytesOnOutputForStoppingSound;
+    ULONG LengthOfNodePath;
+
+    // AFG (Audio Function Group) node capabilities
+    ULONG AfgNodeSampleCapabilities;
+    ULONG AfgNodeStreamFormatCapabilities;
+    ULONG AfgNodeInputAmpCapabilities;
+    ULONG AfgNodeOutputAmpCapabilities;
+
+    // Audio output nodes
+    ULONG AudioOutputNodeNumber;
+    ULONG AudioOutputNodeSampleCapabilities;
+    ULONG AudioOutputNodeStreamFormatCapabilities;
+
+    ULONG OutputAmpNodeNumber;
+    ULONG OutputAmpNodeCapabilities;
+
+    // Secondary audio output nodes
+    ULONG SecondAudioOutputNodeNumber;
+    ULONG SecondAudioOutputNodeSampleCapabilities;
+    ULONG SecondAudioOutputNodeStreamFormatCapabilities;
+    ULONG SecondOutputAmpNodeNumber;
+    ULONG SecondOutputAmpNodeCapabilities;
+
+    // Pin nodes
+    ULONG PinOutputNodeNumber;
+    ULONG PinHeadphoneNodeNumber;
+
+    // Resources
+    PDEVICE_OBJECT PhysicalDeviceObject;
+    PDEVICE_OBJECT FunctionalDeviceObject;
+    PADAPTERCOMMON AdapterCommon;
+    
+    // Synchronization
+    KSPIN_LOCK HardwareLock;
+    
+    // Current state information
+    BOOLEAN PowerState;
+    BOOLEAN HeadphoneConnected;
+    
+    // Selected card
+    ULONG SelectedHdaCard;
+} HDA_DEVICE_EXTENSION, *PHDA_DEVICE_EXTENSION;
+
+
+#define MAX_NUMBER_OF_HDA_SOUND_CARDS 4;
+
+// TODO: rewrite this
+ULONG selected_hda_card;
+
+
+/*****************************************************************************
+ * Constants
+ *****************************************************************************
+ */
+
+//
+// This means shadow register are to be read at least once to initialize.
+//
+const WORD SHREG_INVALID = 0x0001;
+
+//
+// This means shadow register should be overwritten with default value at
+// driver init.
+//
+const WORD SHREG_INIT = 0x0002;
+
+//
+// This constant is used to prevent register caching.
+//
+const WORD SHREG_NOCACHE = 0x0004;
+
+/*****************************************************************************
+ * Classes
+ *****************************************************************************
+ */
+
+/*****************************************************************************
+ * CAdapterCommon
+ *****************************************************************************
+ * This is the common adapter object shared by all miniports to access the
+ * hardware.
+ */
+class CAdapterCommon : public IAdapterCommon, 
+                       public IAdapterPowerManagement,
+                       public CUnknown
+{
+private:
+	static tAC97Registers m_stAC97Registers[64];    // The shadow registers.
+	static struct HDA_DEVICE_EXTENSION m_HDAInfo;
+    static tHardwareConfig m_stHardwareConfig;      // The hardware configuration.
+	//HDA_DEVICE_EXTENSION            m_DevExt;		// Device extension
+	PVOID                           m_pHDARegisters;     // MMIO registers
+    BOOLEAN                         m_bDMAInitialized;   // DMA initialized flag
+    BOOLEAN                         m_bCORBInitialized;  // CORB initialized flag
+    BOOLEAN                         m_bRIRBInitialized;  // RIRB initialized flag
+    PDEVICE_OBJECT m_pDeviceObject;     // Device object used for registry access.
+    PWORD m_pCodecBase;                 // The HDA I/O port address.
+    PUCHAR m_pBusMasterBase;            // The Bus Master base address.
+    BOOL m_bDirectRead;                 // Used during init time.
+    DEVICE_POWER_STATE m_PowerState;    // Current power state of the device.
+
+
+    /*************************************************************************
+     * CAdapterCommon methods
+     *************************************************************************
+     */
+    
+    //
+    // Resets HDA audio registers.
+    //
+    NTSTATUS InitAC97 (void);
+    
+    //
+    // Checks for existance of registers.
+    //
+    NTSTATUS ProbeHWConfig (void);
+
+    //
+    // Returns true if you should disable the input or output pin.
+    //
+    BOOL DisableAC97Pin (IN  TopoPinConfig);
+
+#if (DBG)
+    //
+    // Dumps the probed configuration.
+    //
+    void DumpConfig (void);
+#endif
+
+    //
+    // Sets HDA registers to default.
+    //
+    NTSTATUS SetAC97Default (void);
+
+    //
+    // Aquires the semaphore for HDA register access.
+    //
+    NTSTATUS AcquireCodecSemiphore (void);
+
+    //
+    // Checks if there is a HDA link between ICH and codec.
+    //
+    NTSTATUS PrimaryCodecReady (void);
+
+    //
+    // Powers up the Codec.
+    //
+    NTSTATUS PowerUpCodec (void);
+    
+    //
+    // Saves native audio bus master control registers values to be used 
+    // upon suspend.
+    //
+    NTSTATUS ReadNABMCtrlRegs (void);
+
+    //
+    // Writes back native audio bus master control resgister to be used upon 
+    // resume.
+    //
+    NTSTATUS RestoreNABMCtrlRegs (void);
+
+public:
+    DECLARE_STD_UNKNOWN();
+    DEFINE_STD_CONSTRUCTOR(CAdapterCommon);
+    ~CAdapterCommon();
+
+    /*************************************************************************
+     * IAdapterPowerManagement methods
+     *************************************************************************
+     */
+    IMP_IAdapterPowerManagement;
+
+    /*************************************************************************
+     * IAdapterCommon methods
+     *************************************************************************
+     */
+    
+    //
+    // Initialize the adapter common object -> initialize and probe HW.
+    //
+    STDMETHODIMP_(NTSTATUS) Init
+    (
+        IN  PRESOURCELIST ResourceList,
+        IN  PDEVICE_OBJECT DeviceObject
+    );
+    
+    //
+    // Returns if pin exists.
+    //
+    STDMETHODIMP_(BOOL) GetPinConfig
+    (
+        IN  TopoPinConfig pin
+    )
+    {
+        return m_stHardwareConfig.Pins[pin].bPinConfig;
+    };
+
+    //
+    // Sets the pin configuration (exist/not exist).
+    //
+    STDMETHODIMP_(void) SetPinConfig
+    (
+        IN  TopoPinConfig pin,
+        IN  BOOL config
+    )
+    {
+        m_stHardwareConfig.Pins[pin].bPinConfig = config;
+    };
+
+    //
+    // Return if node exists.
+    //
+    STDMETHODIMP_(BOOL) GetNodeConfig
+    (
+        IN  TopoNodeConfig node
+    )
+    {
+        return m_stHardwareConfig.Nodes[node].bNodeConfig;
+    };
+
+    //
+    // Sets the node configuration (exist/not exist).
+    //
+    STDMETHODIMP_(void) SetNodeConfig
+    (
+        IN  TopoNodeConfig node,
+        IN  BOOL config
+    )
+    {
+        m_stHardwareConfig.Nodes[node].bNodeConfig = config;
+    };
+
+    //
+    // Returns the HDA register that is assosiated with the node.
+    //
+    STDMETHODIMP_(AC97Register) GetNodeReg
+    (   IN  TopoNodes node
+    )
+    {
+        return stMapNodeToReg[node].reg;
+    };
+
+    //
+    // Returns the HDA register mask that is assosiated with the node.
+    //
+    STDMETHODIMP_(WORD) GetNodeMask
+    (
+        IN  TopoNodes node
+    )
+    {
+        return stMapNodeToReg[node].mask;
+    };
+
+    //
+    // Reads a HDA register.
+    //
+    STDMETHODIMP_(NTSTATUS) ReadCodecRegister
+    (
+        IN  AC97Register Register,
+        OUT PWORD wData
+    );
+
+    //
+    // Writes a HDA register.
+    //
+    STDMETHODIMP_(NTSTATUS) WriteCodecRegister
+    (
+        IN  AC97Register Register,
+        IN  WORD wData,
+        IN  WORD wMask
+    );
+
+    //
+    // Reads a 8 bit ICH bus master register.
+    //
+    STDMETHODIMP_(UCHAR) ReadBMControlRegister8
+    (
+        IN  ULONG ulOffset
+    );
+
+    //
+    // Reads a 16 bit ICH bus master register.
+    //
+    STDMETHODIMP_(USHORT) ReadBMControlRegister16
+    (
+        IN  ULONG ulOffset
+    );
+
+    //
+    // Reads a 32 bit ICH bus master register.
+    //
+    STDMETHODIMP_(ULONG) ReadBMControlRegister32
+    (
+        IN  ULONG ulOffset
+    );
+
+    //
+    // Writes a 8 bit ICH bus master register.
+    //                                        
+    STDMETHODIMP_(void) WriteBMControlRegister
+    (
+        IN  ULONG ulOffset,
+        IN  UCHAR Value
+    );
+
+    //
+    // writes a 16 bit ICH bus master register.
+    //
+    STDMETHODIMP_(void) WriteBMControlRegister
+    (
+        IN  ULONG ulOffset,
+        IN  USHORT Value
+    );
+
+    // writes a 32 bit ICH bus master register.
+    STDMETHODIMP_(void) WriteBMControlRegister
+    (
+        IN  ULONG ulOffset,
+        IN  ULONG Value
+    );
+
+    //
+    // Write back cached mixer values to codec registers.
+    //
+    STDMETHODIMP_(NTSTATUS) RestoreCodecRegisters();
+
+    //
+    // Programs a sample rate.
+    //
+    STDMETHODIMP_(NTSTATUS) ProgramSampleRate
+    (
+        IN  AC97Register Register,
+        IN  DWORD dwSampleRate
+    );
+
+
+    /*************************************************************************
+     * Friends
+     *************************************************************************
+     */
+    
+    friend NTSTATUS NewAdapterCommon
+    (
+        OUT PADAPTERCOMMON *OutAdapterCommon,
+        IN  PRESOURCELIST ResourceList
+    );
+};
+
+#endif  //_COMMON_H_

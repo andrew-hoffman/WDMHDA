@@ -1,0 +1,11 @@
+Build Instructions
+
+1. Create a Windows 98se or 2000 VM
+2. Install Visual C++ 6.0 (No service packs)
+3. Install Windows 2000 DDK
+4. Copy the source tree to C:\NTDDK\src\wdm\audio\hda
+5. Open a "Checked Build Environment" or "Free Build Environment" command prompt 
+	(Start > Programs > Development Kits > Windows 2000 DDK)
+6. CD to the hda directory and run "build -cZ"
+
+WDMHDA.SYS will be built in the "objfre" or "objchk" folders. Install it with wdmhda.inf

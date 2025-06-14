@@ -1,0 +1,24 @@
+TARGETNAME=WDMHDA
+TARGETTYPE=DRIVER
+TARGETPATH=obj
+
+TARGETLIBS= \
+        $(SDK_LIB_PATH)\portcls.lib\
+        $(SDK_LIB_PATH)\libcntpr.lib\
+        ..\lib\*\stdunk.lib
+
+INCLUDES=..\inc
+
+MSC_WARNING_LEVEL=-W3 -WX
+
+C_DEFINES=$(CFASTFLAGS) -DUNICODE -D_UNICODE -DUNDER_NT
+LINKER_FLAGS=-map
+
+SOURCES=\
+        adapter.cpp     \
+        common.cpp      \
+        mintopo.cpp     \
+	minwave.cpp	\
+        prophnd.cpp     \
+        ichwave.cpp     \
+        hdadrv.rc

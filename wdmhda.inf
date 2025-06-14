@@ -1,0 +1,318 @@
+;Drew Does what Intel idn't
+;
+;Module Name:
+;   WDMHDA.INF
+;
+;Abstract:
+;    INF file for installing WDM HDA driver
+
+[Version]
+Signature="$CHICAGO$"
+Class=MEDIA
+ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
+provider=%SiriusCybernetics%
+;;LayoutFile=layout.inf, layout1.inf, layout2.inf
+DriverVer=0.0001
+
+;You must specify which platform is supported by each SourceDisksNames section
+;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
+[SourceDisksNames.x86]
+222=%DiskDescription%,,,
+
+;You must also specify which platform is supported by each SourceDisksFiles section
+;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
+[SourceDisksFiles.x86]
+WDMHDA.sys=222
+
+
+[Manufacturer]
+%MfgName%=Intel
+
+;; Excluding drivers from the "Add New Hardware" list.
+[ControlFlags]
+
+ExcludeFromSelect = *
+
+[Intel]
+;;Virtualbox and VMware HDA interfaces
+%WDMHDA_AA.DeviceDesc%=WDMHDA, PCI\VEN_8086&DEV_2668
+%WDMHDA_AB.DeviceDesc%=WDMHDA, PCI\VEN_15AD&DEV_1977
+
+[DestinationDirs]
+WDMHDA.CopyList=10,system32\drivers
+
+[WDMHDA]
+;;This inf is intended for use by IHV. So, it's going to be used as from OEM distributed disk
+;;This is why AlsoInstall got used instead if Needs & Include
+AlsoInstall=KS.Registration(ks.inf), WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=WDMHDA.CopyList
+AddReg=WDMHDA.AddReg,WDMHDA_NAMES.AddReg, WDMHDA_OEM.AddReg
+KnownRegEntries=HDA.KnownRegEntries
+
+[HDA.KnownRegEntries]
+IsWin98Gold=keep
+
+[IsWin98Gold]
+1=HKLM,Software\Microsoft\Windows\CurrentVersion,VersionNumber,0,4.10.1998
+
+[WDMHDA.CopyList]
+WDMHDA.sys
+
+[WDMHDA.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,WDMHDA.Interface.Topology
+
+[WDMHDA.Interface.Wave]
+AddReg=WDMHDA.I.Wave.AddReg
+
+[WDMHDA.I.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%WDMHDA.Wave.szPname%
+
+[WDMHDA.Interface.Topology]
+AddReg=WDMHDA.I.Topo.AddReg
+
+[WDMHDA.I.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%WDMHDA.Topology.szPname%
+
+[WDMHDA.AddReg]
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,,Driver,,WDMHDA.sys
+HKR,,NTMPDriver,,"WDMHDA.sys,sbemul.sys"
+
+HKR,Drivers,SubClasses,,"wave,midi,mixer"
+
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\midi\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+
+HKR,Drivers\wave\wdmaud.drv,Description,,%WDMHDA.DeviceDesc%
+HKR,Drivers\midi\wdmaud.drv, Description,,%WDMHDA.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%WDMHDA.DeviceDesc%
+
+[WDMHDA.Services]
+AddService = WDMHDA, 0x00000002, WDMHDA_Service_Inst
+
+[WDMHDA_Service_Inst]
+DisplayName   = %WDMHDA.SvcDesc%
+ServiceType   = 1                  ; SERVICE_KERNEL_DRIVER
+StartType     = 3                  ; SERVICE_DEMAND_START
+ErrorControl  = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary = %10%\system32\drivers\WDMHDA.sys
+
+[WDMHDA_NAMES.AddReg]
+;; Nodes
+HKLM,%MediaCategories%\%ICHGUID.PhoneVolume%,Name,,%ICHNode.PhoneVolume%
+HKLM,%MediaCategories%\%ICHGUID.PhoneVolume%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.PhoneMute%,Name,,%ICHNode.PhoneMute%
+HKLM,%MediaCategories%\%ICHGUID.PhoneMute%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.LineInMute%,Name,,%ICHNode.LineInMute%
+HKLM,%MediaCategories%\%ICHGUID.LineInMute%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MainMix%,Name,,%ICHNode.MainMix%
+HKLM,%MediaCategories%\%ICHGUID.MainMix%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.3DBypass%,Name,,%ICHNode.3DBypass%
+HKLM,%MediaCategories%\%ICHGUID.3DBypass%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.3DEnable%,Name,,%ICHNode.3DEnable%
+HKLM,%MediaCategories%\%ICHGUID.3DEnable%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.BeepMix%,Name,,%ICHNode.BeepMix%
+HKLM,%MediaCategories%\%ICHGUID.BeepMix%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.HPVolume%,Name,,%ICHNode.HPVolume%
+HKLM,%MediaCategories%\%ICHGUID.HPVolume%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.HPMute%,Name,,%ICHNode.HPMute%
+HKLM,%MediaCategories%\%ICHGUID.HPMute%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MonoOutSelect%,Name,,%ICHNode.MonoOutSelect%
+HKLM,%MediaCategories%\%ICHGUID.MonoOutSelect%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.WaveInSelect%,Name,,%ICHNode.WaveInSelect%
+HKLM,%MediaCategories%\%ICHGUID.WaveInSelect%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MasterInVolume%,Name,,%ICHNode.MasterInVolume%
+HKLM,%MediaCategories%\%ICHGUID.MasterInVolume%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MasterInMute%,Name,,%ICHNode.MasterInMute%
+HKLM,%MediaCategories%\%ICHGUID.MasterInMute%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MicInVolume%,Name,,%ICHNode.MicInVolume%
+HKLM,%MediaCategories%\%ICHGUID.MicInVolume%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.MicInMute%,Name,,%ICHNode.MicInMute%
+HKLM,%MediaCategories%\%ICHGUID.MicInMute%,Display,1,00,00,00,00
+HKLM,%MediaCategories%\%ICHGUID.SimulStereo%,Name,,%ICHNode.SimulStereo%
+HKLM,%MediaCategories%\%ICHGUID.SimulStereo%,Display,1,00,00,00,00
+
+[WDMHDA_OEM.AddReg]
+;;Default register value at driver startup
+;;Uncomment some one of the lines if you want to overwrite the default setting
+;;The value in these outcommented lines is the driver default. You can change
+;;the register values (and uncomment the line) to overwrite the driver default.
+;;low byte comes first, values are hexadezimal.
+;HKR,Settings,MasterVolume,1,0,0		;0dB
+;HKR,Settings,HeadphoneVolume,1,0,0		;0dB
+;HKR,Settings,MonooutVolume,1,0,0		;0dB
+;HKR,Settings,ToneControls,1,F,F		;bypass
+;HKR,Settings,BeepVolume,1,0,0			;0dB
+;HKR,Settings,PhoneVolume,1,8,80		;muted
+;HKR,Settings,MicVolume,1,8,80			;muted
+;HKR,Settings,LineInVolume,1,8,8		;0dB
+;HKR,Settings,CDVolume,1,8,8			;0dB
+;HKR,Settings,VideoVolume,1,8,8			;0dB
+;HKR,Settings,AUXVolume,1,8,8			;0dB
+;HKR,Settings,WaveOutVolume,1,8,8		;0dB. This register is never touched by the system.
+;HKR,Settings,RecordSelect,1,4,4		;select LiniIn
+;HKR,Settings,RecordGain,1,0,0			;0dB
+;HKR,Settings,RecordGainMic,1,0,0		;0dB
+;HKR,Settings,GeneralPurpose,1,0,0		;pre 3D, 3D off, loudness off, mono=mix, mic1
+;HKR,Settings,3DControl,1,0,0			;0%
+;HKR,Settings,PowerDown,1,0,0			;no power down
+
+;;Configuration
+;;You can disable some of the input lines by outcommenting some of the lines
+;;below. This could be necessary if you have a HDA codec on board that for
+;;example supports Video input, but you don't have the Video input accessable
+;;for the user (no plug in).
+;HKR,Settings,DisablePCBeep,1,1
+;HKR,Settings,DisablePhone,1,1
+;HKR,Settings,DisableMic2,1,1
+;HKR,Settings,DisableVideo,1,1
+;HKR,Settings,DisableAUX,1,1
+;HKR,Settings,DisableHeadphone,1,1
+;HKR,Settings,DisableMonoOut,1,1
+HKR,Settings,DisableMicIn,1,1
+;HKR,Settings,DisableMic,1,1		;disables all MIC lines, including MIC record.
+;HKR,Settings,DisableLineIn,1,1
+;HKR,Settings,DisableCD,1,1
+
+
+;;================= Window200====================
+[WDMHDA.NTX86]
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+CopyFiles=WDMHDA.CopyList
+AddReg=WDMHDA.AddReg,WDMHDA_NAMES.AddReg, WDMHDA_OEM.AddReg
+
+[WDMHDA.NTX86.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,WDMHDA.Interface.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,WDMHDA.Interface.Topology
+
+[WDMHDA.NTX86.Services]
+AddService = WDMHDA, 0x00000002, WDMHDA_Service_Inst
+
+
+
+
+[Strings]
+ProviderName="Sirius Cybernetics Corp."
+MfgName="Intel"
+DiskDescription="HDA WDM Sample Driver Disk"
+WDMHDA_AA.DeviceDesc="HDA Sample Driver for Virtualbox HDA Controller"
+WDMHDA_AB.DeviceDesc="HDA Sample Driver for VMWare HDA Controller"
+WDMHDA.DeviceDesc="HDA Sample Driver for VM Controller"
+
+WDMHDA.Wave.szPname="HDA Sound Card"
+WDMHDA.Topology.szPname="HDA Mixer"
+
+MediaCategories="SYSTEM\CurrentControlSet\Control\MediaCategories"
+;; which GUIDs need to be changed?
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSNAME_Wave="Wave"
+KSNAME_Topology="Topology"
+
+WDMHDA.SvcDesc = "Service for HDA Sample Driver (WDM)"
+
+;; Nodes (non-localizeable)
+ICHGUID.PhoneVolume     ="{0A8C1A87-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.PhoneMute       ="{0A8C1A88-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.LineInMute      ="{0A8C1A91-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MainMix         ="{0A8C1A9B-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.3DBypass        ="{0A8C1A9E-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.3DEnable        ="{766DB5A4-6E94-11D2-9ADE-00C04F8EFB68}"
+ICHGUID.BeepMix         ="{0A8C1A9F-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.HPVolume        ="{0A8C1AA5-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.HPMute          ="{0A8C1AA6-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MonoOutSelect   ="{0A8C1AA9-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.WaveInSelect    ="{0A8C1AAE-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MasterInVolume  ="{0A8C1AAF-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MasterInMute    ="{0A8C1AB0-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MicInVolume     ="{0A8C1AB2-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MicInMute       ="{0A8C1AB3-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.SimulStereo     ="{B3AD50B5-3849-4983-ADD7-25E6268F912D}"
+
+;; Nodes (localizeable)
+ICHNode.PhoneVolume     ="Phone Volume"
+ICHNode.PhoneMute       ="Phone Mute"
+ICHNode.LineInMute      ="Line In Mute"
+ICHNode.MainMix         ="Main Mix"
+ICHNode.3DBypass        ="3D Bypass"
+ICHNode.3DEnable        ="3D Enable"
+ICHNode.BeepMix         ="Beep Mix"
+ICHNode.HPVolume        ="Headphone Volume"
+ICHNode.HPMute          ="Headphone Mute"
+ICHNode.MonoOutSelect   ="Mono Out Select"
+ICHNode.WaveInSelect    ="Wave In Select"
+ICHNode.MasterInVolume  ="Wave In Volume"
+ICHNode.MasterInMute    ="Wave In Mute"
+ICHNode.MicInVolume     ="Mic In Volume"
+ICHNode.MicInMute       ="Mic In Mute"
+ICHNode.SimulStereo     ="Simulated Stereo"
+
+[Strings.0407]
+ProviderName="FooProviderName"
+MfgName="Intel"
+DiskDescription="Diskette für HDA WDM Treiberbeispiel"
+WDMHDA_AA.DeviceDesc="HDA Treiberbeispiel für Virtualbox HDA Kontroller"
+WDMHDA_AB.DeviceDesc="HDA Treiberbeispiel für VMWare HDA Kontroller"
+WDMHDA.DeviceDesc="HDA Treiberbeispiel für HDA Kontroller"
+
+WDMHDA.Wave.szPname="HDA Musikkarte"
+WDMHDA.Topology.szPname="HDA Mixer"
+
+MediaCategories="SYSTEM\CurrentControlSet\Control\MediaCategories"
+
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSNAME_Wave="Wave"
+KSNAME_Topology="Topology"
+
+WDMHDA.SvcDesc = "Installationshilfe für HDA Treiberbeispiel (WDM)"
+
+;; Nodes (non-localizeable)
+ICHGUID.PhoneVolume     ="{0A8C1A87-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.PhoneMute       ="{0A8C1A88-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.LineInMute      ="{0A8C1A91-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MainMix         ="{0A8C1A9B-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.3DBypass        ="{0A8C1A9E-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.3DEnable        ="{766DB5A4-6E94-11D2-9ADE-00C04F8EFB68}"
+ICHGUID.BeepMix         ="{0A8C1A9F-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.HPVolume        ="{0A8C1AA5-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.HPMute          ="{0A8C1AA6-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MonoOutSelect   ="{0A8C1AA9-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.WaveInSelect    ="{0A8C1AAE-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MasterInVolume  ="{0A8C1AAF-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MasterInMute    ="{0A8C1AB0-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MicInVolume     ="{0A8C1AB2-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.MicInMute       ="{0A8C1AB3-42B0-11D2-95D2-00C04FB925D3}"
+ICHGUID.SimulStereo     ="{B3AD50B5-3849-4983-ADD7-25E6268F912D}"
+
+;; Nodes (localizeable)
+ICHNode.PhoneVolume     ="Phone Lautstärke"
+ICHNode.PhoneMute       ="Phone Aus"
+ICHNode.LineInMute      ="Line In Aus"
+ICHNode.MainMix         ="Hauptmixer"
+ICHNode.3DBypass        ="3D umgehen"
+ICHNode.3DEnable        ="3D Aktivieren"
+ICHNode.BeepMix         ="Piepmixer"
+ICHNode.HPVolume        ="Kopfhörer Lautstärke"
+ICHNode.HPMute          ="Kopfhörer Aus"
+ICHNode.MonoOutSelect   ="Mono Ausgang Selektor"
+ICHNode.WaveInSelect    ="Aufnahme Selektor"
+ICHNode.MasterInVolume  ="Aufnahme Lautstärke"
+ICHNode.MasterInMute    ="Aufnahme unterdrücken"
+ICHNode.MicInVolume     ="Mic In Lautstärke"
+ICHNode.MicInMute       ="Mic In Aus"
+ICHNode.SimulStereo     ="Simuliertes Stereo"
+

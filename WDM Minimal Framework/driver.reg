@@ -1,0 +1,8 @@
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\driver]
+"ImagePath"="\\SystemRoot\\system32\\drivers\\driver.sys"
+"Type"=dword:00000001
+"Start"=dword:00000001
+"Group"="Base"
+"ErrorControl"=dword:00000001

@@ -157,11 +157,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     // Save the device object
     //
     m_pDeviceObject = DeviceObject;
+
+	//TODO: check PCI config registers for Class code (4h) and subclass (3h)
+	//to make sure we have the right type of device.
 	
 
     //
-    //**Get the memory base address for the HDA codec registers. 
-	//(AC97 uses IO port space but HDA is memory mapped by the system)
+    //Get the memory base address for the HDA codec registers. 
     //
     // Get memory resource
     for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
@@ -171,11 +173,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
             memLength = desc->u.Memory.Length; 
             DOUT(DBG_SYSINFO, ("Resource %d: Phys Addr = 0x%X, Mem Length = 0x%X", 
 				i, desc->u.Memory.Start, desc->u.Memory.Length));
-			//when i print this HERE i get a memLength of zero
-			//but then as soon as we're out of the loop it is 16384. 
-			//i DON'T know why but sure just go with it
+
         }
     }
+
+	// TODO: get interrupt resource
 
 
 	if (!memLength) {
@@ -186,7 +188,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	}
 
 
-	//**Map the device memory into kernel space (Remember to free it in the destructor!)
+	//**Map the device memory into kernel space
     m_pHDARegisters = MmMapIoSpace(physAddr, memLength, MmNonCached);
     if (!m_pHDARegisters) {
         DOUT (DBG_ERROR, ("Failed to map HD Audio registers"));
@@ -196,11 +198,47 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
         DOUT(DBG_SYSINFO, ("Virt Addr = 0x%X, Mem Length = 0x%X", m_pHDARegisters, memLength));
     }
 
+#if (DBG)
 	//try reading something from the mapped memory and see if it makes sense as hda registers
 	for (i = 0; i < 16; i++) {
-		DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUSHORT)m_pHDARegisters)[i]  ));
+		DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
 	}
+#endif
+
 	//now to reset the controller
+
+	writeUCHAR(0x08,0x0);
+
+	for (i = 0; i < 1000; i++) {
+		KeStallExecutionProcessor(100);
+		if ((readUCHAR(0x08) & 0x1) == 0x0) {
+			DOUT(DBG_SYSINFO, ("Codec Reset Started %d", i));
+			break;
+		} else if (i == 999) {
+			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
+		}
+	}
+
+	KeStallExecutionProcessor(100);
+	writeUCHAR(0x08,0x1);
+
+	for (i = 0; i < 1000; i++) {
+		KeStallExecutionProcessor(100);
+		if ((readUCHAR(0x08) & 0x1) == 0x1) {
+			DOUT(DBG_SYSINFO, ("Codec Reset Complete %d", i));
+			break;
+		}
+		else if (i == 999) {
+			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
+		}
+	}
+
+
+
+	//allocate CORB, RIRB, BDL buffer, DMA position buffer (as one chunk of 8k)
+
+	//and get the physical addresses of each of those and write them to where they go
+
 
     //
     // Initialize the controller.
@@ -257,22 +295,6 @@ CAdapterCommon::~CAdapterCommon ()
 		m_pHDARegisters = NULL; // Ensure the pointer is set to NULL after unmapping
 	}
 
-}
-/*****************************************************************************
- * CAdapterCommon::Sleep
- *****************************************************************************
- * sleeps the thread 1ms (for codec reset only)
- */
-
-NTSTATUS Sleep (void)
-{
-    LARGE_INTEGER interval;
-    interval.QuadPart = -10000; // 1ms delay (negative value indicates relative time in 100-nanosecond units)
-
-    NTSTATUS status = KeDelayExecutionThread(KernelMode, FALSE, &interval);
-    if (!NT_SUCCESS(status))
-		DOUT (DBG_ERROR, ("can't sleep"));
-	return status;
 }
 
 #if (DBG)
@@ -1990,6 +2012,24 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
  */ 
 
 #pragma code_seg()
+
+/*****************************************************************************
+ * CAdapterCommon::Sleep
+ *****************************************************************************
+ * sleeps the thread 1ms (for codec reset only)
+ */
+
+NTSTATUS CAdapterCommon::Sleep (void)
+{
+    LARGE_INTEGER interval;
+    interval.QuadPart = -10000; // 1ms delay (negative value indicates relative time in 100-nanosecond units)
+
+    NTSTATUS status = KeDelayExecutionThread(KernelMode, FALSE, &interval);
+    if (!NT_SUCCESS(status))
+		DOUT (DBG_ERROR, ("can't sleep"));
+	return status;
+}
+
 /*****************************************************************************
  * CAdapterCommon::WriteBMControlRegister
  *****************************************************************************
@@ -2111,5 +2151,56 @@ STDMETHODIMP_(ULONG) CAdapterCommon::ReadBMControlRegister32
                    m_pBusMasterBase + ulOffset));
 
     return ulValue;
+}
+
+STDMETHODIMP_(UCHAR) CAdapterCommon::readUCHAR(USHORT reg)
+{
+	return READ_REGISTER_UCHAR((PUCHAR)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+}
+
+STDMETHODIMP_(void) CAdapterCommon::writeUCHAR(USHORT cmd, UCHAR value)
+{
+	WRITE_REGISTER_UCHAR((PUCHAR)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::setUCHARBit(USHORT reg, UCHAR flag)
+{
+	writeUCHAR(reg, readUCHAR(reg) | flag);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::clearUCHARBit(USHORT reg, UCHAR flag)
+{
+	writeUCHAR(reg, readUCHAR(reg) & ~flag);
+}
+
+STDMETHODIMP_(USHORT) CAdapterCommon::readUSHORT(USHORT reg)
+{
+	return READ_REGISTER_USHORT((PUSHORT)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+}
+
+STDMETHODIMP_(void) CAdapterCommon::writeUSHORT(USHORT cmd, USHORT value)
+{
+	WRITE_REGISTER_USHORT((PUSHORT)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+}
+
+
+STDMETHODIMP_(ULONG) CAdapterCommon::readULONG(USHORT reg)
+{
+	return READ_REGISTER_ULONG((PULONG)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+}
+
+STDMETHODIMP_(void) CAdapterCommon::writeULONG(USHORT cmd, ULONG value)
+{
+	WRITE_REGISTER_ULONG((PULONG)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::setULONGBit(USHORT reg, ULONG flag)
+{
+	writeULONG(reg, readULONG(reg) | flag);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
+{
+	writeULONG(reg, readULONG(reg) & ~flag);
 }
 

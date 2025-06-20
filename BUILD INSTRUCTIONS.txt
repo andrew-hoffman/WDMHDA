@@ -1,8 +1,8 @@
 Build Instructions
 
 1. Create a Windows 98se or 2000 VM
-2. Install Visual C++ 6.0 (No service packs)
-3. Install Windows 2000 DDK
+2. Install Visual C++ 6.0 (No service packs) with all options
+3. Install Windows 2000 DDK with all options except Alpha code selected
 4. Copy the source tree to C:\NTDDK\src\wdm\audio\hda
 5. Open a "Checked Build Environment" or "Free Build Environment" command prompt 
 	(Start > Programs > Development Kits > Windows 2000 DDK)

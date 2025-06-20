@@ -240,6 +240,12 @@ private:
     // Resets HDA audio registers.
     //
     NTSTATUS InitAC97 (void);
+
+	//
+    // yield thread context to sleep a bit.
+    //
+
+	NTSTATUS Sleep (void);
     
     //
     // Checks for existance of registers.
@@ -449,6 +455,21 @@ public:
         IN  ULONG ulOffset,
         IN  ULONG Value
     );
+
+	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
+    STDMETHODIMP_(void)		writeUCHAR(USHORT reg, UCHAR value);
+
+	STDMETHODIMP_(void)		setUCHARBit(USHORT reg, UCHAR flag);
+	STDMETHODIMP_(void)		clearUCHARBit(USHORT reg, UCHAR flag);
+
+    STDMETHODIMP_(USHORT)	readUSHORT(USHORT reg);
+    STDMETHODIMP_(void)		writeUSHORT(USHORT reg, USHORT value);
+
+    STDMETHODIMP_(ULONG)	readULONG(USHORT reg);
+    STDMETHODIMP_(void)		writeULONG(USHORT reg, ULONG value);
+
+	STDMETHODIMP_(void)		setULONGBit(USHORT reg, ULONG flag);
+	STDMETHODIMP_(void)		clearULONGBit(USHORT reg, ULONG flag);
 
     //
     // Write back cached mixer values to codec registers.

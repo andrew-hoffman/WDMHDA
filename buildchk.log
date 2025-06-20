@@ -17,7 +17,7 @@ ichwave.cpp
 Stop.
 Linking c:\ntddk\src\wdm\audio\hda directory ********************
 'nmake.exe /c BUILDMSG=Stop. -i LINKONLY=1 NOPASS0=1 NTTEST= UMTEST= 386=1'
-	link -out:objchk\i386\WDMHDA.sys -machine:ix86 @C:\WINDOWS\TEMP\nma92035.
+	link -out:objchk\i386\WDMHDA.sys -machine:ix86 @C:\WINDOWS\TEMP\nma80625.
 Microsoft (R) Incremental Linker Version 5.12.8181
 Copyright (C) Microsoft Corp 1992-1998. All rights reserved.
 

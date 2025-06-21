@@ -6,6 +6,11 @@ Build Instructions
 4. Copy the source tree to C:\NTDDK\src\wdm\audio\hda
 5. Open a "Checked Build Environment" or "Free Build Environment" command prompt 
 	(Start > Programs > Development Kits > Windows 2000 DDK)
-6. CD to the hda directory and run "build -cZ"
+	checked builds include debug prints and extra memory bounds checking.
+6. CD to the C:\NTDDK\src\wdm\audio directory and run "build -cZ"
+	this will build all the sample audio drivers as well but we need stdunk.cpp and the headers from them
+	After the first build, you can build in the hda directory.
 
 WDMHDA.SYS will be built in the "objfre" or "objchk" folders. Install it with wdmhda.inf
+
+to use a kernel debugger see https://bikodbg.com/blog/2021/08/win98-ddk/

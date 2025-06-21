@@ -328,6 +328,8 @@ NTSTATUS StartDevice
     //
     // Start the wave miniport.
     //
+	// TODO: Change to WaveCyclic as soon as i have the init code down
+
     if (NT_SUCCESS (ntStatus))
     {
         ntStatus = InstallSubdevice (DeviceObject,

@@ -97,7 +97,8 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
-ULONG memLength = 0xDED;//check
+ULONG memLength = 0x0;//check
+PDEVICE_DESCRIPTION pDeviceDescription;
 
 
 #pragma code_seg("PAGE")
@@ -158,9 +159,19 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     //
     m_pDeviceObject = DeviceObject;
 
+	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
+    DOUT(DBG_SYSINFO, ("Inotial PDO align was %d", 
+				m_pDeviceObject -> AlignmentRequirement));
+
+	if (m_pDeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
+		m_pDeviceObject -> AlignmentRequirement = FILE_128_BYTE_ALIGNMENT;
+		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
+				m_pDeviceObject -> AlignmentRequirement));
+	}
+
 	//TODO: check PCI config registers for Class code (4h) and subclass (3h)
 	//to make sure we have the right type of device.
-	
+	//and is there anything in there we need to set?
 
     //
     //Get the memory base address for the HDA codec registers. 
@@ -188,7 +199,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	}
 
 
-	//**Map the device memory into kernel space
+	//Map the device memory into kernel space
     m_pHDARegisters = MmMapIoSpace(physAddr, memLength, MmNonCached);
     if (!m_pHDARegisters) {
         DOUT (DBG_ERROR, ("Failed to map HD Audio registers"));
@@ -235,15 +246,71 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 
 
-	//allocate CORB, RIRB, BDL buffer, DMA position buffer (as one chunk of 8k)
+	//allocate CORB, RIRB, BDL buffer, DMA position buffer
+	//as one chunk of 8k because i'm not doing this malarkey 3x
 
-	//and get the physical addresses of each of those and write them to where they go
+	//create device description object for our DMA
+	pDeviceDescription = (PDEVICE_DESCRIPTION)ExAllocatePool (PagedPool,
+                                      sizeof (DEVICE_DESCRIPTION));
+	if (!pDeviceDescription) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	//zero that struct
+	RtlZeroMemory(pDeviceDescription, sizeof (DEVICE_DESCRIPTION));
+
+	pDeviceDescription -> Version			= DEVICE_DESCRIPTION_VERSION;
+	pDeviceDescription -> Master			= TRUE;
+	pDeviceDescription -> ScatterGather		= FALSE; // for THIS purpose it can't
+	pDeviceDescription -> DemandMode		= FALSE;
+	pDeviceDescription -> AutoInitialize	= FALSE;
+	pDeviceDescription -> Dma32BitAddresses = TRUE;
+	pDeviceDescription -> IgnoreCount		= FALSE;
+	pDeviceDescription -> Reserved1			= FALSE;
+	pDeviceDescription -> Dma64BitAddresses = FALSE;
+	pDeviceDescription -> DmaChannel		= 0;
+	pDeviceDescription -> InterfaceType		= PCIBus;
+	pDeviceDescription -> MaximumLength		= 128;
+
+	//we have to pretend we're on an Alpha and have "map registers" to allocate
+	ULONG nMapRegisters = 0;
+
+	PDMA_ADAPTER DMA_Adapter = IoGetDmaAdapter (
+		m_pDeviceObject,
+		pDeviceDescription,
+		&nMapRegisters );
+
+	DOUT(DBG_SYSINFO, ("Map Registers = %d", nMapRegisters));
+
+	//now we call the AllocateCommonBuffer function pointer in that struct
+
+	PPHYSICAL_ADDRESS LogicalAddress = NULL;
+	PVOID VirtualAddress = NULL;
+	
+	VirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+		DMA_Adapter,
+		8192,
+		LogicalAddress, //out param
+		TRUE );
+	if (!VirtualAddress) {
+		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
+		return STATUS_NO_MEMORY;
+	}
+	if (!LogicalAddress) {
+		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
+		return STATUS_NO_MEMORY;
+	}
+
+
+	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X, Phys Addr = 0x%X", VirtualAddress, LogicalAddress));
+
+	//the other reason i got 8k was to ensure we have enough for 128 byte alignment.
 
 
     //
     // Initialize the controller.
     //
-    ntStatus = InitAC97 ();
+    //ntStatus = InitAC97 ();
     if (!NT_SUCCESS (ntStatus))
         return ntStatus;
     
@@ -260,7 +327,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     //
     // Now, every AC97 read access goes to the cache.
     //
-    m_bDirectRead = FALSE;
+    //m_bDirectRead = FALSE;
 
     //
     // Restore the AC97 registers now.
@@ -268,7 +335,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 #if (DBG)
     DumpConfig ();
 #endif
-    ntStatus = SetAC97Default ();
+
+	//return an error at the end for now so it doesnt run the ac97 specific parts of the driver further
+    ntStatus = STATUS_INVALID_PARAMETER;
+	
+	//SetAC97Default ();
 
     //
     // Initialize the device state.

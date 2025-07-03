@@ -97,6 +97,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
+UCHAR interrupt = 0;
 ULONG memLength = 0x0;//check
 ULONG audBufSize = 96000 * 2 * 2; //1s of 2ch 16 bit audio
 PDEVICE_DESCRIPTION pDeviceDescription;
@@ -177,12 +178,19 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//that's done thru the PnP manager somehow.
 	//is there anything in there we need to set?
 
+	//there may be multiple instances of this driver loaded at once
+	//on systems with HDMI display audio support for instance
+	//but it should be one driver per controller.
+	//which may access multiple codecs but for now only sending 1 audio stream
+	//hardware mixing may come MUCH later.
+
     //
-    //Get the memory base address for the HDA codec registers. 
+    //Get the memory base address for the HDA controller registers. 
     //
 
-    // Get memory resource - note we only want the first BAR if there are multiple
+    // Get memory resource - note we only want the first BAR
 	// on Skylake and newer mobile chipsets, there is a DSP interface at BAR2
+	DOUT(DBG_SYSINFO, ("%d Resources in List", ResourceList->NumberOfEntries() ));
 
     for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
         PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, i);
@@ -192,15 +200,20 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 				memLength = desc->u.Memory.Length; 
 			}
             DOUT(DBG_SYSINFO, ("Resource %d: Phys Addr = 0x%X, Mem Length = 0x%X", 
-				i, desc->u.Memory.Start, desc->u.Memory.Length));
-        }
+				i, physAddr, memLength));
+        } else {
+				// get interrupt resource too if there is one
+			 desc = ResourceList->FindTranslatedEntry(CmResourceTypeInterrupt, i);
+			 if (desc) {
+				// interrupt = desc->u.Interrupt.Vector;
+				DOUT(DBG_SYSINFO, ("Resource %d: Affinity %d, Level %d, Vector = 0x%X", 
+				i, desc->u.Interrupt.Affinity, desc->u.Interrupt.Level, desc->u.Interrupt.Vector));
+			 }
+		}
     }
 
-	// TODO: get interrupt resource too
-
-
 	if (!memLength) {
-        DOUT (DBG_ERROR, ("Failed to map HD Audio registers"));
+        DOUT (DBG_ERROR, ("No memory for HD Audio controller registers"));
         return STATUS_INSUFFICIENT_RESOURCES;
 	} else {
 		DOUT(DBG_SYSINFO, ("Phys Addr = 0x%X, Mem Length = 0x%X", physAddr, memLength));
@@ -210,8 +223,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//Map the device memory into kernel space
     m_pHDARegisters = MmMapIoSpace(physAddr, memLength, MmNonCached);
     if (!m_pHDARegisters) {
-        DOUT (DBG_ERROR, ("Failed to map HD Audio registers"));
-        return STATUS_NO_MEMORY;
+        DOUT (DBG_ERROR, ("Failed to map HD Audio registers to kernel mem"));
+        return STATUS_BUFFER_TOO_SMALL;
     }
 	else {
         DOUT(DBG_SYSINFO, ("Virt Addr = 0x%X, Mem Length = 0x%X", m_pHDARegisters, memLength));
@@ -224,14 +237,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	}
 #endif
 
-	//now to reset the controller
+	//Reset the controller
 
 	writeUCHAR(0x08,0x0);
 
 	for (i = 0; i < 1000; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x0) {
-			DOUT(DBG_SYSINFO, ("Codec Reset Started %d", i));
+			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
 			break;
 		} else if (i == 999) {
 			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
@@ -244,7 +257,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	for (i = 0; i < 1000; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x1) {
-			DOUT(DBG_SYSINFO, ("Codec Reset Complete %d", i));
+			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
 			break;
 		}
 		else if (i == 999) {
@@ -325,25 +338,26 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		8192,
 		pLogicalAddress, //out param
 		TRUE );
+	PHYSICAL_ADDRESS LogicalAddress = *pLogicalAddress;
 
-	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", VirtualAddress));
-	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", *pLogicalAddress));
+	DOUT(DBG_SYSINFO, ("CORB Virt Addr = 0x%X,", VirtualAddress));
+	DOUT(DBG_SYSINFO, ("CORB Phys Addr = 0x%X,", LogicalAddress));
 
 	if (!VirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
-		return STATUS_NO_MEMORY;
+		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if ((*pLogicalAddress).QuadPart == 0) {
+	if (LogicalAddress.QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
 
 	if (is64OK == FALSE) {
-		ASSERT( (*pLogicalAddress).HighPart == 0);
+		ASSERT( LogicalAddress.HighPart == 0);
 	}
 
-	//TODO check alignment of what we received
-
+	//check 128-byte alignment of what we received
+	ASSERT( LogicalAddress.LowPart & 127 == 0);
 
 	//map the audio buffer too
 
@@ -355,15 +369,16 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		audBufSize,
 		pBufLogicalAddress, //out param
 		TRUE );
+	PHYSICAL_ADDRESS BufLogicalAddress = *pBufLogicalAddress;
 
-	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", BufVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", *pBufLogicalAddress));
+	DOUT(DBG_SYSINFO, ("Buffer Virt Addr = 0x%X,", BufVirtualAddress));
+	DOUT(DBG_SYSINFO, ("Buffer Phys Addr = 0x%X,", BufLogicalAddress));
 
 	if (!BufVirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt Buffer Space"));
-		return STATUS_NO_MEMORY;
+		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if ((*pBufLogicalAddress).QuadPart == 0) {
+	if (BufLogicalAddress.QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys Buffer Space"));
 		return STATUS_NO_MEMORY;
 	}
@@ -371,21 +386,28 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//ok then. write the needed logical addresses for CORB/RIRB to the HDA controller registers
 
 	//corb addr
-	writeULONG( 0x40, (*pLogicalAddress).LowPart);
+	writeULONG( 0x40, LogicalAddress.LowPart);
 	if (is64OK){
-		writeULONG( 0x44, (*pLogicalAddress).HighPart);
+		writeULONG( 0x44, LogicalAddress.HighPart);
 	}
 	else {
 		writeULONG( 0x44, 0);
 	}
+
 	//rirb addr
-	writeULONG( 0x50, (*pLogicalAddress).LowPart);
+
+	writeULONG( 0x50, (LogicalAddress.LowPart + 1024));
 	if (is64OK){
-		writeULONG( 0x54, (*pLogicalAddress).HighPart);
+		writeULONG( 0x54, LogicalAddress.HighPart);
 	}
 	else {
 		writeULONG( 0x54, 0);
 	}
+
+	//overlay a struct for the corb & rirb slots at that virtual pointer
+
+	//detect 
+
     //
     // Initialize the controller registers
     //
@@ -440,9 +462,11 @@ CAdapterCommon::~CAdapterCommon ()
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
 
-	//free DMA buffers
+	//TODO: free DMA buffers
 	//if(buffer)
 	//DMA_Adapter->DmaOperations->FreeCommonBuffer
+
+	//free DMA adapter object
 	if (DMA_Adapter) {
 		DMA_Adapter->DmaOperations->PutDmaAdapter(DMA_Adapter);
 		DMA_Adapter = NULL;

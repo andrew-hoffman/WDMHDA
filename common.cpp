@@ -98,8 +98,10 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
 ULONG memLength = 0x0;//check
+ULONG audBufSize = 96000 * 2 * 2; //1s of 2ch 16 bit audio
 PDEVICE_DESCRIPTION pDeviceDescription;
 PDMA_ADAPTER DMA_Adapter;
+BOOLEAN is64OK = FALSE;
 
 
 #pragma code_seg("PAGE")
@@ -172,27 +174,29 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	//TODO: check PCI config registers for Class code (4h) and subclass (3h)
 	//to make sure we have the right type of device.
-	//and is there anything in there we need to set?
+	//that's done thru the PnP manager somehow.
+	//is there anything in there we need to set?
 
     //
     //Get the memory base address for the HDA codec registers. 
     //
 
     // Get memory resource - note we only want the first BAR if there are multiple
-	// on Skylake and newer mobile chipsets, there is a DSP at BAR2
+	// on Skylake and newer mobile chipsets, there is a DSP interface at BAR2
 
     for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
         PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, i);
         if (desc) {
-            physAddr = desc->u.Memory.Start;
-            memLength = desc->u.Memory.Length; 
+			if (!memLength) {
+				physAddr = desc->u.Memory.Start;
+				memLength = desc->u.Memory.Length; 
+			}
             DOUT(DBG_SYSINFO, ("Resource %d: Phys Addr = 0x%X, Mem Length = 0x%X", 
 				i, desc->u.Memory.Start, desc->u.Memory.Length));
-			break;
         }
     }
 
-	// TODO: get interrupt resource
+	// TODO: get interrupt resource too
 
 
 	if (!memLength) {
@@ -248,6 +252,29 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		}
 	}
 
+	 //read capabilities
+	 DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
+
+	 //TODO check that we have at least 1 output or bidirectional stream engine
+
+	 //check 64OK flag
+	 is64OK = readUCHAR(0x00) & 1;
+
+	 //disable interrupts
+	 writeULONG (0x20, 0);
+ 
+	 //turn off dma position transfer
+	 writeULONG (0x70, 0);
+	 writeULONG (0x74, 0);
+ 
+	 //disable synchronization
+	 writeULONG (0x34, 0);
+	 writeULONG (0x38, 0);
+
+	 //stop CORB and RIRB
+	 writeUCHAR (0x4C, 0x0);
+	 writeUCHAR (0x5C, 0x0);
+ 
 	//allocate common buffer as one chunk of 8k
 	//for CORB, RIRB, BDL buffer, DMA position buffer
 
@@ -269,10 +296,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	pDeviceDescription -> Dma32BitAddresses = TRUE;
 	pDeviceDescription -> IgnoreCount		= FALSE;
 	pDeviceDescription -> Reserved1			= FALSE;
-	pDeviceDescription -> Dma64BitAddresses = FALSE; //it might, but Win98 can't
+	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= 128;
+	pDeviceDescription -> MaximumLength		= audBufSize + 8192;
 
 	//we have to pretend we're on an Alpha and have "map registers" to allocate
 	ULONG nMapRegisters = 0;
@@ -284,65 +311,81 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	DOUT(DBG_SYSINFO, ("Map Registers = %d", nMapRegisters));
 
-	//it only gives me 2 map registers whatever that means, why?
-
-	DOUT(DBG_SYSINFO, ("Buffer 4096 takes %d map registers", BYTES_TO_PAGES(4096) ));
-	DOUT(DBG_SYSINFO, ("Buffer 8192 takes %d map registers", BYTES_TO_PAGES(8192) ));
-	DOUT(DBG_SYSINFO, ("Buffer 38400 takes %d map registers", BYTES_TO_PAGES(38400) ));
+	//do we have enough of this fictional resource?
+	//map registers used = number of pages allocated + 1 
 
 	//now we call the AllocateCommonBuffer function pointer in that struct
 
-	PPHYSICAL_ADDRESS LogicalAddress = NULL;
 	PVOID VirtualAddress = NULL;
+	PPHYSICAL_ADDRESS pLogicalAddress = NULL;
+	
 	
 	VirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		4096,
-		LogicalAddress, //out param
+		8192,
+		pLogicalAddress, //out param
 		TRUE );
 
 	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", VirtualAddress));
-	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", LogicalAddress));
+	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", *pLogicalAddress));
 
 	if (!VirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
-	if (!LogicalAddress) {
+	if ((*pLogicalAddress).QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
-	//what do we do when the virtual address is ok but the physical address is null?
-	//docs don't describe that situation
 
-	//map the audio buffer too?
+	if (is64OK == FALSE) {
+		ASSERT( (*pLogicalAddress).HighPart == 0);
+	}
 
-	PPHYSICAL_ADDRESS BufLogicalAddress = NULL;
+	//TODO check alignment of what we received
+
+
+	//map the audio buffer too
+
+	PPHYSICAL_ADDRESS pBufLogicalAddress = NULL;
 	PVOID BufVirtualAddress = NULL;
 	
 	BufVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		96 * 100 * 2 * 2, // 96 khz, 100 ms, 2 ch, 16 bit
-		BufLogicalAddress, //out param
+		audBufSize,
+		pBufLogicalAddress, //out param
 		TRUE );
 
 	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", BufVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", BufLogicalAddress));
+	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", *pBufLogicalAddress));
 
 	if (!BufVirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt Buffer Space"));
 		return STATUS_NO_MEMORY;
 	}
-	if (!BufLogicalAddress) {
+	if ((*pBufLogicalAddress).QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys Buffer Space"));
 		return STATUS_NO_MEMORY;
 	}
 
-	//if i can't get this to work i'm just gonna use MmAllocateContiguousMemory
-	//like the documentation says I shouldn't. 
-	//Because this driver is never gonna run on Alpha
+	//ok then. write the needed logical addresses for CORB/RIRB to the HDA controller registers
 
-
+	//corb addr
+	writeULONG( 0x40, (*pLogicalAddress).LowPart);
+	if (is64OK){
+		writeULONG( 0x44, (*pLogicalAddress).HighPart);
+	}
+	else {
+		writeULONG( 0x44, 0);
+	}
+	//rirb addr
+	writeULONG( 0x50, (*pLogicalAddress).LowPart);
+	if (is64OK){
+		writeULONG( 0x54, (*pLogicalAddress).HighPart);
+	}
+	else {
+		writeULONG( 0x54, 0);
+	}
     //
     // Initialize the controller registers
     //

@@ -99,6 +99,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
 };
 ULONG memLength = 0x0;//check
 PDEVICE_DESCRIPTION pDeviceDescription;
+PDMA_ADAPTER DMA_Adapter;
 
 
 #pragma code_seg("PAGE")
@@ -160,7 +161,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     m_pDeviceObject = DeviceObject;
 
 	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
-    DOUT(DBG_SYSINFO, ("Inotial PDO align was %d", 
+    DOUT(DBG_SYSINFO, ("Initial PDO align was %d", 
 				m_pDeviceObject -> AlignmentRequirement));
 
 	if (m_pDeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
@@ -176,7 +177,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     //
     //Get the memory base address for the HDA codec registers. 
     //
-    // Get memory resource
+
+    // Get memory resource - note we only want the first BAR if there are multiple
+	// on Skylake and newer mobile chipsets, there is a DSP at BAR2
+
     for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
         PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, i);
         if (desc) {
@@ -184,7 +188,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
             memLength = desc->u.Memory.Length; 
             DOUT(DBG_SYSINFO, ("Resource %d: Phys Addr = 0x%X, Mem Length = 0x%X", 
 				i, desc->u.Memory.Start, desc->u.Memory.Length));
-
+			break;
         }
     }
 
@@ -244,10 +248,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		}
 	}
 
-
-
-	//allocate CORB, RIRB, BDL buffer, DMA position buffer
-	//as one chunk of 8k because i'm not doing this malarkey 3x
+	//allocate common buffer as one chunk of 8k
+	//for CORB, RIRB, BDL buffer, DMA position buffer
 
 	//create device description object for our DMA
 	pDeviceDescription = (PDEVICE_DESCRIPTION)ExAllocatePool (PagedPool,
@@ -267,7 +269,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	pDeviceDescription -> Dma32BitAddresses = TRUE;
 	pDeviceDescription -> IgnoreCount		= FALSE;
 	pDeviceDescription -> Reserved1			= FALSE;
-	pDeviceDescription -> Dma64BitAddresses = FALSE;
+	pDeviceDescription -> Dma64BitAddresses = FALSE; //it might, but Win98 can't
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
 	pDeviceDescription -> MaximumLength		= 128;
@@ -275,12 +277,18 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//we have to pretend we're on an Alpha and have "map registers" to allocate
 	ULONG nMapRegisters = 0;
 
-	PDMA_ADAPTER DMA_Adapter = IoGetDmaAdapter (
+	DMA_Adapter = IoGetDmaAdapter (
 		m_pDeviceObject,
 		pDeviceDescription,
 		&nMapRegisters );
 
 	DOUT(DBG_SYSINFO, ("Map Registers = %d", nMapRegisters));
+
+	//it only gives me 2 map registers whatever that means, why?
+
+	DOUT(DBG_SYSINFO, ("Buffer 4096 takes %d map registers", BYTES_TO_PAGES(4096) ));
+	DOUT(DBG_SYSINFO, ("Buffer 8192 takes %d map registers", BYTES_TO_PAGES(8192) ));
+	DOUT(DBG_SYSINFO, ("Buffer 38400 takes %d map registers", BYTES_TO_PAGES(38400) ));
 
 	//now we call the AllocateCommonBuffer function pointer in that struct
 
@@ -289,9 +297,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	
 	VirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		8192,
+		4096,
 		LogicalAddress, //out param
 		TRUE );
+
+	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", VirtualAddress));
+	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", LogicalAddress));
+
 	if (!VirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
@@ -300,15 +312,39 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
+	//what do we do when the virtual address is ok but the physical address is null?
+	//docs don't describe that situation
 
+	//map the audio buffer too?
 
-	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X, Phys Addr = 0x%X", VirtualAddress, LogicalAddress));
+	PPHYSICAL_ADDRESS BufLogicalAddress = NULL;
+	PVOID BufVirtualAddress = NULL;
+	
+	BufVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+		DMA_Adapter,
+		96 * 100 * 2 * 2, // 96 khz, 100 ms, 2 ch, 16 bit
+		BufLogicalAddress, //out param
+		TRUE );
 
-	//the other reason i got 8k was to ensure we have enough for 128 byte alignment.
+	DOUT(DBG_SYSINFO, ("Mapped Virt Addr = 0x%X,", BufVirtualAddress));
+	DOUT(DBG_SYSINFO, ("Mapped Phys Addr = 0x%X,", BufLogicalAddress));
+
+	if (!BufVirtualAddress) {
+		DOUT(DBG_ERROR, ("Couldn't map virt Buffer Space"));
+		return STATUS_NO_MEMORY;
+	}
+	if (!BufLogicalAddress) {
+		DOUT(DBG_ERROR, ("Couldn't map phys Buffer Space"));
+		return STATUS_NO_MEMORY;
+	}
+
+	//if i can't get this to work i'm just gonna use MmAllocateContiguousMemory
+	//like the documentation says I shouldn't. 
+	//Because this driver is never gonna run on Alpha
 
 
     //
-    // Initialize the controller.
+    // Initialize the controller registers
     //
     //ntStatus = InitAC97 ();
     if (!NT_SUCCESS (ntStatus))
@@ -360,7 +396,19 @@ CAdapterCommon::~CAdapterCommon ()
     PAGED_CODE ();
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
-	
+
+	//free DMA buffers
+	//if(buffer)
+	//DMA_Adapter->DmaOperations->FreeCommonBuffer
+	if (DMA_Adapter) {
+		DMA_Adapter->DmaOperations->PutDmaAdapter(DMA_Adapter);
+		DMA_Adapter = NULL;
+	}
+	//free device description
+	if (pDeviceDescription) {
+		ExFreePool(pDeviceDescription);
+	}
+	//free PCI BAR space	
     if (m_pHDARegisters) {
 		MmUnmapIoSpace(m_pHDARegisters, memLength);
 		m_pHDARegisters = NULL; // Ensure the pointer is set to NULL after unmapping

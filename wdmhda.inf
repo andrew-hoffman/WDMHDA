@@ -10,33 +10,40 @@
 Signature="$CHICAGO$"
 Class=MEDIA
 ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
-provider=%SiriusCybernetics%
+provider=%ProviderName%
 ;;LayoutFile=layout.inf, layout1.inf, layout2.inf
-DriverVer=0.0001
+;;DriverVer needs to be kept up to date for Windows 2000+
+;;i think the DLL inherits the VERSIONINFO from the DDK
+DriverVer=07/08/2025,5.00.2195.1
 
 ;You must specify which platform is supported by each SourceDisksNames section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
 [SourceDisksNames.x86]
-222=%DiskDescription%,,,
+101=%DiskDescription%,,,
 
 ;You must also specify which platform is supported by each SourceDisksFiles section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
 [SourceDisksFiles.x86]
-WDMHDA.sys=222
-
+WDMHDA.sys=101
 
 [Manufacturer]
 %MfgName%=Intel
 
-;; Excluding drivers from the "Add New Hardware" list.
+;; Excluding drivers from the "Add New Hardware" list (should be done for all PnP)
 [ControlFlags]
 
 ExcludeFromSelect = *
 
 [Intel]
-;;Virtualbox and VMware HDA interfaces
+;;Intel HDA interfaces
 %WDMHDA_AA.DeviceDesc%=WDMHDA, PCI\VEN_8086&DEV_2668
+%WDMHDA_AA.DeviceDesc%=WDMHDA, PCI\VEN_8086&DEV_27D8
+
+;VMWare
 %WDMHDA_AB.DeviceDesc%=WDMHDA, PCI\VEN_15AD&DEV_1977
+
+;Generic PCI class. use at your own risk
+%WDMHDA.DeviceDesc%=WDMHDA, PCI\CC_0403
 
 [DestinationDirs]
 WDMHDA.CopyList=10,system32\drivers
@@ -204,9 +211,9 @@ AddService = WDMHDA, 0x00000002, WDMHDA_Service_Inst
 ProviderName="Sirius Cybernetics Corp."
 MfgName="Intel"
 DiskDescription="HDA WDM Sample Driver Disk"
-WDMHDA_AA.DeviceDesc="HDA Sample Driver for Virtualbox HDA Controller"
+WDMHDA_AA.DeviceDesc="HDA Sample Driver for Intel HDA Controller"
 WDMHDA_AB.DeviceDesc="HDA Sample Driver for VMWare HDA Controller"
-WDMHDA.DeviceDesc="HDA Sample Driver for VM Controller"
+WDMHDA.DeviceDesc="HDA Sample Driver for HDA Controller"
 
 WDMHDA.Wave.szPname="HDA Sound Card"
 WDMHDA.Topology.szPname="HDA Mixer"
@@ -259,10 +266,10 @@ ICHNode.MicInMute       ="Mic In Mute"
 ICHNode.SimulStereo     ="Simulated Stereo"
 
 [Strings.0407]
-ProviderName="FooProviderName"
+ProviderName="Sirius-Kybernetik GmbH"
 MfgName="Intel"
 DiskDescription="Diskette für HDA WDM Treiberbeispiel"
-WDMHDA_AA.DeviceDesc="HDA Treiberbeispiel für Virtualbox HDA Kontroller"
+WDMHDA_AA.DeviceDesc="HDA Treiberbeispiel für Intel HDA Kontroller"
 WDMHDA_AB.DeviceDesc="HDA Treiberbeispiel für VMWare HDA Kontroller"
 WDMHDA.DeviceDesc="HDA Treiberbeispiel für HDA Kontroller"
 

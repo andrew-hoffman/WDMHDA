@@ -359,7 +359,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//check 128-byte alignment of what we received
 	ASSERT( LogicalAddress.LowPart & 127 == 0);
 
-	//map the audio buffer too
+	//map the audio buffer too? or should we be doing this through WaveCyclic?
+	//not sure if that can give me the desired 128 byte phys alignment but we might
+	//get that automatically just by mapping more than a 4k page worth.
 
 	PPHYSICAL_ADDRESS pBufLogicalAddress = NULL;
 	PVOID BufVirtualAddress = NULL;

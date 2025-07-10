@@ -97,13 +97,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
-UCHAR interrupt = 0;
-ULONG memLength = 0x0;//check
-ULONG audBufSize = 96000 * 2 * 2; //1s of 2ch 16 bit audio
-PDEVICE_DESCRIPTION pDeviceDescription;
-PDMA_ADAPTER DMA_Adapter;
-BOOLEAN is64OK = FALSE;
-
+ULONG audBufSize = 9600 * 2 * 2; //100ms of 2ch 16 bit audio
 
 #pragma code_seg("PAGE")
 /*****************************************************************************
@@ -173,10 +167,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 				m_pDeviceObject -> AlignmentRequirement));
 	}
 
-	//TODO: check PCI config registers for Class code (4h) and subclass (3h)
-	//to make sure we have the right type of device.
-	//that's done thru the PnP manager somehow.
-	//is there anything in there we need to set?
+	//is there anything in config space we need to set?
 
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
@@ -229,6 +220,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	else {
         DOUT(DBG_SYSINFO, ("Virt Addr = 0x%X, Mem Length = 0x%X", m_pHDARegisters, memLength));
     }
+	Base = (PUCHAR)m_pHDARegisters;
 
 #if (DBG)
 	//try reading something from the mapped memory and see if it makes sense as hda registers
@@ -236,58 +228,18 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
 	}
 #endif
+	//read capabilities
+	USHORT caps = readUSHORT(0x00);
 
-	//Reset the controller
+	//check 64OK flag
+	is64OK = caps & 1;
 
-	writeUCHAR(0x08,0x0);
+	//TODO check that we have at least 1 output or bidirectional stream engine
 
-	for (i = 0; i < 1000; i++) {
-		KeStallExecutionProcessor(100);
-		if ((readUCHAR(0x08) & 0x1) == 0x0) {
-			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
-			break;
-		} else if (i == 999) {
-			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
-		}
-	}
+	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
+	InputStreamBase = (Base + 0x80);
+	OutputStreamBase = (Base + 0x80 + (0x20 * ((caps>>8) & 0xF))); //skip input streams ports
 
-	KeStallExecutionProcessor(100);
-	writeUCHAR(0x08,0x1);
-
-	for (i = 0; i < 1000; i++) {
-		KeStallExecutionProcessor(100);
-		if ((readUCHAR(0x08) & 0x1) == 0x1) {
-			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
-			break;
-		}
-		else if (i == 999) {
-			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
-		}
-	}
-
-	 //read capabilities
-	 DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
-
-	 //TODO check that we have at least 1 output or bidirectional stream engine
-
-	 //check 64OK flag
-	 is64OK = readUCHAR(0x00) & 1;
-
-	 //disable interrupts
-	 writeULONG (0x20, 0);
- 
-	 //turn off dma position transfer
-	 writeULONG (0x70, 0);
-	 writeULONG (0x74, 0);
- 
-	 //disable synchronization
-	 writeULONG (0x34, 0);
-	 writeULONG (0x38, 0);
-
-	 //stop CORB and RIRB
-	 writeUCHAR (0x4C, 0x0);
-	 writeUCHAR (0x5C, 0x0);
- 
 	//allocate common buffer as one chunk of 8k
 	//for CORB, RIRB, BDL buffer, DMA position buffer
 
@@ -338,28 +290,42 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		8192,
 		pLogicalAddress, //out param
 		TRUE );
-	PHYSICAL_ADDRESS LogicalAddress = *pLogicalAddress;
 
-	DOUT(DBG_SYSINFO, ("CORB Virt Addr = 0x%X,", VirtualAddress));
-	DOUT(DBG_SYSINFO, ("CORB Phys Addr = 0x%X,", LogicalAddress));
+	CorbMemPhys = *pLogicalAddress;
+	CorbMemVirt = (PULONG) VirtualAddress;
 
-	if (!VirtualAddress) {
+	DOUT(DBG_SYSINFO, ("CORB Virt Addr = 0x%X,", CorbMemVirt));
+	DOUT(DBG_SYSINFO, ("CORB Phys Addr = 0x%X,", CorbMemPhys));
+
+	if (!CorbMemVirt) {
 		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
 		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if (LogicalAddress.QuadPart == 0) {
+	if (CorbMemPhys.QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
 
 	if (is64OK == FALSE) {
-		ASSERT( LogicalAddress.HighPart == 0);
+		ASSERT( CorbMemPhys.HighPart == 0);
 	}
 
 	//check 128-byte alignment of what we received
-	ASSERT( LogicalAddress.LowPart & 127 == 0);
+	ASSERT( CorbMemPhys.LowPart & 127 == 0);
 
-	//map the audio buffer too? or should we be doing this through WaveCyclic?
+	//set all our pointers
+
+	RirbMemVirt = CorbMemVirt + 1024;
+	RirbMemPhys.LowPart = CorbMemPhys.LowPart + 1024; //we wont get a carry will we?
+	RirbMemPhys.HighPart = CorbMemPhys.HighPart;
+
+	//TODO: support multiple BDLs for multiple streams
+	BdlMemVirt = RirbMemVirt + 2048;
+	BdlMemPhys.LowPart = RirbMemPhys.LowPart + 2048;
+	BdlMemPhys.HighPart = RirbMemPhys.HighPart;
+
+	//map the audio buffer too
+	// - or should we be doing this through WaveCyclic?
 	//not sure if that can give me the desired 128 byte phys alignment but we might
 	//get that automatically just by mapping more than a 4k page worth.
 
@@ -385,38 +351,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		return STATUS_NO_MEMORY;
 	}
 
-	//ok then. write the needed logical addresses for CORB/RIRB to the HDA controller registers
-
-	//corb addr
-	writeULONG( 0x40, LogicalAddress.LowPart);
-	if (is64OK){
-		writeULONG( 0x44, LogicalAddress.HighPart);
-	}
-	else {
-		writeULONG( 0x44, 0);
-	}
-
-	//rirb addr
-
-	writeULONG( 0x50, (LogicalAddress.LowPart + 1024));
-	if (is64OK){
-		writeULONG( 0x54, LogicalAddress.HighPart);
-	}
-	else {
-		writeULONG( 0x54, 0);
-	}
-
-	//overlay a struct for the corb & rirb slots at that virtual pointer
-
-	//detect 
-
+	//
+    // Reset the controller and init registers
     //
-    // Initialize the controller registers
-    //
-    //ntStatus = InitAC97 ();
+    ntStatus = InitHDA ();
     if (!NT_SUCCESS (ntStatus))
         return ntStatus;
     
+
     //
     // Probe codec configuration
     //
@@ -427,14 +369,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
         return ntStatus;
     }
 
-    //
-    // Now, every AC97 read access goes to the cache.
-    //
-    //m_bDirectRead = FALSE;
-
-    //
-    // Restore the AC97 registers now.
-    //
 #if (DBG)
     DumpConfig ();
 #endif
@@ -778,34 +712,196 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::NonDelegatingQueryInterface
 }
 
 /*****************************************************************************
- * CAdapterCommon::InitAC97
+ * CAdapterCommon::InitHDA
  *****************************************************************************
- * Initialize the ICH (without hosing the modem if it got installed first).
+ * Initialize the HDA controller. Only call this from IRQL = Passive
  */
-NTSTATUS CAdapterCommon::InitAC97 (void)
+
+NTSTATUS CAdapterCommon::InitHDA (void)
 {
     PAGED_CODE ();
     
-    DOUT (DBG_PRINT, ("[CAdapterCommon::InitAC97]"));
+    DOUT (DBG_PRINT, ("[CAdapterCommon::InitHDA]"));
 
-    //
-    // First check if there is an AC link to the primary CoDec.
-    //
-    NTSTATUS ntStatus = PrimaryCodecReady ();
+	//TODO: try to stop all possible running streams before resetting
+
+	//we're not supposed to write to any registers before reset
+
+	//Reset the whole controller
+
+	writeUCHAR(0x08,0x0);
+
+	for (int i = 0; i < 100; i++) {
+		KeStallExecutionProcessor(100);
+		if ((readUCHAR(0x08) & 0x1) == 0x0) {
+			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
+			break;
+		} else if (i == 99) {
+			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
+			return STATUS_TIMEOUT;
+		}
+	}
+
+	KeStallExecutionProcessor(100);
+	writeUCHAR(0x08,0x1);
+
+	for (i = 0; i < 100; i++) {
+		KeStallExecutionProcessor(100);
+		if ((readUCHAR(0x08) & 0x1) == 0x1) {
+			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
+			break;
+		}
+		else if (i == 99) {
+			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
+			return STATUS_TIMEOUT;
+		}
+	}
+
+	//disable interrupts
+	writeULONG (0x20, 0);
+ 
+	//turn off dma position transfer
+	writeULONG (0x70, 0);
+	writeULONG (0x74, 0);
+ 
+	//disable synchronization
+	writeULONG (0x34, 0);
+	writeULONG (0x38, 0);
+
+	//stop CORB and RIRB
+	writeUCHAR (0x4C, 0x0);
+	writeUCHAR (0x5C, 0x0);
+
+	//write the needed logical addresses for CORB/RIRB to the HDA controller registers
+
+	//corb addr
+	writeULONG (0x40, CorbMemPhys.LowPart);
+	if (is64OK){
+		writeULONG (0x44, CorbMemPhys.HighPart);
+	}
+	else {
+		writeULONG(0x44, 0);
+	}
+	//corb number of entries (each entry is 4 bytes)
+	//check what is supported and set it to the max supported
+
+	if ((readUCHAR (0x4E)  & 0x40) == 0x40){
+		//corb size is 256 entries
+		DOUT (DBG_SYSINFO, ("Corb size 256 entries"));
+		CorbNumberOfEntries = 256;
+		writeUCHAR (0x4E, 0x2);
+	} else if ((readUCHAR (0x4E)  & 0x40) == 0x20){
+		//corb size is 16 entries
+		DOUT (DBG_SYSINFO, ("Corb size 16 entries"));
+		CorbNumberOfEntries = 16;
+		writeUCHAR (0x4E, 0x1);
+	} else if ((readUCHAR (0x4E)  & 0x40) == 0x10){
+		//corb size is 2 entries
+		DOUT (DBG_SYSINFO, ("Corb size 2 entries"));
+		CorbNumberOfEntries = 2;
+		writeUCHAR (0x4E, 0x0);
+	} else {
+		//CORB not supported, need to use PIO
+		//i'm not gonna bother for now since CORB/RIRB support is required for
+		//UAA compliant hardware, eg. anything with existing Windows drivers
+		DOUT (DBG_ERROR, ("CORB only supports PIO"));
+		return STATUS_NOT_IMPLEMENTED;
+	}
+	//Reset corb read pointer
+	writeUSHORT(0x4A, 0x8000); //write a 1 to bit 15
+	for (i = 0; i < 5; i++) {
+		KeStallExecutionProcessor(10);
+		if ((readUSHORT(0x4A) & 0x8000) == 0x8000) break;
+		//read back the 1 to verify reset
+	}
+	if ((readUSHORT(0x4A) & 0x8000) == 0x0000){
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset"));
+		return STATUS_TIMEOUT;
+	}
+
+	//then write a 0 and read back the 0 to verify a clear
+	writeUSHORT(0x4A, 0x0000);
+	for (i = 0; i < 5; i++) {
+		KeStallExecutionProcessor(10);
+		if ((readUSHORT(0x4A) & 0x8000) == 0x0000) break;
+	}
+	if ((readUSHORT(0x4A) & 0x8000) == 0x8000){
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset"));
+		return STATUS_TIMEOUT;
+	}
+
+	writeUSHORT( 0x48,0);
+	CorbPointer = 1;
+
+	//rirb addr
+
+	writeULONG (0x50, RirbMemPhys.LowPart);
+	if (is64OK){
+		writeULONG (0x54, RirbMemPhys.HighPart);
+	}
+	else {
+		writeULONG (0x54, 0);
+	}
+	//rirb number of entries (each entry is 8 bytes)
+	
+	if ((readUCHAR (0x5E)  & 0x40) == 0x40){
+		//rirb size is 256 entries
+		DOUT (DBG_SYSINFO, ("rirb size 256 entries"));
+		RirbNumberOfEntries = 256;
+		writeUCHAR (0x5E, 0x2);
+	} else if ((readUCHAR (0x5E)  & 0x40) == 0x20){
+		//rirb size is 16 entries
+		DOUT (DBG_SYSINFO, ("rirb size 16 entries"));
+		RirbNumberOfEntries = 16;
+		writeUCHAR (0x5E, 0x1);
+	} else if ((readUCHAR (0x5E)  & 0x40) == 0x10){
+		//rirb size is 2 entries
+		DOUT (DBG_SYSINFO, ("rirb size 2 entries"));
+		RirbNumberOfEntries = 2;
+		writeUCHAR (0x5E, 0x0);
+	} else {
+		//rirb not supported, need to use PIO
+		DOUT (DBG_ERROR, ("RIRB only supports PIO"))
+		return STATUS_NOT_IMPLEMENTED;
+	}
+
+	//reset RIRB write pointer to 0th entry
+	writeUSHORT (0x58, 0x8000);
+
+	KeStallExecutionProcessor(10);
+	writeULONG(0x5A, 0); //disable interrupts
+	RirbPointer = 1;
+ 
+	//start CORB and RIRB
+	writeUCHAR ( 0x4C, 0x2);
+	writeUCHAR ( 0x5C, 0x2);
+
+	//find codecs on the link
+	//TODO: i will need 2 implementations of send_codec_verb
+	//one immediate that stalls, and one with a callback 
+
+	//for(int codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
+		//components->hda[sound_card_number].communication_type = HDA_CORB_RIRB;
+		//codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+
+	//if(codec_id != 0) {
+	//	logf("\nHDA: CORB/RIRB communication interface");
+	//  hda_initalize_codec(sound_card_number, codec_number);
+	//  break; //initalization is complete
+	//	}
+	//}
+
+    //ok now if we got here we have a working link
+	//and we're ready to go init the codec
+
+	NTSTATUS ntStatus = PrimaryCodecReady ();
     if (NT_SUCCESS (ntStatus))
-    {
-        //
-        // Second, reset this primary CoDec; If this is a AMC97 CoDec, only
-        // the audio registers are reset. If this is a MC97 CoDec, the CoDec
-        // should ignore the reset (according to the spec).
-        //
-        WriteCodecRegister (AC97REG_RESET, 0x00, -1);
-        
+    {        
         ntStatus = PowerUpCodec ();
     }
     else
     {
-        DOUT (DBG_ERROR, ("Initialization of AC97 CoDec failed."));
+        DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
     }
 
     return ntStatus;
@@ -1296,7 +1392,7 @@ NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
 /*****************************************************************************
  * CAdapterCommon::ReadCodecRegister
  *****************************************************************************
- * Reads a AC97 register. Don't call at PASSIVE_LEVEL.
+ * Reads a AC97 register. only(?) call at PASSIVE_LEVEL.
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ReadCodecRegister
 (
@@ -2175,9 +2271,9 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
     DOUT (DBG_PRINT, ("[CAdapterCommon::RestoreCodecRegisters]"));
 
     //
-    // Initialize the AC97 codec.
+    // Initialize the HDA codec from scratch
     //
-    NTSTATUS ntStatus = InitAC97 ();
+    NTSTATUS ntStatus = InitHDA ();
     if (!NT_SUCCESS (ntStatus))
         return ntStatus;
 
@@ -2185,11 +2281,12 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
     // Restore all codec registers.  Failure is not critical but we will
     // print a message just the same.
 	//
-    for (AC97Register i = AC97REG_MASTER_VOLUME; i < AC97REG_RESERVED2; 
-        i = (AC97Register)(i + 1))
-	{
-        WriteCodecRegister (i, m_stAC97Registers[i].wCache, -1);
-	}
+
+	//   for (AC97Register i = AC97REG_MASTER_VOLUME; i < AC97REG_RESERVED2; 
+	//      i = (AC97Register)(i + 1))
+	//	{
+	//     WriteCodecRegister (i, m_stAC97Registers[i].wCache, -1);
+	//	}
 
 	return STATUS_SUCCESS;
 }
@@ -2201,22 +2298,6 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
 
 #pragma code_seg()
 
-/*****************************************************************************
- * CAdapterCommon::Sleep
- *****************************************************************************
- * sleeps the thread 1ms (for codec reset only)
- */
-
-NTSTATUS CAdapterCommon::Sleep (void)
-{
-    LARGE_INTEGER interval;
-    interval.QuadPart = -10000; // 1ms delay (negative value indicates relative time in 100-nanosecond units)
-
-    NTSTATUS status = KeDelayExecutionThread(KernelMode, FALSE, &interval);
-    if (!NT_SUCCESS(status))
-		DOUT (DBG_ERROR, ("can't sleep"));
-	return status;
-}
 
 /*****************************************************************************
  * CAdapterCommon::WriteBMControlRegister

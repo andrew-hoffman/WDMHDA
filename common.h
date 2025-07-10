@@ -94,91 +94,6 @@ typedef struct
  *****************************************************************************/
 
 
-// PCI device info structure (WDM style)
-typedef struct _PCI_DEVICE_INFO {
-    ULONG VendorId;
-    ULONG DeviceId;
-    ULONG BusNumber;
-    ULONG DeviceFunction;
-    PVOID MappedResources;
-} PCI_DEVICE_INFO, *PPCI_DEVICE_INFO;
-
-// HD Audio info structure (WDM style)
-typedef struct _HDA_DEVICE_EXTENSION {
-    // PCI device information
-    PCI_DEVICE_INFO PciInfo;
-
-    // Base addresses and stream information
-    ULONG Base;
-    ULONG InputStreamBase;
-    ULONG OutputStreamBase;
-    ULONG CommunicationType;
-    ULONG CodecNumber;
-    ULONG IsInitalizedUsefulOutput;
-    ULONG SelectedOutputNode;
-
-    // CORB/RIRB buffers
-    PULONG CorbMem;
-    ULONG CorbPointer;
-    ULONG CorbNumberOfEntries;
-    PULONG RirbMem;
-    ULONG RirbPointer;
-    ULONG RirbNumberOfEntries;
-
-    // Output buffer information
-    PULONG OutputBufferList;
-    ULONG SoundLength;
-    ULONG BytesOnOutputForStoppingSound;
-    ULONG LengthOfNodePath;
-
-    // AFG (Audio Function Group) node capabilities
-    ULONG AfgNodeSampleCapabilities;
-    ULONG AfgNodeStreamFormatCapabilities;
-    ULONG AfgNodeInputAmpCapabilities;
-    ULONG AfgNodeOutputAmpCapabilities;
-
-    // Audio output nodes
-    ULONG AudioOutputNodeNumber;
-    ULONG AudioOutputNodeSampleCapabilities;
-    ULONG AudioOutputNodeStreamFormatCapabilities;
-
-    ULONG OutputAmpNodeNumber;
-    ULONG OutputAmpNodeCapabilities;
-
-    // Secondary audio output nodes
-    ULONG SecondAudioOutputNodeNumber;
-    ULONG SecondAudioOutputNodeSampleCapabilities;
-    ULONG SecondAudioOutputNodeStreamFormatCapabilities;
-    ULONG SecondOutputAmpNodeNumber;
-    ULONG SecondOutputAmpNodeCapabilities;
-
-    // Pin nodes
-    ULONG PinOutputNodeNumber;
-    ULONG PinHeadphoneNodeNumber;
-
-    // Resources
-    PDEVICE_OBJECT PhysicalDeviceObject;
-    PDEVICE_OBJECT FunctionalDeviceObject;
-    PADAPTERCOMMON AdapterCommon;
-    
-    // Synchronization
-    KSPIN_LOCK HardwareLock;
-    
-    // Current state information
-    BOOLEAN PowerState;
-    BOOLEAN HeadphoneConnected;
-    
-    // Selected card
-    ULONG SelectedHdaCard;
-} HDA_DEVICE_EXTENSION, *PHDA_DEVICE_EXTENSION;
-
-
-#define MAX_NUMBER_OF_HDA_SOUND_CARDS 4;
-
-// TODO: rewrite this
-ULONG selected_hda_card;
-
-
 /*****************************************************************************
  * Constants
  *****************************************************************************
@@ -217,13 +132,46 @@ class CAdapterCommon : public IAdapterCommon,
 {
 private:
 	static tAC97Registers m_stAC97Registers[64];    // The shadow registers.
-	static struct HDA_DEVICE_EXTENSION m_HDAInfo;
+	//static struct HDA_DEVICE_EXTENSION m_HDAInfo;
     static tHardwareConfig m_stHardwareConfig;      // The hardware configuration.
-	//HDA_DEVICE_EXTENSION            m_DevExt;		// Device extension
-	PVOID                           m_pHDARegisters;     // MMIO registers
-    BOOLEAN                         m_bDMAInitialized;   // DMA initialized flag
-    BOOLEAN                         m_bCORBInitialized;  // CORB initialized flag
-    BOOLEAN                         m_bRIRBInitialized;  // RIRB initialized flag
+	//HDA_DEVICE_EXTENSION m_DevExt;		// Device extension
+	PVOID m_pHDARegisters;     // MMIO registers
+	PUCHAR Base;
+    PUCHAR InputStreamBase;
+    PUCHAR OutputStreamBase;
+
+	// CORB/RIRB buffers
+
+    PULONG CorbMemVirt;
+	PHYSICAL_ADDRESS CorbMemPhys;
+    ULONG CorbPointer;
+    ULONG CorbNumberOfEntries;
+
+    PULONG RirbMemVirt;
+	PHYSICAL_ADDRESS RirbMemPhys;
+    ULONG RirbPointer;
+    ULONG RirbNumberOfEntries;
+
+	PULONG BdlMemVirt;
+	PHYSICAL_ADDRESS BdlMemPhys;
+
+	PULONG DmaPosVirt;
+	PHYSICAL_ADDRESS DmaPosPhys;
+
+    // Output buffer information
+    PULONG OutputBufferList;
+
+	PDMA_ADAPTER DMA_Adapter;
+	PDEVICE_DESCRIPTION pDeviceDescription;
+	UCHAR interrupt;
+	ULONG memLength;//check
+
+	BOOLEAN is64OK;
+
+
+    BOOLEAN m_bDMAInitialized;   // DMA initialized flag
+    BOOLEAN m_bCORBInitialized;  // CORB initialized flag
+    BOOLEAN m_bRIRBInitialized;  // RIRB initialized flag
     PDEVICE_OBJECT m_pDeviceObject;     // Device object used for registry access.
     PWORD m_pCodecBase;                 // The HDA I/O port address.
     PUCHAR m_pBusMasterBase;            // The Bus Master base address.
@@ -239,13 +187,8 @@ private:
     //
     // Resets HDA audio registers.
     //
-    NTSTATUS InitAC97 (void);
+    NTSTATUS InitHDA (void);
 
-	//
-    // yield thread context to sleep a bit.
-    //
-
-	NTSTATUS Sleep (void);
     
     //
     // Checks for existance of registers.

@@ -1,6 +1,6 @@
  WDMHDA
 
- Timestamp is 686f0461 (Wed Jul 09 17:08:01 2025)
+ Timestamp is 68715b57 (Fri Jul 11 11:43:35 2025)
 
  Preferred load address is 00010000
 
@@ -10,7 +10,7 @@
  0002:000000b0 000011cfH .rdata                  DATA
  0003:00000000 00000c65H .data                   DATA
  0003:00000c68 00000690H .bss                    DATA
- 0004:00000000 0000fbc4H PAGE                    CODE
+ 0004:00000000 0000fbd4H PAGE                    CODE
  0005:00000000 0000003cH .idata$2                CODE
  0005:0000003c 00000014H .idata$3                CODE
  0005:00000050 000000b0H .idata$4                CODE
@@ -414,59 +414,59 @@
  0004:00000b8e       _AddDevice@8               00016c0e f   adapter.obj
  0004:00000c82       _DriverEntry@8             00016d02 f   adapter.obj
  0004:00000d8e       ?NewAdapterCommon@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00016e0e f   common.obj
- 0004:0000128a       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 0001730a f   common.obj
- 0004:00001d46       ??1CAdapterCommon@@UAE@XZ  00017dc6 f   common.obj
- 0004:0000228e       ?DumpConfig@CAdapterCommon@@AAEXXZ 0001830e f   common.obj
- 0004:00002d3a       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00018dba f   common.obj
- 0004:000030e6       ?InitHDA@CAdapterCommon@@AAEJXZ 00019166 f   common.obj
- 0004:00003952       ?ProbeHWConfig@CAdapterCommon@@AAEJXZ 000199d2 f   common.obj
- 0004:0000452a       ?AcquireCodecSemiphore@CAdapterCommon@@AAEJXZ 0001a5aa f   common.obj
- 0004:0000484a       ?ReadCodecRegister@CAdapterCommon@@UAGJW4AC97Register@@PAG@Z 0001a8ca f   common.obj
- 0004:00004d92       ?WriteCodecRegister@CAdapterCommon@@UAGJW4AC97Register@@GG@Z 0001ae12 f   common.obj
- 0004:000050ea       ?PrimaryCodecReady@CAdapterCommon@@AAEJXZ 0001b16a f   common.obj
- 0004:000052d6       ?PowerUpCodec@CAdapterCommon@@AAEJXZ 0001b356 f   common.obj
- 0004:000055ca       ?ProgramSampleRate@CAdapterCommon@@UAGJW4AC97Register@@K@Z 0001b64a f   common.obj
- 0004:00005ac2       ?PowerChangeState@CAdapterCommon@@UAGXT_POWER_STATE@@@Z 0001bb42 f   common.obj
- 0004:00005eba       ?QueryPowerChangeState@CAdapterCommon@@UAGJT_POWER_STATE@@@Z 0001bf3a f   common.obj
- 0004:0000600e       ?QueryDeviceCapabilities@CAdapterCommon@@UAGJPAU_DEVICE_CAPABILITIES@@@Z 0001c08e f   common.obj
- 0004:0000611a       ?DisableAC97Pin@CAdapterCommon@@AAEHW4TopoPinConfig@@@Z 0001c19a f   common.obj
- 0004:0000633a       ?RestoreCodecRegisters@CAdapterCommon@@UAGJXZ 0001c3ba f   common.obj
- 0004:00006438       ?CreateMiniportTopologyICH@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001c4b8 f   mintopo.obj
- 0004:000065ae       ?NonDelegatingQueryInterface@CMiniportTopologyICH@@UAGJABU_GUID@@PAPAX@Z 0001c62e f   mintopo.obj
- 0004:00006762       ??1CMiniportTopologyICH@@UAE@XZ 0001c7e2 f   mintopo.obj
- 0004:000068f0       ?DataRangeIntersection@CMiniportTopologyICH@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0001c970 f   mintopo.obj
- 0004:0000699a       ?Init@CMiniportTopologyICH@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 0001ca1a f   mintopo.obj
- 0004:00006bee       ?GetDescription@CMiniportTopologyICH@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001cc6e f   mintopo.obj
- 0004:00006d96       ?DumpTopology@CMiniportTopologyICH@@AAEXXZ 0001ce16 f   mintopo.obj
- 0004:000070aa       ?BuildTopology@CMiniportTopologyICH@@AAEJXZ 0001d12a f   mintopo.obj
- 0004:0000721e       ?BuildPinDescriptors@CMiniportTopologyICH@@AAEJXZ 0001d29e f   mintopo.obj
- 0004:000079b2       ?BuildNodeDescriptors@CMiniportTopologyICH@@AAEJXZ 0001da32 f   mintopo.obj
- 0004:00008ab6       ?BuildConnectionDescriptors@CMiniportTopologyICH@@AAEJXZ 0001eb36 f   mintopo.obj
- 0004:0000a3ae       ?GetPhysicalConnectionPins@CMiniportTopologyICH@@UAGJPAK00@Z 0002042e f   mintopo.obj
- 0004:0000a552       ?CreateMiniportWaveICH@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 000205d2 f   minwave.obj
- 0004:0000a6ea       ?NonDelegatingQueryInterface@CMiniportWaveICH@@UAGJABU_GUID@@PAPAX@Z 0002076a f   minwave.obj
- 0004:0000a8ba       ??1CMiniportWaveICH@@UAE@XZ 0002093a f   minwave.obj
- 0004:0000aad6       ?Init@CMiniportWaveICH@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWavePci@@PAPAUIServiceGroup@@@Z 00020b56 f   minwave.obj
- 0004:0000add6       ?ProcessResources@CMiniportWaveICH@@AAEJPAUIResourceList@@@Z 00020e56 f   minwave.obj
- 0004:0000b102       ?BuildDataRangeInformation@CMiniportWaveICH@@AAEJXZ 00021182 f   minwave.obj
- 0004:0000b862       ?NewStream@CMiniportWaveICH@@UAGJPAPAUIMiniportWavePciStream@@PAUIUnknown@@W4_POOL_TYPE@@PAUIPortWavePciStream@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 000218e2 f   minwave.obj
- 0004:0000bbfa       ?GetDescription@CMiniportWaveICH@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00021c7a f   minwave.obj
- 0004:0000bd1e       ?DataRangeIntersection@CMiniportWaveICH@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00021d9e f   minwave.obj
- 0004:0000bf72       ?TestDataFormat@CMiniportWaveICH@@AAEJPATKSDATAFORMAT@@W4WavePins@@@Z 00021ff2 f   minwave.obj
- 0004:0000c386       ?PowerChangeNotify@CMiniportWaveICH@@UAGXT_POWER_STATE@@@Z 00022406 f   minwave.obj
- 0004:0000c672       ?GetDBValues@CMiniportTopologyICH@@SGJPAUIAdapterCommon@@W4TopoNodes@@PAJ2PAK@Z 000226f2 f   prophnd.obj
- 0004:0000ca56       ?PropertyHandler_OnOff@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00022ad6 f   prophnd.obj
- 0004:0000cf5a       ?BasicSupportHandler@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00022fda f   prophnd.obj
- 0004:0000d302       ?PropertyHandler_Level@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00023382 f   prophnd.obj
- 0004:0000dec6       ?PropertyHandler_Tone@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00023f46 f   prophnd.obj
- 0004:0000e536       ?PropertyHandler_Ulong@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 000245b6 f   prophnd.obj
- 0004:0000ec01       ?PropertyHandler_CpuResources@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00024c81 f   prophnd.obj
- 0004:0000eda2       ?CreateMiniportWaveICHStream@@YGJPAPAVCMiniportWaveICHStream@@PAUIUnknown@@W4_POOL_TYPE@@@Z 00024e22 f   ichwave.obj
- 0004:0000ef3a       ??1CMiniportWaveICHStream@@UAE@XZ 00024fba f   ichwave.obj
- 0004:0000f2e6       ?Init@CMiniportWaveICHStream@@QAEJPAVCMiniportWaveICH@@PAUIPortWavePciStream@@KEPATKSDATAFORMAT@@PAPAUIServiceGroup@@@Z 00025366 f   ichwave.obj
- 0004:0000f742       ?NonDelegatingQueryInterface@CMiniportWaveICHStream@@UAGJABU_GUID@@PAPAX@Z 000257c2 f   ichwave.obj
- 0004:0000f8e2       ?GetAllocatorFraming@CMiniportWaveICHStream@@UAGJPAUKSALLOCATOR_FRAMING@@@Z 00025962 f   ichwave.obj
- 0004:0000fa3e       ?SetFormat@CMiniportWaveICHStream@@UAGJPATKSDATAFORMAT@@@Z 00025abe f   ichwave.obj
+ 0004:0000128e       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 0001730e f   common.obj
+ 0004:00001d56       ??1CAdapterCommon@@UAE@XZ  00017dd6 f   common.obj
+ 0004:0000229e       ?DumpConfig@CAdapterCommon@@AAEXXZ 0001831e f   common.obj
+ 0004:00002d4a       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00018dca f   common.obj
+ 0004:000030f6       ?InitHDA@CAdapterCommon@@AAEJXZ 00019176 f   common.obj
+ 0004:00003962       ?ProbeHWConfig@CAdapterCommon@@AAEJXZ 000199e2 f   common.obj
+ 0004:0000453a       ?AcquireCodecSemiphore@CAdapterCommon@@AAEJXZ 0001a5ba f   common.obj
+ 0004:0000485a       ?ReadCodecRegister@CAdapterCommon@@UAGJW4AC97Register@@PAG@Z 0001a8da f   common.obj
+ 0004:00004da2       ?WriteCodecRegister@CAdapterCommon@@UAGJW4AC97Register@@GG@Z 0001ae22 f   common.obj
+ 0004:000050fa       ?PrimaryCodecReady@CAdapterCommon@@AAEJXZ 0001b17a f   common.obj
+ 0004:000052e6       ?PowerUpCodec@CAdapterCommon@@AAEJXZ 0001b366 f   common.obj
+ 0004:000055da       ?ProgramSampleRate@CAdapterCommon@@UAGJW4AC97Register@@K@Z 0001b65a f   common.obj
+ 0004:00005ad2       ?PowerChangeState@CAdapterCommon@@UAGXT_POWER_STATE@@@Z 0001bb52 f   common.obj
+ 0004:00005eca       ?QueryPowerChangeState@CAdapterCommon@@UAGJT_POWER_STATE@@@Z 0001bf4a f   common.obj
+ 0004:0000601e       ?QueryDeviceCapabilities@CAdapterCommon@@UAGJPAU_DEVICE_CAPABILITIES@@@Z 0001c09e f   common.obj
+ 0004:0000612a       ?DisableAC97Pin@CAdapterCommon@@AAEHW4TopoPinConfig@@@Z 0001c1aa f   common.obj
+ 0004:0000634a       ?RestoreCodecRegisters@CAdapterCommon@@UAGJXZ 0001c3ca f   common.obj
+ 0004:00006448       ?CreateMiniportTopologyICH@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001c4c8 f   mintopo.obj
+ 0004:000065be       ?NonDelegatingQueryInterface@CMiniportTopologyICH@@UAGJABU_GUID@@PAPAX@Z 0001c63e f   mintopo.obj
+ 0004:00006772       ??1CMiniportTopologyICH@@UAE@XZ 0001c7f2 f   mintopo.obj
+ 0004:00006900       ?DataRangeIntersection@CMiniportTopologyICH@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0001c980 f   mintopo.obj
+ 0004:000069aa       ?Init@CMiniportTopologyICH@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 0001ca2a f   mintopo.obj
+ 0004:00006bfe       ?GetDescription@CMiniportTopologyICH@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001cc7e f   mintopo.obj
+ 0004:00006da6       ?DumpTopology@CMiniportTopologyICH@@AAEXXZ 0001ce26 f   mintopo.obj
+ 0004:000070ba       ?BuildTopology@CMiniportTopologyICH@@AAEJXZ 0001d13a f   mintopo.obj
+ 0004:0000722e       ?BuildPinDescriptors@CMiniportTopologyICH@@AAEJXZ 0001d2ae f   mintopo.obj
+ 0004:000079c2       ?BuildNodeDescriptors@CMiniportTopologyICH@@AAEJXZ 0001da42 f   mintopo.obj
+ 0004:00008ac6       ?BuildConnectionDescriptors@CMiniportTopologyICH@@AAEJXZ 0001eb46 f   mintopo.obj
+ 0004:0000a3be       ?GetPhysicalConnectionPins@CMiniportTopologyICH@@UAGJPAK00@Z 0002043e f   mintopo.obj
+ 0004:0000a562       ?CreateMiniportWaveICH@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 000205e2 f   minwave.obj
+ 0004:0000a6fa       ?NonDelegatingQueryInterface@CMiniportWaveICH@@UAGJABU_GUID@@PAPAX@Z 0002077a f   minwave.obj
+ 0004:0000a8ca       ??1CMiniportWaveICH@@UAE@XZ 0002094a f   minwave.obj
+ 0004:0000aae6       ?Init@CMiniportWaveICH@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWavePci@@PAPAUIServiceGroup@@@Z 00020b66 f   minwave.obj
+ 0004:0000ade6       ?ProcessResources@CMiniportWaveICH@@AAEJPAUIResourceList@@@Z 00020e66 f   minwave.obj
+ 0004:0000b112       ?BuildDataRangeInformation@CMiniportWaveICH@@AAEJXZ 00021192 f   minwave.obj
+ 0004:0000b872       ?NewStream@CMiniportWaveICH@@UAGJPAPAUIMiniportWavePciStream@@PAUIUnknown@@W4_POOL_TYPE@@PAUIPortWavePciStream@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 000218f2 f   minwave.obj
+ 0004:0000bc0a       ?GetDescription@CMiniportWaveICH@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00021c8a f   minwave.obj
+ 0004:0000bd2e       ?DataRangeIntersection@CMiniportWaveICH@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00021dae f   minwave.obj
+ 0004:0000bf82       ?TestDataFormat@CMiniportWaveICH@@AAEJPATKSDATAFORMAT@@W4WavePins@@@Z 00022002 f   minwave.obj
+ 0004:0000c396       ?PowerChangeNotify@CMiniportWaveICH@@UAGXT_POWER_STATE@@@Z 00022416 f   minwave.obj
+ 0004:0000c682       ?GetDBValues@CMiniportTopologyICH@@SGJPAUIAdapterCommon@@W4TopoNodes@@PAJ2PAK@Z 00022702 f   prophnd.obj
+ 0004:0000ca66       ?PropertyHandler_OnOff@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00022ae6 f   prophnd.obj
+ 0004:0000cf6a       ?BasicSupportHandler@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00022fea f   prophnd.obj
+ 0004:0000d312       ?PropertyHandler_Level@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00023392 f   prophnd.obj
+ 0004:0000ded6       ?PropertyHandler_Tone@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00023f56 f   prophnd.obj
+ 0004:0000e546       ?PropertyHandler_Ulong@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 000245c6 f   prophnd.obj
+ 0004:0000ec11       ?PropertyHandler_CpuResources@CMiniportTopologyICH@@SGJPAU_PCPROPERTY_REQUEST@@@Z 00024c91 f   prophnd.obj
+ 0004:0000edb2       ?CreateMiniportWaveICHStream@@YGJPAPAVCMiniportWaveICHStream@@PAUIUnknown@@W4_POOL_TYPE@@@Z 00024e32 f   ichwave.obj
+ 0004:0000ef4a       ??1CMiniportWaveICHStream@@UAE@XZ 00024fca f   ichwave.obj
+ 0004:0000f2f6       ?Init@CMiniportWaveICHStream@@QAEJPAVCMiniportWaveICH@@PAUIPortWavePciStream@@KEPATKSDATAFORMAT@@PAPAUIServiceGroup@@@Z 00025376 f   ichwave.obj
+ 0004:0000f752       ?NonDelegatingQueryInterface@CMiniportWaveICHStream@@UAGJABU_GUID@@PAPAX@Z 000257d2 f   ichwave.obj
+ 0004:0000f8f2       ?GetAllocatorFraming@CMiniportWaveICHStream@@UAGJPAUKSALLOCATOR_FRAMING@@@Z 00025972 f   ichwave.obj
+ 0004:0000fa4e       ?SetFormat@CMiniportWaveICHStream@@UAGJPATKSDATAFORMAT@@@Z 00025ace f   ichwave.obj
  0005:00000000       __IMPORT_DESCRIPTOR_ntoskrnl 00025c60     ntoskrnl:ntoskrnl.exe
  0005:00000014       __IMPORT_DESCRIPTOR_HAL    00025c74     hal:HAL.dll
  0005:00000028       __IMPORT_DESCRIPTOR_portcls 00025c88     portcls:portcls.sys

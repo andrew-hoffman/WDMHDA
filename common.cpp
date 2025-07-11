@@ -311,7 +311,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	}
 
 	//check 128-byte alignment of what we received
-	ASSERT( CorbMemPhys.LowPart & 127 == 0);
+	ASSERT( (CorbMemPhys.LowPart & 0x7F) == 0);
 
 	//set all our pointers
 

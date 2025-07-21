@@ -171,16 +171,18 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
-	//but it should be one driver per controller.
-	//which may access multiple codecs but for now only sending 1 audio stream
-	//hardware mixing may come MUCH later.
+	//but it should be one driver per HDA controller.
+	//which may access multiple codecs but for now only sending 1 audio stream to all
+	//hardware mixing may come, MUCH later.
 
     //
     //Get the memory base address for the HDA controller registers. 
     //
 
     // Get memory resource - note we only want the first BAR
-	// on Skylake and newer mobile chipsets, there is a DSP interface at BAR2
+	// on Skylake and newer mobile chipsets,
+	// there is a DSP interface at BAR2 for Intel Smart Sound Technology
+
 	DOUT(DBG_SYSINFO, ("%d Resources in List", ResourceList->NumberOfEntries() ));
 
     for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
@@ -314,6 +316,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	ASSERT( (CorbMemPhys.LowPart & 0x7F) == 0);
 
 	//set all our pointers
+	//TODO: datasheet suggests RIRB should be on a 2k boundary 
+	//so maybe move the RIRB to the beginning of the block instead?
 
 	RirbMemVirt = CorbMemVirt + 1024;
 	RirbMemPhys.LowPart = CorbMemPhys.LowPart + 1024; //we wont get a carry will we?
@@ -330,14 +334,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//get that automatically just by mapping more than a 4k page worth.
 
 	PPHYSICAL_ADDRESS pBufLogicalAddress = NULL;
-	PVOID BufVirtualAddress = NULL;
+	BufVirtualAddress = NULL;
 	
 	BufVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
 		audBufSize,
 		pBufLogicalAddress, //out param
 		TRUE );
-	PHYSICAL_ADDRESS BufLogicalAddress = *pBufLogicalAddress;
+	BufLogicalAddress = *pBufLogicalAddress;
 
 	DOUT(DBG_SYSINFO, ("Buffer Virt Addr = 0x%X,", BufVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Buffer Phys Addr = 0x%X,", BufLogicalAddress));
@@ -398,10 +402,25 @@ CAdapterCommon::~CAdapterCommon ()
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
 
-	//TODO: free DMA buffers
-	//if(buffer)
-	//DMA_Adapter->DmaOperations->FreeCommonBuffer
-
+	//free DMA buffers
+	if((CorbMemVirt != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing corb/rirb buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					8192,
+                      CorbMemPhys,
+                      CorbMemVirt,
+                      false );
+	}
+	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing audio buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					audBufSize,
+                      BufLogicalAddress,
+                      BufVirtualAddress,
+                      false );
+	}
 	//free DMA adapter object
 	if (DMA_Adapter) {
 		DMA_Adapter->DmaOperations->PutDmaAdapter(DMA_Adapter);
@@ -772,6 +791,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR (0x4C, 0x0);
 	writeUCHAR (0x5C, 0x0);
 
+	//TODO: cache flush needed here?
+
 	//write the needed logical addresses for CORB/RIRB to the HDA controller registers
 
 	//corb addr
@@ -780,7 +801,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		writeULONG (0x44, CorbMemPhys.HighPart);
 	}
 	else {
-		writeULONG(0x44, 0);
+		writeULONG (0x44, 0);
 	}
 	//corb number of entries (each entry is 4 bytes)
 	//check what is supported and set it to the max supported
@@ -808,7 +829,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		return STATUS_NOT_IMPLEMENTED;
 	}
 	//Reset corb read pointer
-	writeUSHORT(0x4A, 0x8000); //write a 1 to bit 15
+	writeUSHORT (0x4A, 0x8000); //write a 1 to bit 15
 	for (i = 0; i < 5; i++) {
 		KeStallExecutionProcessor(10);
 		if ((readUSHORT(0x4A) & 0x8000) == 0x8000) break;
@@ -830,8 +851,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		return STATUS_TIMEOUT;
 	}
 
-	writeUSHORT( 0x48,0);
-	CorbPointer = 1;
+	writeUSHORT (0x48,0);
+	CorbPointer = 1; //always points to next free entry
 
 	//rirb addr
 
@@ -870,7 +891,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	KeStallExecutionProcessor(10);
 	writeULONG(0x5A, 0); //disable interrupts
-	RirbPointer = 1;
+	RirbPointer = 1; //always points to next free entry
  
 	//start CORB and RIRB
 	writeUCHAR ( 0x4C, 0x2);
@@ -880,16 +901,17 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	//TODO: i will need 2 implementations of send_codec_verb
 	//one immediate that stalls, and one with a callback 
 
-	//for(int codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
+	for(int codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
 		//components->hda[sound_card_number].communication_type = HDA_CORB_RIRB;
-		//codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+		DOUT (DBG_SYSINFO, ("codec %d response 0x%X", i, codec_id));
 
-	//if(codec_id != 0) {
-	//	logf("\nHDA: CORB/RIRB communication interface");
-	//  hda_initalize_codec(sound_card_number, codec_number);
-	//  break; //initalization is complete
-	//	}
-	//}
+		if(codec_id != 0) {
+		//	logf("\nHDA: CORB/RIRB communication interface");
+		//  hda_initalize_codec(sound_card_number, codec_number);
+			break; //initalization is complete
+		}
+	}
 
     //ok now if we got here we have a working link
 	//and we're ready to go init the codec
@@ -1358,12 +1380,14 @@ NTSTATUS CAdapterCommon::ProbeHWConfig (void)
 /*****************************************************************************
  * CAdapterCommon::AcquireCodecSemiphore
  *****************************************************************************
- * Acquires the AC97 semiphore.  This can not be called at dispatch level
+ * Acquires the AC97 semaphore.  This can not be called at dispatch level
  * because it can timeout if a lower IRQL thread has the semaphore.
  */
 NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
 {
     PAGED_CODE ();
+
+	//TODO how to rewrite this for HDA?
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::AcquireCodecSemiphore]"));
 
@@ -1392,7 +1416,7 @@ NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
 /*****************************************************************************
  * CAdapterCommon::ReadCodecRegister
  *****************************************************************************
- * Reads a AC97 register. only(?) call at PASSIVE_LEVEL.
+ * Reads a HDA CODEC register. only(?) call at PASSIVE_LEVEL.
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ReadCodecRegister
 (
@@ -1486,7 +1510,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ReadCodecRegister
 /*****************************************************************************
  * CAdapterCommon::WriteCodecRegister
  *****************************************************************************
- * Writes to a AC97 register.  This can only be done at passive level because
+ * Writes to a HDA CODEC register.  This can only be done at passive level because
  * the AcquireCodecSemiphore call could fail!
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteCodecRegister
@@ -2297,6 +2321,54 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
  */ 
 
 #pragma code_seg()
+
+STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
+	//using CORB/RIRB interface only (immediate cmd interface is not sdupported)
+	//TODO: check sizes of components passed in
+	//TODO: check for unsolicited responses and maybe schedule a DPC for them
+
+	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
+	DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
+ 
+	//write verb
+	CorbMemVirt[CorbPointer] = value;
+  
+	//move write pointer
+	writeUSHORT(0x48, CorbPointer);
+  
+	//wait for RIRB pointer to update to match
+
+	for(ULONG ticks = 0; ticks < 5; ++ticks) {
+		KeStallExecutionProcessor(10);
+		if(readUSHORT (0x58) == CorbPointer) {
+			break;
+		}
+		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 4)) {
+			DOUT (DBG_ERROR, ("No Response to Codec Verb"));
+			//	components->hda[selected_hda_card].communication_type = HDA_UNINITALIZED;
+			return STATUS_TIMEOUT;
+		}
+	}
+
+	//read response. each response is 8 bytes long but we only care about the lower 32 bits
+	value = RirbMemVirt[RirbPointer * 2];
+
+	//move pointers
+	CorbPointer++;
+	if(CorbPointer == CorbNumberOfEntries) {
+		CorbPointer = 0;
+	}
+	RirbPointer++;
+	if(RirbPointer == RirbNumberOfEntries) {
+		RirbPointer = 0;
+	}
+
+	//return response
+	return value;
+	//TODO: implement immediate command interface if it is ever necessary
+}
+
 
 
 /*****************************************************************************

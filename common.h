@@ -144,13 +144,13 @@ private:
 
     PULONG CorbMemVirt;
 	PHYSICAL_ADDRESS CorbMemPhys;
-    ULONG CorbPointer;
-    ULONG CorbNumberOfEntries;
+    USHORT CorbPointer;
+    USHORT CorbNumberOfEntries;
 
     PULONG RirbMemVirt;
 	PHYSICAL_ADDRESS RirbMemPhys;
-    ULONG RirbPointer;
-    ULONG RirbNumberOfEntries;
+    USHORT RirbPointer;
+    USHORT RirbNumberOfEntries;
 
 	PULONG BdlMemVirt;
 	PHYSICAL_ADDRESS BdlMemPhys;
@@ -160,6 +160,8 @@ private:
 
     // Output buffer information
     PULONG OutputBufferList;
+	PVOID BufVirtualAddress;
+	PHYSICAL_ADDRESS BufLogicalAddress;
 
 	PDMA_ADAPTER DMA_Adapter;
 	PDEVICE_DESCRIPTION pDeviceDescription;
@@ -398,6 +400,8 @@ public:
         IN  ULONG ulOffset,
         IN  ULONG Value
     );
+
+	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);	
 
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
     STDMETHODIMP_(void)		writeUCHAR(USHORT reg, UCHAR value);

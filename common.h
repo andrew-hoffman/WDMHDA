@@ -135,25 +135,29 @@ private:
 	//static struct HDA_DEVICE_EXTENSION m_HDAInfo;
     static tHardwareConfig m_stHardwareConfig;      // The hardware configuration.
 	//HDA_DEVICE_EXTENSION m_DevExt;		// Device extension
-	PVOID m_pHDARegisters;     // MMIO registers
+	PUCHAR m_pHDARegisters;     // MMIO registers
 	PUCHAR Base;
     PUCHAR InputStreamBase;
     PUCHAR OutputStreamBase;
+	PMDL mdl;
 
 	// CORB/RIRB buffers
+	// RIRB is at the beginning of the block, then CORB, then BDL
+
+	PULONG RirbMemVirt;
+	PHYSICAL_ADDRESS RirbMemPhys;
+    USHORT RirbPointer;
+    USHORT RirbNumberOfEntries;
 
     PULONG CorbMemVirt;
 	PHYSICAL_ADDRESS CorbMemPhys;
     USHORT CorbPointer;
     USHORT CorbNumberOfEntries;
 
-    PULONG RirbMemVirt;
-	PHYSICAL_ADDRESS RirbMemPhys;
-    USHORT RirbPointer;
-    USHORT RirbNumberOfEntries;
-
 	PULONG BdlMemVirt;
 	PHYSICAL_ADDRESS BdlMemPhys;
+	USHORT BdlPointer;
+    USHORT BdlNumberOfEntries;
 
 	PULONG DmaPosVirt;
 	PHYSICAL_ADDRESS DmaPosPhys;

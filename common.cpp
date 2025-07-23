@@ -212,9 +212,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		DOUT(DBG_SYSINFO, ("Phys Addr = 0x%X, Mem Length = 0x%X", physAddr, memLength));
 	}
 
-
 	//Map the device memory into kernel space
-    m_pHDARegisters = MmMapIoSpace(physAddr, memLength, MmNonCached);
+    m_pHDARegisters = (PUCHAR) MmMapIoSpace(physAddr, memLength, MmNonCached);
     if (!m_pHDARegisters) {
         DOUT (DBG_ERROR, ("Failed to map HD Audio registers to kernel mem"));
         return STATUS_BUFFER_TOO_SMALL;
@@ -242,8 +241,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	InputStreamBase = (Base + 0x80);
 	OutputStreamBase = (Base + 0x80 + (0x20 * ((caps>>8) & 0xF))); //skip input streams ports
 
-	//allocate common buffer as one chunk of 8k
+	//allocate common buffers
 	//for CORB, RIRB, BDL buffer, DMA position buffer
+
+	//the spec doesn't tell you this, but these can NOT share a 4k page
+	//so we need a separate mapping for each one.
 
 	//create device description object for our DMA
 	pDeviceDescription = (PDEVICE_DESCRIPTION)ExAllocatePool (PagedPool,
@@ -283,50 +285,103 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	//now we call the AllocateCommonBuffer function pointer in that struct
 
-	PVOID VirtualAddress = NULL;
-	PPHYSICAL_ADDRESS pLogicalAddress = NULL;
+	PVOID RirbVirtualAddress = NULL;
+	PPHYSICAL_ADDRESS pRirbLogicalAddress = NULL;
 	
 	
-	VirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+	RirbVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		8192,
-		pLogicalAddress, //out param
-		TRUE );
+		2048,
+		pRirbLogicalAddress, //out param
+		FALSE ); //CacheEnabled is probably ignored
 
-	CorbMemPhys = *pLogicalAddress;
-	CorbMemVirt = (PULONG) VirtualAddress;
+	RirbMemPhys = *pRirbLogicalAddress;
+	RirbMemVirt = (PULONG) RirbVirtualAddress;
+	//mdl = IoAllocateMdl(VirtualAddress, 8192, FALSE, FALSE, NULL);
 
-	DOUT(DBG_SYSINFO, ("CORB Virt Addr = 0x%X,", CorbMemVirt));
-	DOUT(DBG_SYSINFO, ("CORB Phys Addr = 0x%X,", CorbMemPhys));
+	DOUT(DBG_SYSINFO, ("RIRB Virt Addr = 0x%X,", RirbMemVirt));
+	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbMemPhys));
 
-	if (!CorbMemVirt) {
-		DOUT(DBG_ERROR, ("Couldn't map virt CORB/RIRB Space"));
+	if (!RirbMemVirt) {
+		DOUT(DBG_ERROR, ("Couldn't map virt RIRB Space"));
 		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if (CorbMemPhys.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys CORB/RIRB Space"));
+	if (RirbMemPhys.QuadPart == 0) {
+		DOUT(DBG_ERROR, ("Couldn't map phys RIRB Space"));
 		return STATUS_NO_MEMORY;
 	}
 
 	if (is64OK == FALSE) {
-		ASSERT( CorbMemPhys.HighPart == 0);
+		ASSERT(RirbMemPhys.HighPart == 0);
+	}
+
+	//check 128-byte alignment of what we received
+	ASSERT( (RirbMemPhys.LowPart & 0x7F) == 0);
+
+	//same for CORB
+
+	PVOID CorbVirtualAddress = NULL;
+	PPHYSICAL_ADDRESS pCorbLogicalAddress = NULL;
+	
+	
+	CorbVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+		DMA_Adapter,
+		1024,
+		pCorbLogicalAddress, //out param
+		FALSE ); //CacheEnabled is probably ignored
+
+	CorbMemPhys = *pCorbLogicalAddress;
+	CorbMemVirt = (PULONG) CorbVirtualAddress;
+
+	DOUT(DBG_SYSINFO, ("Corb Virt Addr = 0x%X,", CorbMemVirt));
+	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbMemPhys));
+
+	if (!CorbMemVirt) {
+		DOUT(DBG_ERROR, ("Couldn't map virt Corb Space"));
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+	if (CorbMemPhys.QuadPart == 0) {
+		DOUT(DBG_ERROR, ("Couldn't map phys Corb Space"));
+		return STATUS_NO_MEMORY;
+	}
+
+	if (is64OK == FALSE) {
+		ASSERT(CorbMemPhys.HighPart == 0);
 	}
 
 	//check 128-byte alignment of what we received
 	ASSERT( (CorbMemPhys.LowPart & 0x7F) == 0);
 
-	//set all our pointers
-	//TODO: datasheet suggests RIRB should be on a 2k boundary 
-	//so maybe move the RIRB to the beginning of the block instead?
+	//same for BDL
 
-	RirbMemVirt = CorbMemVirt + 1024;
-	RirbMemPhys.LowPart = CorbMemPhys.LowPart + 1024; //we wont get a carry will we?
-	RirbMemPhys.HighPart = CorbMemPhys.HighPart;
+	PVOID BdlVirtualAddress = NULL;
+	PPHYSICAL_ADDRESS pBdlLogicalAddress = NULL;
+	
+	
+	BdlVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+		DMA_Adapter,
+		1024,
+		pBdlLogicalAddress, //out param
+		FALSE ); //CacheEnabled is probably ignored
 
-	//TODO: support multiple BDLs for multiple streams
-	BdlMemVirt = RirbMemVirt + 2048;
-	BdlMemPhys.LowPart = RirbMemPhys.LowPart + 2048;
-	BdlMemPhys.HighPart = RirbMemPhys.HighPart;
+	BdlMemPhys = *pBdlLogicalAddress;
+	BdlMemVirt = (PULONG) BdlVirtualAddress;
+
+	//same for DMA Position buffer
+
+	PVOID DmaVirtualAddress = NULL;
+	PPHYSICAL_ADDRESS pDmaLogicalAddress = NULL;
+	
+	
+	DmaVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
+		DMA_Adapter,
+		1024,
+		pDmaLogicalAddress, //out param
+		FALSE ); //CacheEnabled is probably ignored
+
+	DmaPosPhys = *pDmaLogicalAddress;
+	DmaPosVirt = (PULONG) DmaVirtualAddress;
+
 
 	//map the audio buffer too
 	// - or should we be doing this through WaveCyclic?
@@ -340,7 +395,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		DMA_Adapter,
 		audBufSize,
 		pBufLogicalAddress, //out param
-		TRUE );
+		FALSE );
 	BufLogicalAddress = *pBufLogicalAddress;
 
 	DOUT(DBG_SYSINFO, ("Buffer Virt Addr = 0x%X,", BufVirtualAddress));
@@ -403,15 +458,43 @@ CAdapterCommon::~CAdapterCommon ()
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
 
 	//free DMA buffers
-	if((CorbMemVirt != NULL) && (DMA_Adapter!= NULL)){
-		DOUT (DBG_PRINT, ("freeing corb/rirb buffer"));
+	if((RirbMemVirt != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing rirb buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
 					DMA_Adapter,
-					8192,
+					2048,
+                      RirbMemPhys,
+                      RirbMemVirt,
+                      FALSE );
+	}
+	if((CorbMemVirt != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing Corb buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					2048,
                       CorbMemPhys,
                       CorbMemVirt,
-                      false );
+                      FALSE );
 	}
+	if((BdlMemVirt != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					2048,
+                      BdlMemPhys,
+                      BdlMemVirt,
+                      FALSE );
+	}
+	if((DmaPosVirt != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing Dma buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					2048,
+                      DmaPosPhys,
+                      DmaPosVirt,
+                      FALSE );
+	}
+
 	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
 		DOUT (DBG_PRINT, ("freeing audio buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
@@ -419,7 +502,7 @@ CAdapterCommon::~CAdapterCommon ()
 					audBufSize,
                       BufLogicalAddress,
                       BufVirtualAddress,
-                      false );
+                      FALSE );
 	}
 	//free DMA adapter object
 	if (DMA_Adapter) {
@@ -889,32 +972,43 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	//reset RIRB write pointer to 0th entry
 	writeUSHORT (0x58, 0x8000);
 
+	//dma position buffer pointer
+	writeULONG (0x70, DmaPosPhys.LowPart);
+	if (is64OK){
+		writeULONG (0x74, DmaPosPhys.HighPart);
+	}
+	else {
+		writeULONG (0x74, 0);
+	}
+
+
 	KeStallExecutionProcessor(10);
 	writeULONG(0x5A, 0); //disable interrupts
 	RirbPointer = 1; //always points to next free entry
- 
-	//start CORB and RIRB
+	
+	//start CORB and RIRB. i think this also makes the HDA controller zero them
 	writeUCHAR ( 0x4C, 0x2);
 	writeUCHAR ( 0x5C, 0x2);
 
 	//find codecs on the link
 	//TODO: i will need 2 implementations of send_codec_verb
-	//one immediate that stalls, and one with a callback 
+	//one immediate that stalls, and one with a callback
+	//maybe take more than one verb at once
 
-	for(int codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
+	for(int codec_number = 0, codec_id = 0; codec_number < 15; codec_number++) {
 		//components->hda[sound_card_number].communication_type = HDA_CORB_RIRB;
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-		DOUT (DBG_SYSINFO, ("codec %d response 0x%X", i, codec_id));
+		DOUT (DBG_SYSINFO, ("codec %d response 0x%X", codec_number, codec_id));
 
 		if(codec_id != 0) {
-		//	logf("\nHDA: CORB/RIRB communication interface");
-		//  hda_initalize_codec(sound_card_number, codec_number);
+		DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
+		//  hda_initalize_codec(codec_number);
 			break; //initalization is complete
 		}
 	}
 
     //ok now if we got here we have a working link
-	//and we're ready to go init the codec
+	//and we're ready to go init whatever codec we found
 
 	NTSTATUS ntStatus = PrimaryCodecReady ();
     if (NT_SUCCESS (ntStatus))
@@ -2326,13 +2420,15 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
 	//using CORB/RIRB interface only (immediate cmd interface is not sdupported)
 	//TODO: check sizes of components passed in
-	//TODO: check for unsolicited responses and maybe schedule a DPC for them
+	//TODO: locking
+	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
 	DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
  
 	//write verb
-	CorbMemVirt[CorbPointer] = value;
+	WRITE_REGISTER_ULONG(CorbMemVirt + (CorbPointer), value);
+	//KeFlushIoBuffers(mdl, FALSE, TRUE); //does this do anything? it's defined to nothing in wdm.h
   
 	//move write pointer
 	writeUSHORT(0x48, CorbPointer);
@@ -2342,6 +2438,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	for(ULONG ticks = 0; ticks < 5; ++ticks) {
 		KeStallExecutionProcessor(10);
 		if(readUSHORT (0x58) == CorbPointer) {
+			//KeFlushIoBuffers(mdl, TRUE, TRUE);  
 			break;
 		}
 		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 4)) {
@@ -2352,7 +2449,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	}
 
 	//read response. each response is 8 bytes long but we only care about the lower 32 bits
-	value = RirbMemVirt[RirbPointer * 2];
+	value = READ_REGISTER_ULONG (RirbMemVirt + (RirbPointer * 2));
 
 	//move pointers
 	CorbPointer++;
@@ -2496,12 +2593,12 @@ STDMETHODIMP_(ULONG) CAdapterCommon::ReadBMControlRegister32
 
 STDMETHODIMP_(UCHAR) CAdapterCommon::readUCHAR(USHORT reg)
 {
-	return READ_REGISTER_UCHAR((PUCHAR)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+	return READ_REGISTER_UCHAR((PUCHAR)(m_pHDARegisters + reg));
 }
 
 STDMETHODIMP_(void) CAdapterCommon::writeUCHAR(USHORT cmd, UCHAR value)
 {
-	WRITE_REGISTER_UCHAR((PUCHAR)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+	WRITE_REGISTER_UCHAR((PUCHAR)(m_pHDARegisters + cmd), value);
 }
 
 STDMETHODIMP_(void) CAdapterCommon::setUCHARBit(USHORT reg, UCHAR flag)
@@ -2516,23 +2613,23 @@ STDMETHODIMP_(void) CAdapterCommon::clearUCHARBit(USHORT reg, UCHAR flag)
 
 STDMETHODIMP_(USHORT) CAdapterCommon::readUSHORT(USHORT reg)
 {
-	return READ_REGISTER_USHORT((PUSHORT)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+	return READ_REGISTER_USHORT((PUSHORT)(m_pHDARegisters + reg));
 }
 
 STDMETHODIMP_(void) CAdapterCommon::writeUSHORT(USHORT cmd, USHORT value)
 {
-	WRITE_REGISTER_USHORT((PUSHORT)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+	WRITE_REGISTER_USHORT((PUSHORT)(m_pHDARegisters + cmd), value);
 }
 
 
 STDMETHODIMP_(ULONG) CAdapterCommon::readULONG(USHORT reg)
 {
-	return READ_REGISTER_ULONG((PULONG)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + reg));
+	return READ_REGISTER_ULONG((PULONG)(m_pHDARegisters + reg));
 }
 
 STDMETHODIMP_(void) CAdapterCommon::writeULONG(USHORT cmd, ULONG value)
 {
-	WRITE_REGISTER_ULONG((PULONG)(reinterpret_cast<PUCHAR>(m_pHDARegisters) + cmd), value);
+	WRITE_REGISTER_ULONG((PULONG)(m_pHDARegisters + cmd), value);
 }
 
 STDMETHODIMP_(void) CAdapterCommon::setULONGBit(USHORT reg, ULONG flag)

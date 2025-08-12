@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 // Communication types
-#define HDA_UNINITALIZED 0
+#define HDA_UNinitializeD 0
 #define HDA_CORB_RIRB 1
 #define HDA_PIO 2
 
@@ -177,7 +177,7 @@ private:
 
 	ULONG communication_type;
     //ULONG codec_number;
-    ULONG is_initalized_useful_output;
+    ULONG is_initialized_useful_output;
     ULONG selected_output_node;
     ULONG length_of_node_path;
 
@@ -434,7 +434,15 @@ public:
         IN  ULONG Value
     );
 
-	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);	
+	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
+	STDMETHODIMP_(void)		hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number); 
+	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
+	STDMETHODIMP_(ULONG)	hda_get_node_connection_entry(ULONG codec, ULONG node, ULONG connection_entry_number);
+	STDMETHODIMP_(void)		hda_initialize_output_pin(ULONG pin_node_number);
+	STDMETHODIMP_(BOOL)		hda_is_headphone_connected ( void );
+	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain);
+	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
+	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
 
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
     STDMETHODIMP_(void)		writeUCHAR(USHORT reg, UCHAR value);

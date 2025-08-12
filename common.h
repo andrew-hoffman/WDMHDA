@@ -171,8 +171,36 @@ private:
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	UCHAR interrupt;
 	ULONG memLength;//check
+	UCHAR codecNumber;
 
 	BOOLEAN is64OK;
+
+	ULONG communication_type;
+    //ULONG codec_number;
+    ULONG is_initalized_useful_output;
+    ULONG selected_output_node;
+    ULONG length_of_node_path;
+
+    ULONG afg_node_sample_capabilities;
+    ULONG afg_node_stream_format_capabilities;
+    ULONG afg_node_input_amp_capabilities;
+    ULONG afg_node_output_amp_capabilities;
+
+    ULONG audio_output_node_number;
+    ULONG audio_output_node_sample_capabilities;
+    ULONG audio_output_node_stream_format_capabilities;
+
+    ULONG output_amp_node_number;
+    ULONG output_amp_node_capabilities;
+
+    ULONG second_audio_output_node_number;
+    ULONG second_audio_output_node_sample_capabilities;
+    ULONG second_audio_output_node_stream_format_capabilities;
+    ULONG second_output_amp_node_number;
+    ULONG second_output_amp_node_capabilities;
+
+    ULONG pin_output_node_number;
+    ULONG pin_headphone_node_number;
 
 
     BOOLEAN m_bDMAInitialized;   // DMA initialized flag
@@ -194,6 +222,7 @@ private:
     // Resets HDA audio registers.
     //
     NTSTATUS InitHDA (void);
+	NTSTATUS InitializeCodec (UCHAR num);
 
     
     //

@@ -823,22 +823,24 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 {
     PAGED_CODE ();
     
+	NTSTATUS ntStatus = STATUS_NOT_IMPLEMENTED;
+
     DOUT (DBG_PRINT, ("[CAdapterCommon::InitHDA]"));
 
 	//TODO: try to stop all possible running streams before resetting
 
 	//we're not supposed to write to any registers before reset
 
-	//Reset the whole controller
+	//Reset the whole controller. Spec says this can take up to 521 us
 
 	writeUCHAR(0x08,0x0);
 
-	for (int i = 0; i < 100; i++) {
+	for (int i = 0; i < 10; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x0) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
 			break;
-		} else if (i == 99) {
+		} else if (i == 9) {
 			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
 			return STATUS_TIMEOUT;
 		}
@@ -847,13 +849,13 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	KeStallExecutionProcessor(100);
 	writeUCHAR(0x08,0x1);
 
-	for (i = 0; i < 100; i++) {
+	for (i = 0; i < 10; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x1) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
 			break;
 		}
-		else if (i == 99) {
+		else if (i == 9) {
 			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
 			return STATUS_TIMEOUT;
 		}
@@ -990,30 +992,38 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR ( 0x4C, 0x2);
 	writeUCHAR ( 0x5C, 0x2);
 
-	//find codecs on the link
 	//TODO: i will need 2 implementations of send_codec_verb
 	//one immediate that stalls, and one with a callback
-	//maybe take more than one verb at once
+	//maybe take more than one verb at once w/o blocking
 
-	for(int codec_number = 0, codec_id = 0; codec_number < 15; codec_number++) {
-		//components->hda[sound_card_number].communication_type = HDA_CORB_RIRB;
+	//find codecs on the link.
+	//this can also be done by checking bits in STATESTS register
+
+	ULONG codec_id = 0;
+
+	for(UCHAR codec_number = 0;  codec_number < 15; codec_number++) {
+		//communication_type = HDA_CORB_RIRB;
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
 		DOUT (DBG_SYSINFO, ("codec %d response 0x%X", codec_number, codec_id));
 
 		if(codec_id != 0) {
-		DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
-		//  hda_initalize_codec(codec_number);
-			break; //initalization is complete
+			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
+
+			//initialize the first codec we find that gives a nonzero response
+			//TODO: init all codecs on link
+			ntStatus = InitializeCodec(codec_number);
+		
+		break; //initalization is complete
 		}
 	}
 
     //ok now if we got here we have a working link
 	//and we're ready to go init whatever codec we found
 
-	NTSTATUS ntStatus = PrimaryCodecReady ();
+//	NTSTATUS ntStatus = PrimaryCodecReady ();
     if (NT_SUCCESS (ntStatus))
     {        
-        ntStatus = PowerUpCodec ();
+//        ntStatus = PowerUpCodec ();
     }
     else
     {
@@ -1022,6 +1032,308 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
     return ntStatus;
 }
+
+/*****************************************************************************
+ * CAdapterCommon::InitializeCodec
+ *****************************************************************************
+ */
+
+NTSTATUS CAdapterCommon::InitializeCodec (UCHAR codec_number)
+{
+    PAGED_CODE ();
+
+	 //test if this codec exist
+	ULONG codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+	if(codec_id == 0x00000000) {
+		return STATUS_NOT_FOUND;
+	}
+	codecNumber = codec_number;
+
+	//log basic codec info
+	DOUT (DBG_SYSINFO, ("Codec %d ", codec_number ) );
+	DOUT (DBG_SYSINFO, ("VID: %04x", (codec_id>>16) ));
+	DOUT (DBG_SYSINFO, ("PID: %04x", (codec_id & 0xFFFF) ));
+
+	//find Audio Function Groups
+	ULONG response = hda_send_verb(codec_number, 0, 0xF00, 0x04);
+
+	DOUT (DBG_SYSINFO, ( "First Group node: %d Number of Groups: %d", 
+	 (response >> 16) & 0xFF, response & 0xFF 
+	 ));
+	ULONG node = (response >> 16) & 0xFF;
+	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
+		if((hda_send_verb(codec_number, node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
+		hda_initalize_audio_function_group(codec_number, node); //initalize Audio Function Group
+		return STATUS_SUCCESS;
+		}
+	}
+	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
+	return STATUS_NOT_FOUND;	
+}
+
+/*****************************************************************************
+ * CAdapterCommon::initialize_audio_function_group
+ *****************************************************************************
+ */
+
+void hda_initalize_audio_function_group(UCHAR codec_number, UCHAR afg_node_number) {
+	//reset AFG
+	hda_send_verb(codec_number, afg_node_number, 0x7FF, 0x00);
+
+	//enable power for AFG
+	hda_send_verb(codec_number, afg_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(codec_number, afg_node_number, 0x708, 0x00);
+
+	//read available info
+	afg_node_sample_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0A);
+	afg_node_stream_format_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0B);
+	afg_node_input_amp_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0D);
+	afg_node_output_amp_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x12);
+
+	//log AFG info
+	DOUT (DBG_SYSINFO, ("\nAudio Function Group node %d", afg_node_number));
+	DOUT (DBG_SYSINFO, ("\nAFG sample capabilities: 0x%x", afg_node_sample_capabilities));
+	DOUT (DBG_SYSINFO, ("\nAFG stream format capabilities: 0x%x", afg_node_stream_format_capabilities));
+	DOUT (DBG_SYSINFO, ("\nAFG input amp capabilities: 0x%x", afg_node_input_amp_capabilities));
+	DOUT (DBG_SYSINFO, ("\nAFG output amp capabilities: 0x%x", afg_node_output_amp_capabilities));
+
+	//log all AFG nodes and find useful PINs
+	DOUT (DBG_SYSINFO, ("\n\nLIST OF ALL NODES IN AFG:"));
+	ULONG subordinate_node_count_reponse = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x04);
+	ULONG pin_alternative_output_node_number = 0, pin_speaker_default_node_number = 0, pin_speaker_node_number = 0, pin_headphone_node_number = 0;
+	pin_output_node_number = 0;
+	pin_headphone_node_number = 0;
+
+	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
+		type_of_node = 0; node < last_node; node++) {
+
+		//log number of node
+		DOUT (DBG_SYSINFO, ("\n%d ", node);
+  
+		//get type of node
+		type_of_node = hda_get_node_type(codec_number, node);
+
+		//process node
+		//TODO: can i express this more compactly as a switch statement?
+
+		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
+			DOUT (DBG_SYSINFO, ("Audio Output"));
+
+			//disable every audio output by connecting it to stream 0
+			hda_send_verb(codec_number, node, 0x706, 0x00);
+		}
+		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
+			DOUT (DBG_SYSINFO, ("Audio Input"));
+		}
+		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
+			DOUT (DBG_SYSINFO, ("Audio Mixer"));
+		}
+		else if(type_of_node == HDA_WIDGET_AUDIO_SELECTOR) {
+			DOUT (DBG_SYSINFO, ("Audio Selector"));
+		}
+		else if(type_of_node == HDA_WIDGET_PIN_COMPLEX) {
+			DOUT (DBG_SYSINFO, ("Pin Complex "));
+
+			//read type of PIN
+			type_of_node = ((hda_send_verb(codec_number, node, 0xF1C, 0x00) >> 20) & 0xF);
+
+			if(type_of_node == HDA_PIN_LINE_OUT) {
+				DOUT (DBG_SYSINFO, ("Line Out"));
+	
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_SPEAKER) {
+				DOUT (DBG_SYSINFO, ("Speaker "));
+
+				//first speaker node is default speaker
+				if(pin_speaker_default_node_number==0) {
+					pin_speaker_default_node_number = node;
+				}
+
+				//find if there is device connected to this PIN
+				if((hda_send_verb(codec_number, node, 0xF00, 0x09) & 0x4)==0x4) {
+					//find if it is jack or fixed device
+					if((hda_send_verb(codec_number, node, 0xF1C, 0x00)>>30)!=0x1) {
+						//find if is device output capable
+						if((hda_send_verb(codec_number, node, 0xF00, 0x0C) & 0x10)==0x10) {
+							//there is connected device
+							DOUT (DBG_SYSINFO, ("connected output device"));
+							//we will use first pin with connected device, so save node number only for first PIN
+							if(pin_speaker_node_number==0) {
+								pin_speaker_node_number = node;
+							}
+						} else {
+							DOUT (DBG_SYSINFO, ("not output capable"));
+						}
+					} else {
+						DOUT (DBG_SYSINFO, ("not jack or fixed device"));
+					}
+				} else {
+					DOUT (DBG_SYSINFO, ("no output device"));
+				}
+			} else if(type_of_node == HDA_PIN_HEADPHONE_OUT) {
+				DOUT (DBG_SYSINFO, ("Headphone Out"));
+
+				//save node number
+				//TODO: handle if there are multiple HP nodes
+				pin_headphone_node_number = node;
+			} else if(type_of_node == HDA_PIN_CD) {
+				DOUT (DBG_SYSINFO, ("CD"));
+	
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_SPDIF_OUT) {
+				DOUT (DBG_SYSINFO, ("SPDIF Out"));
+	
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_OUT) {
+				DOUT (DBG_SYSINFO, ("Digital Other Out"));
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_MODEM_LINE_SIDE) {
+				DOUT (DBG_SYSINFO, ("Modem Line Side"));
+
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_MODEM_HANDSET_SIDE) {
+				DOUT (DBG_SYSINFO, ("Modem Handset Side"));
+	
+				//save this node, this variable contain number of last alternative output
+				pin_alternative_output_node_number = node;
+			} else if(type_of_node == HDA_PIN_LINE_IN) {
+				DOUT (DBG_SYSINFO, ("Line In"));
+			} else if(type_of_node == HDA_PIN_AUX) {
+				DOUT (DBG_SYSINFO, ("AUX"));
+			} else if(type_of_node == HDA_PIN_MIC_IN) {
+				DOUT (DBG_SYSINFO, ("Mic In"));
+			} else if(type_of_node == HDA_PIN_TELEPHONY) {
+				DOUT (DBG_SYSINFO, ("Telephony"));
+			} else if(type_of_node == HDA_PIN_SPDIF_IN) {
+				DOUT (DBG_SYSINFO, ("SPDIF In"));
+			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_IN) {
+				DOUT (DBG_SYSINFO, ("Digital Other In"));
+			} else if(type_of_node == HDA_PIN_RESERVED) {
+				DOUT (DBG_SYSINFO, ("Reserved"));
+			} else if(type_of_node == HDA_PIN_OTHER) {
+				DOUT (DBG_SYSINFO, ("Other"));
+			}
+		}
+		//if it's not a PIN then what other type of node is it?
+		else if(type_of_node == HDA_WIDGET_POWER_WIDGET) {
+			DOUT (DBG_SYSINFO, ("Power Widget"));
+		} else if(type_of_node == HDA_WIDGET_VOLUME_KNOB) {
+			DOUT (DBG_SYSINFO, ("Volume Knob"));
+		} else if(type_of_node == HDA_WIDGET_BEEP_GENERATOR) {
+			DOUT (DBG_SYSINFO, ("Beep Generator"));
+		} else if(type_of_node == HDA_WIDGET_VENDOR_DEFINED) {
+			DOUT (DBG_SYSINFO, ("Vendor defined"));
+		} else {
+			DOUT (DBG_SYSINFO, ("Reserved type"));
+		}
+
+		//log all connected nodes
+		DOUT (DBG_SYSINFO, (" "));
+		UCHAR connection_entry_number = 0;
+		USHORT connection_entry_node = hda_get_node_connection_entry(codec_number, node, 0);
+		while (connection_entry_node != 0x0000) {
+			DOUT (DBG_SYSINFO, ("%d ", connection_entry_node));
+			connection_entry_number++;
+			connection_entry_node = hda_get_node_connection_entry(codec_number, node, connection_entry_number);
+		}
+	}
+	
+	//reset variables of second path
+	second_audio_output_node_number = 0;
+	second_audio_output_node_sample_capabilities = 0;
+	second_audio_output_node_stream_format_capabilities = 0;
+	second_output_amp_node_number = 0;
+	second_output_amp_node_capabilities = 0;
+
+	//initalize output PINs
+	DOUT (DBG_SYSINFO, ("\n"));
+	if (pin_speaker_default_node_number != 0) {
+		//initalize speaker
+		is_initalized_useful_output = STATUS_TRUE;
+		if (pin_speaker_node_number != 0) {
+			DOUT (DBG_SYSINFO, ("\nSpeaker output");
+			hda_initalize_output_pin(sound_card_number, pin_speaker_node_number); //initalize speaker with connected output device
+			pin_output_node_number = pin_speaker_node_number; //save speaker node number
+		}	
+		else {
+			DOUT (DBG_SYSINFO, ("\nDefault speaker output");
+			hda_initalize_output_pin(sound_card_number, pin_speaker_default_node_number); //initalize default speaker
+			pin_output_node_number = pin_speaker_default_node_number; //save speaker node number
+		}
+
+		//save speaker path
+		second_audio_output_node_number = audio_output_node_number;
+		second_audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+		second_audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+		second_output_amp_node_number = output_amp_node_number;
+		second_output_amp_node_capabilities = output_amp_node_capabilities;
+
+		//if codec has also headphone output, initalize it
+		if (pin_headphone_node_number != 0) {
+			DOUT (DBG_SYSINFO, ("\n\nHeadphone output");
+			hda_initalize_output_pin(sound_card_number, pin_headphone_node_number); //initalize headphone output
+			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
+
+			//if first path and second path share nodes, left only info for first path
+			if(audio_output_node_number==second_audio_output_node_number) {
+				second_audio_output_node_number = 0;
+			}
+			if(output_amp_node_number==second_output_amp_node_number) {
+				second_output_amp_node_number = 0;
+			}
+
+			//find headphone connection status
+			if(hda_is_headphone_connected()==STATUS_TRUE) {
+				hda_disable_pin_output(codec_number, pin_output_node_number);
+				selected_output_node = pin_headphone_node_number;
+			} else {
+				selected_output_node = pin_output_node_number;
+			}
+
+			//add task for checking headphone connection
+			//TODO: this will have to be a DPC and hda_send_verb has to be protected by a semaphore 1st
+
+			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
+		}
+	}
+	else if(pin_headphone_node_number!=0) { //codec do not have speaker, but only headphone output
+		DOUT (DBG_SYSINFO, ("\nHeadphone output"));
+		is_initalized_useful_output = STATUS_TRUE;
+		hda_initalize_output_pin(sound_card_number, pin_headphone_node_number); //initalize headphone output
+		pin_output_node_number = pin_headphone_node_number; //save headphone node number
+	}
+	else if(pin_alternative_output_node_number!=0) { //codec have only alternative output
+		DOUT (DBG_SYSINFO, ("\nAlternative output"));
+		is_initalized_useful_output = STATUS_FALSE;
+		hda_initalize_output_pin(sound_card_number, pin_alternative_output_node_number); //initalize alternative output
+		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
+	}
+	else {
+		DOUT (DBG_SYSINFO, ("\nCodec do not have any output PINs"));
+	}
+}
+
+
+//TODO: next functions
+CAdapterCommon:hda_get_node_type( void ){
+
+}
+
+CAdapterCommon:hda_get_node_connection_entry( void){
+
+}
+
+CAdapterCommon:hda_initalize_output_pin( void){
+
+}
+
 
 /*****************************************************************************
  * CAdapterCommon::ProbeHWConfig

@@ -428,9 +428,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
         return ntStatus;
     }
 
-#if (DBG)
-    DumpConfig ();
-#endif
 
 	//return an error at the end for now so it doesnt run the ac97 specific parts of the driver further
     ntStatus = STATUS_INVALID_PARAMETER;
@@ -456,6 +453,18 @@ CAdapterCommon::~CAdapterCommon ()
     PAGED_CODE ();
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
+
+	//Free audio buffer
+	//TODO: ensure everything is stopped before the destructor!
+	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+		DOUT (DBG_PRINT, ("freeing audio buffer"));
+		DMA_Adapter->DmaOperations->FreeCommonBuffer(
+					DMA_Adapter,
+					audBufSize,
+                      BufLogicalAddress,
+                      BufVirtualAddress,
+                      FALSE );
+	}
 
 	//free DMA buffers
 	if((RirbMemVirt != NULL) && (DMA_Adapter!= NULL)){
@@ -495,15 +504,6 @@ CAdapterCommon::~CAdapterCommon ()
                       FALSE );
 	}
 
-	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
-		DOUT (DBG_PRINT, ("freeing audio buffer"));
-		DMA_Adapter->DmaOperations->FreeCommonBuffer(
-					DMA_Adapter,
-					audBufSize,
-                      BufLogicalAddress,
-                      BufVirtualAddress,
-                      FALSE );
-	}
 	//free DMA adapter object
 	if (DMA_Adapter) {
 		DMA_Adapter->DmaOperations->PutDmaAdapter(DMA_Adapter);
@@ -529,236 +529,7 @@ CAdapterCommon::~CAdapterCommon ()
  */
 void CAdapterCommon::DumpConfig (void)
 {
-    PAGED_CODE ();
-
-    DOUT (DBG_PRINT, ("[CAdapterCommon::DumpConfig]"));
-
-    //
-    // Print debug output for MICIN.
-    //
-    if (GetPinConfig (PINC_MICIN_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("MICIN found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No MICIN found"));
-    }
-
-    //
-    // Print debug output for tone controls.
-    //
-    if (GetNodeConfig (NODEC_TONE_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("Tone controls found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No tone controls found"));
-    }
-
-    //
-    // Print debug output for mono out.
-    //
-    if (!GetPinConfig (PINC_MONOOUT_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("No mono out found"));
-    }
-
-    //
-    // Print debug output for headphones.
-    //
-    if (!GetPinConfig (PINC_HPOUT_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("No headphone out found"));
-    }
-
-    //
-    // Print debug output for loudness.
-    //
-    if (GetNodeConfig (NODEC_LOUDNESS_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("Loudness found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No Loudness found"));
-    }
-
-    //
-    // Print debug output for 3D.
-    //
-    if (GetNodeConfig (NODEC_3D_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("3D controls found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No 3D controls found"));
-    }
-
-    //
-    // Print debug output for pc beep.
-    //
-    if (GetPinConfig (PINC_PCBEEP_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("PC beep found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No PC beep found"));
-    }
-
-    //
-    // Print debug output for phone line (or mono line input).
-    //
-    if (GetPinConfig (PINC_PHONE_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("Phone found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No Phone found"));
-    }
-
-    //
-    // Print debug output for video.
-    //
-    if (GetPinConfig (PINC_VIDEO_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("Video in found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No Video in found"));
-    }
-
-    //
-    // Print debug output for AUX.
-    //
-    if (GetPinConfig (PINC_AUX_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("AUX in found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No AUX in found"));
-    }
-
-    //
-    // Print debug output for second miorophone.
-    //
-    if (GetPinConfig (PINC_MIC2_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("MIC2 found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("No MIC2 found"));
-    }
-    
-    //
-    // Print debug output for 3D stuff.
-    //
-    if (GetNodeConfig (NODEC_3D_PRESENT))
-    {
-        if (GetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE))
-        {
-            DOUT (DBG_PROBE, ("Adjustable 3D center control found"));
-        }
-        if (GetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE))
-        {
-            DOUT (DBG_PROBE, ("Nonadjustable 3D depth control found"));
-        }
-    }
-
-    //
-    // Print debug output for quality of master volume.
-    //
-    if (GetNodeConfig (NODEC_6BIT_MASTER_VOLUME))
-    {
-        DOUT (DBG_PROBE, ("6bit master out found"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("5bit master out found"));
-    }
-
-    //
-    // Print debug output for quality of headphones volume.
-    //
-    if (GetPinConfig (PINC_HPOUT_PRESENT))
-    {
-        if (GetNodeConfig (NODEC_6BIT_HPOUT_VOLUME))
-        {
-            DOUT (DBG_PROBE, ("6bit headphone out found"));
-        }
-        else
-        {
-            DOUT (DBG_PROBE, ("5bit headphone out found"));
-        }
-    }
-
-    //
-    // Print debug output for quality of mono out volume.
-    //
-    if (GetPinConfig (PINC_MONOOUT_PRESENT))
-    {
-        if (GetNodeConfig (NODEC_6BIT_MONOOUT_VOLUME))
-        {
-            DOUT (DBG_PROBE, ("6bit mono out found"));
-        }
-        else
-        {
-            DOUT (DBG_PROBE, ("5bit mono out found"));
-        }
-    }
-
-    //
-    // Print sample rate information.
-    //
-    if (GetNodeConfig (NODEC_PCM_VARIABLERATE_SUPPORTED))
-    {
-        DOUT (DBG_PROBE, ("PCM variable sample rate supported"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("only 48KHz PCM supported"));
-    }
-
-    //
-    // Print double rate information.
-    //
-    if (GetNodeConfig (NODEC_PCM_DOUBLERATE_SUPPORTED))
-    {
-        DOUT (DBG_PROBE, ("PCM double sample rate supported"));
-    }
-
-    //
-    // Print mic rate information.
-    //
-    if (GetNodeConfig (NODEC_MIC_VARIABLERATE_SUPPORTED))
-    {
-        DOUT (DBG_PROBE, ("MIC variable sample rate supported"));
-    }
-    else
-    {
-        DOUT (DBG_PROBE, ("only 48KHz MIC supported"));
-    }
-
-    // print DAC information
-    if (GetNodeConfig (NODEC_CENTER_DAC_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("center DAC found"));
-    }
-    if (GetNodeConfig (NODEC_SURROUND_DAC_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("surround DAC found"));
-    }
-    if (GetNodeConfig (NODEC_LFE_DAC_PRESENT))
-    {
-        DOUT (DBG_PROBE, ("LFE DAC found"));
-    }
+//TODO: replace this if needed
 }
 #endif
 
@@ -1298,7 +1069,7 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 			}
 
 			//add task for checking headphone connection
-			//TODO: this will have to be a DPC and hda_send_verb has to be protected by a semaphore 1st
+			//TODO: this will have to be a DPC and hda_send_verb has to be protected by a mutex 1st
 
 			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
 		}
@@ -1385,10 +1156,318 @@ BOOL CAdapterCommon::hda_is_headphone_connected ( void ) {
 }
 
 void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
-	//TODO this function
+    PAGED_CODE ();
 
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+
+    DOUT (DBG_PRINT, ("[CAdapterCommon::hda_initialize_output_pin]"));
+	//reset variables of first path
+	audio_output_node_number = 0;
+	audio_output_node_sample_capabilities = 0;
+	audio_output_node_stream_format_capabilities = 0;
+	output_amp_node_number = 0;
+	output_amp_node_capabilities = 0;
+
+	//turn on power for PIN
+	hda_send_verb(codecNumber, pin_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(codecNumber, pin_node_number, 0x708, 0x00);
+
+	//disable any processing
+	hda_send_verb(codecNumber, pin_node_number, 0x703, 0x00);
+
+	//enable PIN
+	hda_send_verb(codecNumber, pin_node_number, 0x707, (hda_send_verb(codecNumber, pin_node_number, 0xF07, 0x00) | 0x80 | 0x40));
+
+	//enable EAPD + L-R swap
+	hda_send_verb(codecNumber, pin_node_number, 0x70C, 0x6);
+
+	//set maximal volume for PIN
+	ULONG pin_output_amp_capabilities = hda_send_verb(codecNumber, pin_node_number, 0xF00, 0x12);
+	hda_set_node_gain(codecNumber, pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 100);
+	if(pin_output_amp_capabilities != 0) {
+		//we will control volume by PIN node
+		output_amp_node_number = pin_node_number;
+		output_amp_node_capabilities = pin_output_amp_capabilities;
+	}
+
+	//start enabling path of nodes
+	length_of_node_path = 0;
+	hda_send_verb(codecNumber, pin_node_number, 0x701, 0x00); //select first node
+	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, pin_node_number, 0); //get first node number
+	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
+	if(type_of_first_connected_node==HDA_WIDGET_AUDIO_OUTPUT) {
+		hda_initalize_audio_output(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
+		hda_initalize_audio_mixer(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
+		hda_initalize_audio_selector(first_connected_node_number);
+	}
+	else {
+		DOUT (DBG_PRINT, ("\nHDA ERROR: PIN have connection %d", first_connected_node_number));
+	}
 }
 
+void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) {
+	DOUT (DBG_PRINT, ("Initalizing Audio Output %d", audio_output_node_number));
+	audio_output_node_number = audio_output_node_number;
+
+	//turn on power for Audio Output
+	hda_send_verb(codecNumber, audio_output_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(codecNumber, audio_output_node_number, 0x708, 0x00);
+
+	//disable any processing
+	hda_send_verb(codecNumber, audio_output_node_number, 0x703, 0x00);
+
+	//connect Audio Output to stream 1 channel 0
+	hda_send_verb(codecNumber, audio_output_node_number, 0x706, 0x10);
+
+	//set maximal volume for Audio Output
+	ULONG audio_output_amp_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x12);
+	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 100);
+	if(audio_output_amp_capabilities!=0) {
+		//we will control volume by Audio Output node
+		output_amp_node_number = audio_output_node_number;
+		output_amp_node_capabilities = audio_output_amp_capabilities;
+	}
+
+	//read info, if something is not present, take it from AFG node
+	ULONG audio_output_sample_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x0A);
+	if(audio_output_sample_capabilities==0) {
+		audio_output_node_sample_capabilities = afg_node_sample_capabilities;
+	}
+	else {
+		audio_output_node_sample_capabilities = audio_output_sample_capabilities;
+	}
+	ULONG audio_output_stream_format_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x0B);
+	if(audio_output_stream_format_capabilities==0) {
+		audio_output_node_stream_format_capabilities = afg_node_stream_format_capabilities;
+	}
+	else {
+		audio_output_node_stream_format_capabilities = audio_output_stream_format_capabilities;
+	}
+	if(output_amp_node_number==0) { //if nodes in path do not have output amp capabilities, volume will be controlled by Audio Output node with capabilities taken from AFG node
+		output_amp_node_number = audio_output_node_number;
+		output_amp_node_capabilities = afg_node_output_amp_capabilities;
+	}
+
+	//because we are at end of node path, log all gathered info
+	DOUT (DBG_PRINT, ("Sample Capabilites: 0x%x", audio_output_node_sample_capabilities));
+	DOUT (DBG_PRINT, ("Stream Format Capabilites: 0x%x", audio_output_node_stream_format_capabilities));
+	DOUT (DBG_PRINT, ("Volume node: %d", output_amp_node_number));
+	DOUT (DBG_PRINT, ("Volume capabilities: 0x%x", output_amp_node_capabilities));
+}
+
+void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
+	if(length_of_node_path>=10) {
+		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
+		return;
+	}
+	DOUT (DBG_PRINT,("Initalizing Audio Mixer %d", audio_mixer_node_number));
+
+	//turn on power for Audio Mixer
+	hda_send_verb(codecNumber, audio_mixer_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(codecNumber, audio_mixer_node_number, 0x708, 0x00);
+
+	//set maximal volume for Audio Mixer
+	ULONG audio_mixer_amp_capabilities = hda_send_verb(codecNumber, audio_mixer_node_number, 0xF00, 0x12);
+	hda_set_node_gain(codecNumber, audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 100);
+	if(audio_mixer_amp_capabilities != 0) {
+		//we will control volume by Audio Mixer node
+		output_amp_node_number = audio_mixer_node_number;
+		output_amp_node_capabilities = audio_mixer_amp_capabilities;
+	}
+
+	//continue in path
+	length_of_node_path++;
+	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, audio_mixer_node_number, 0); //get first node number
+	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
+	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
+		hda_initalize_audio_output(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
+		hda_initalize_audio_mixer(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
+		hda_initalize_audio_selector(first_connected_node_number);
+	}
+	else {
+		DOUT (DBG_PRINT,("HDA ERROR: Mixer have connection %d", first_connected_node_number));
+	}
+}
+
+void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_number) {
+	if(length_of_node_path>=10) {
+		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
+	return;
+	}
+	DOUT (DBG_PRINT,("Initalizing Audio Selector %d", audio_selector_node_number));
+
+	//turn on power for Audio Selector
+	hda_send_verb(codecNumber, audio_selector_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(codecNumber, audio_selector_node_number, 0x708, 0x00);
+
+	//disable any processing
+	hda_send_verb(codecNumber, audio_selector_node_number, 0x703, 0x00);
+
+	//set maximal volume for Audio Selector
+	ULONG audio_selector_amp_capabilities = hda_send_verb(codecNumber, audio_selector_node_number, 0xF00, 0x12);
+	hda_set_node_gain(codecNumber, audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 100);
+	if(audio_selector_amp_capabilities != 0) {
+		//we will control volume by Audio Selector node
+		output_amp_node_number = audio_selector_node_number;
+		output_amp_node_capabilities = audio_selector_amp_capabilities;
+	}
+	
+	//continue in path
+	length_of_node_path++;
+	hda_send_verb(codecNumber, audio_selector_node_number, 0x701, 0x00); //select first node
+	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, audio_selector_node_number, 0); //get first node number
+	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
+	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
+		hda_initalize_audio_output(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
+		hda_initalize_audio_mixer(first_connected_node_number);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
+		hda_initalize_audio_selector(first_connected_node_number);
+	}
+	else {
+		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
+	}
+}
+
+void CAdapterCommon::hda_set_volume(ULONG volume) {
+	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume);
+	if(second_output_amp_node_number != 0) {
+		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume);
+	}
+}
+
+/*
+void CAdapterCommon::hda_check_headphone_connection_change(void) {
+	//TODO: schedule as a periodic task
+	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected()==TRUE) { //headphone was connected
+		hda_disable_pin_output(codecNumber, pin_output_node_number);
+		selected_output_node = pin_headphone_node_number;
+	}
+	else if(selected_output_node == pin_headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+		hda_enable_pin_output(codecNumber, pin_output_node_number);
+		selected_output_node = pin_output_node_number;
+	}
+}
+*/
+
+UCHAR CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
+	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};
+	ULONG mask=0x00010000;
+ 
+	//get bit of requested size in capabilities
+	for(int i=0; i<5; i++) {
+		if(channel_sizes[i]==size) {
+			break;
+		}
+	mask <<= 1;
+	}
+ 
+	if((audio_output_node_sample_capabilities & mask)==mask) {
+		return TRUE;
+	}
+	else {
+		return FALSE;
+	}
+}
+
+UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
+	ULONG sample_rates[11] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000};
+	USHORT mask=0x0000001;
+ 
+	//get bit of requested sample rate in capabilities
+	for(int i=0; i<11; i++) {
+		if(sample_rates[i]==sample_rate) {
+			break;
+		}
+		mask <<= 1;
+	}
+ 
+	if((audio_output_node_sample_capabilities & mask)==mask) {
+		return TRUE;
+	}
+	else {
+		return FALSE;
+	}
+}
+/*
+//TODO: binary constants not supported in this compiler
+USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
+ USHORT data_format = 0;
+
+ //channels
+ data_format = (channels-1);
+
+ //bits per sample
+ if(bits_per_sample==16) {
+  data_format |= ((0b001)<<4);
+ }
+ else if(bits_per_sample==20) {
+  data_format |= ((0b010)<<4);
+ }
+ else if(bits_per_sample==24) {
+  data_format |= ((0b011)<<4);
+ }
+ else if(bits_per_sample==32) {
+  data_format |= ((0b100)<<4);
+ }
+
+ //sample rate
+ if(sample_rate==48000) {
+  data_format |= ((0b0000000)<<8);
+ }
+ else if(sample_rate==44100) {
+  data_format |= ((0b1000000)<<8);
+ }
+ else if(sample_rate==32000) {
+  data_format |= ((0b0001010)<<8);
+ }
+ else if(sample_rate==22050) {
+  data_format |= ((0b1000001)<<8);
+ }
+ else if(sample_rate==16000) {
+  data_format |= ((0b0000010)<<8);
+ }
+ else if(sample_rate==11025) {
+  data_format |= ((0b1000011)<<8);
+ }
+ else if(sample_rate==8000) {
+  data_format |= ((0b0000101)<<8);
+ }
+ else if(sample_rate==88200) {
+  data_format |= ((0b1001000)<<8);
+ }
+ else if(sample_rate==96000) {
+  data_format |= ((0b0001000)<<8);
+ }
+ else if(sample_rate==176400) {
+  data_format |= ((0b1011000)<<8);
+ }
+ else if(sample_rate==192000) {
+  data_format |= ((0b0011000)<<8);
+ }
+
+ return data_format;
+}
+
+*/
 
 /*****************************************************************************
  * CAdapterCommon::ProbeHWConfig
@@ -2756,7 +2835,7 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
     DOUT (DBG_PRINT, ("[CAdapterCommon::RestoreCodecRegisters]"));
 
     //
-    // Initialize the HDA codec from scratch
+    // Initialize the HDA codec from scratch. nevermind trying to cache anything
     //
     NTSTATUS ntStatus = InitHDA ();
     if (!NT_SUCCESS (ntStatus))
@@ -2785,9 +2864,10 @@ NTSTATUS CAdapterCommon::RestoreCodecRegisters (void)
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
-	//using CORB/RIRB interface only (immediate cmd interface is not sdupported)
+	//using CORB/RIRB interface only (immediate cmd interface is not supported)
+
 	//TODO: check sizes of components passed in
-	//TODO: locking
+	//TODO: locking (mutex?) 
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
@@ -2810,7 +2890,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		}
 		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 4)) {
 			DOUT (DBG_ERROR, ("No Response to Codec Verb"));
-			//	components->hda[selected_hda_card].communication_type = HDA_UNinitializeD;
+			//	communication_type = HDA_UNinitializeD;
 			return STATUS_TIMEOUT;
 		}
 	}
@@ -2827,6 +2907,8 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	if(RirbPointer == RirbNumberOfEntries) {
 		RirbPointer = 0;
 	}
+
+	//TODO: unlock mutex
 
 	//return response
 	return value;
@@ -2957,6 +3039,8 @@ STDMETHODIMP_(ULONG) CAdapterCommon::ReadBMControlRegister32
 
     return ulValue;
 }
+
+//HDA codec register read and write functions
 
 STDMETHODIMP_(UCHAR) CAdapterCommon::readUCHAR(USHORT reg)
 {

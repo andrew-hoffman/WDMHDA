@@ -35,7 +35,7 @@ const int DBG_ALL      = 0xFFFFFFFF;
 // The default statements that will print are warnings (DBG_WARNING) and
 // errors (DBG_ERROR).
 //
-const int DBG_DEFAULT = 0x00000777;  // warnings, errors, info, let's see.
+const int DBG_DEFAULT = 0x000007F7;  // warnings, errors, info, let's see.
 
     
 //

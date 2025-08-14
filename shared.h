@@ -377,6 +377,9 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      AC97Register  Register,
         IN      DWORD         dwSampleRate
     )   PURE;
+	    STDMETHOD_(NTSTATUS, hda_stop_stream)
+    (   THIS_
+    )   PURE;
 };
 
 typedef IAdapterCommon *PADAPTERCOMMON;

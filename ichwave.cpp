@@ -1676,58 +1676,10 @@ NTSTATUS CMiniportWaveICHStream::ResetDMA (void)
 {
     DOUT (DBG_PRINT, ("ResetDMA"));
 
-    //
-    // Turn off DMA engine (or make sure it's turned off)
-    //
-    UCHAR RegisterValue = Wave->AdapterCommon->
-        ReadBMControlRegister8 (m_ulBDAddr + X_CR) & ~CR_RPBM;
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr + X_CR, RegisterValue);
+	NTSTATUS ntStatus = Wave->AdapterCommon->hda_stop_stream();
+	if (!NT_SUCCESS (ntStatus))
+        return ntStatus;
 
-    //
-    // Reset all register contents.
-    //
-    RegisterValue |= CR_RR;
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr + X_CR, RegisterValue);
-    
-    //
-    // Wait until reset condition is cleared by HW; should not take long.
-    //
-    ULONGLONG ullStartTime = PcGetTimeInterval (0);
-    BOOL bTimedOut = TRUE;
-    do
-    {
-        if (!(Wave->AdapterCommon->
-           ReadBMControlRegister8 (m_ulBDAddr + X_CR) & CR_RR))
-        {
-            bTimedOut = FALSE;
-            break;
-        }
-    } while (PcGetTimeInterval (ullStartTime) < GTI_MILLISECONDS (1000));
-
-    if (bTimedOut)
-    {
-        DOUT (DBG_ERROR, ("ResetDMA TIMEOUT!!"));
-    }
-    
-    //
-    // We only want interrupts upon completion.
-    //
-    RegisterValue = CR_IOCE | CR_LVBIE;
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr + X_CR, RegisterValue);
-    
-    //
-    // Setup the Buffer Descriptor Base Address (BDBA) register.
-    //
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr,
-                               stBDList.PhysAddr.u.LowPart);
-
-    //
-    // Set the DMA engine state.
-    //
     DMAEngineState = DMA_ENGINE_OFF;
 
 

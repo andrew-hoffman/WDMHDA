@@ -66,10 +66,6 @@ tAC97Registers CAdapterCommon::m_stAC97Registers[] =
 {0x8080, 0,             NULL,               0},         // AC97REG_6CH_VOL_LRSURR
 {0x0000, SHREG_NOCACHE, NULL,               0}          // AC97REG_RESERVED2
 
-// We leave the other values blank.  There would be a huge gap with 31
-// elements that are currently unused, and then there would be 2 other
-// (used) values, the vendor IDs.  We just force a read from the vendor 
-// IDs in the end of ProbeHWConfig to fill the cache.
 };
 
 
@@ -171,7 +167,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
-	//but it should be one driver per HDA controller.
+	//but it should be one driver object per HDA controller.
 	//which may access multiple codecs but for now only sending 1 audio stream to all
 	//hardware mixing may come, MUCH later.
 
@@ -238,8 +234,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	//TODO check that we have at least 1 output or bidirectional stream engine
 
 	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
-	InputStreamBase = (Base + 0x80);
-	OutputStreamBase = (Base + 0x80 + (0x20 * ((caps>>8) & 0xF))); //skip input streams ports
+
+	//offsets for stream engines
+	InputStreamBase = (0x80);
+	OutputStreamBase = (0x80 + (0x20 * ((caps >> 8) & 0xF))); //skip input streams ports
 
 	//allocate common buffers
 	//for CORB, RIRB, BDL buffer, DMA position buffer
@@ -430,7 +428,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 
 	//return an error at the end for now so it doesnt run the ac97 specific parts of the driver further
-    ntStatus = STATUS_INVALID_PARAMETER;
+    //ntStatus = STATUS_INVALID_PARAMETER;
 	
 	//SetAC97Default ();
 
@@ -438,6 +436,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     // Initialize the device state.
     //
     m_PowerState = PowerDeviceD0;
+
+	//should we set up output stream 1 from here for now?
 
     return ntStatus;
 }
@@ -1407,84 +1407,77 @@ UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 		return FALSE;
 	}
 }
-/*
-//TODO: binary constants not supported in this compiler
+
 USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
  USHORT data_format = 0;
 
  //channels
- data_format = (channels-1);
+ data_format = (USHORT)(channels-1);
 
  //bits per sample
  if(bits_per_sample==16) {
-  data_format |= ((0b001)<<4);
+  data_format |= ((0x1)<<4);
  }
  else if(bits_per_sample==20) {
-  data_format |= ((0b010)<<4);
+  data_format |= ((0x2)<<4);
  }
  else if(bits_per_sample==24) {
-  data_format |= ((0b011)<<4);
+  data_format |= ((0x3)<<4);
  }
  else if(bits_per_sample==32) {
-  data_format |= ((0b100)<<4);
+  data_format |= ((0x4)<<4);
  }
 
  //sample rate
  if(sample_rate==48000) {
-  data_format |= ((0b0000000)<<8);
+  data_format |= ((0x0)<<8);
  }
  else if(sample_rate==44100) {
-  data_format |= ((0b1000000)<<8);
+  data_format |= ((0x40)<<8);
  }
  else if(sample_rate==32000) {
-  data_format |= ((0b0001010)<<8);
+  data_format |= ((0xA)<<8);
  }
  else if(sample_rate==22050) {
-  data_format |= ((0b1000001)<<8);
+  data_format |= ((0x41)<<8);
  }
  else if(sample_rate==16000) {
-  data_format |= ((0b0000010)<<8);
+  data_format |= ((0x2)<<8);
  }
  else if(sample_rate==11025) {
-  data_format |= ((0b1000011)<<8);
+  data_format |= ((0x43)<<8);
  }
  else if(sample_rate==8000) {
-  data_format |= ((0b0000101)<<8);
+  data_format |= ((0x5)<<8);
  }
  else if(sample_rate==88200) {
-  data_format |= ((0b1001000)<<8);
+  data_format |= ((0x48)<<8);
  }
  else if(sample_rate==96000) {
-  data_format |= ((0b0001000)<<8);
+  data_format |= ((0x8)<<8);
  }
  else if(sample_rate==176400) {
-  data_format |= ((0b1011000)<<8);
+  data_format |= ((0x58)<<8);
  }
  else if(sample_rate==192000) {
-  data_format |= ((0b0011000)<<8);
+  data_format |= ((0x18)<<8);
  }
 
  return data_format;
 }
 
-*/
+
 
 /*****************************************************************************
  * CAdapterCommon::ProbeHWConfig
  *****************************************************************************
  * Probes the hardware configuration.
- * If this function returns with an error, then the configuration is not
- * complete! Probing the registers is done by reading them (and comparing with
- * the HW default value) or when the default is unknown, writing to them and
- * reading back + restoring.
- * Additionally, we read the registry so that a HW vendor can overwrite (means
- * disable) found registers in case the adapter (e.g. video) is not visible to
- * the user (he can't plug in a video audio there).
- *
- * This is a very long function with all of the error checking!
+ * got rid of all the checking. for now we support NOTHING
  */
 NTSTATUS CAdapterCommon::ProbeHWConfig (void)
 {
+
+	//TODO: delete all of this. for now i just disable everything optional
     PAGED_CODE ();
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
@@ -1493,401 +1486,32 @@ NTSTATUS CAdapterCommon::ProbeHWConfig (void)
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ProbeHWConfig]"));
 
-    //
-    // Wait for the whatever 97 to complete reset and establish a link.
-    //
-    ntStatus = PrimaryCodecReady ();
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
+    SetPinConfig (PINC_MICIN_PRESENT, FALSE);
+    SetPinConfig (PINC_HPOUT_PRESENT, FALSE);
 
-    //
-    // Master volume is one of the supported registers on an AC97
-    //
-    ntStatus = ReadCodecRegister (AC97REG_MASTER_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
+    SetNodeConfig (NODEC_3D_PRESENT, FALSE);
+    SetPinConfig (PINC_MIC_PRESENT, FALSE);
+    SetPinConfig (PINC_LINEIN_PRESENT, FALSE);
+    SetPinConfig (PINC_CD_PRESENT, FALSE);
+    SetPinConfig (PINC_MONOOUT_PRESENT, FALSE);
+    SetPinConfig (PINC_PCBEEP_PRESENT, FALSE);
+    SetPinConfig (PINC_PHONE_PRESENT, FALSE);
+    SetPinConfig (PINC_VIDEO_PRESENT, FALSE);
+    SetPinConfig (PINC_AUX_PRESENT, FALSE);
+    SetPinConfig (PINC_MIC2_PRESENT, FALSE);
+	SetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE, FALSE);
+	SetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE, TRUE);
+    SetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE, FALSE);
+    SetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE, FALSE);
 
-    // Default is x8000.
-    if (wCodecReg != 0x8000)
-        return STATUS_NO_SUCH_DEVICE;
+    SetNodeConfig (NODEC_6BIT_MASTER_VOLUME, FALSE);
 
-    //
-    // This gives us information about the AC97 CoDec
-    //
-    ntStatus = ReadCodecRegister (AC97REG_RESET, &wCodecID);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
+	SetNodeConfig (NODEC_6BIT_HPOUT_VOLUME, FALSE);
+    SetNodeConfig (NODEC_6BIT_MONOOUT_VOLUME, FALSE);
+    // We want to disable all features, so lets assume a read with
+    // value 0, that will disable all features (see above).
+    wCodecReg = 0;
 
-    //
-    // Fill out the configuration stuff.
-    //
-
-    SetPinConfig (PINC_MICIN_PRESENT, wCodecID & 0x0001);
-    
-    // Check if OEM wants to disable MIC record line.
-    if (DisableAC97Pin (PINC_MICIN_PRESENT))
-        SetPinConfig (PINC_MICIN_PRESENT, FALSE);
-
-    // If we still have MIC record line, enable the DAC in ext. audio register.
-    if (GetPinConfig (PINC_MICIN_PRESENT))
-        // Enable ADC MIC.
-        WriteCodecRegister (AC97REG_EXT_AUDIO_CTRL, 0, 0x4000);
-    else
-        // Disable ADC MIC.
-        WriteCodecRegister (AC97REG_EXT_AUDIO_CTRL, 0x4000, 0x4000);
-
-    //
-    // Continue setting configuration information.
-    //
-
-    SetNodeConfig (NODEC_TONE_PRESENT, wCodecID & 0x0004);
-    SetNodeConfig (NODEC_SIMUL_STEREO_PRESENT, wCodecID & 0x0008);
-    SetPinConfig (PINC_HPOUT_PRESENT, wCodecID & 0x0010);
-    
-    // Check if OEM wants to disable headphone output.
-    if (DisableAC97Pin (PINC_HPOUT_PRESENT))
-        SetPinConfig (PINC_HPOUT_PRESENT, FALSE);
-
-    SetNodeConfig (NODEC_LOUDNESS_PRESENT, wCodecID & 0x0020);
-    SetNodeConfig (NODEC_3D_PRESENT, wCodecID & 0x7C00);
-
-    //
-    // Test for the input pins that are always there but could be disabled
-    // by the HW vender
-    //
-
-    // Check if OEM wants to disable mic input.
-    if (DisableAC97Pin (PINC_MIC_PRESENT))
-        SetPinConfig (PINC_MIC_PRESENT, FALSE);
-    else
-        SetPinConfig (PINC_MIC_PRESENT, TRUE);
-    
-    // Check if OEM wants to disable line input.
-    if (DisableAC97Pin (PINC_LINEIN_PRESENT))
-        SetPinConfig (PINC_LINEIN_PRESENT, FALSE);
-    else
-        SetPinConfig (PINC_LINEIN_PRESENT, TRUE);
-
-    // Check if OEM wants to disable CD input.
-    if (DisableAC97Pin (PINC_CD_PRESENT))
-        SetPinConfig (PINC_CD_PRESENT, FALSE);
-    else
-        SetPinConfig (PINC_CD_PRESENT, TRUE);
-
-
-    //
-    // For the rest, we have to probe the registers.
-    //
-
-    //
-    // Test for Mono out.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_MMONO_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // Default is x8000.
-    if (wCodecReg == 0x8000)
-        SetPinConfig (PINC_MONOOUT_PRESENT, TRUE);
-    else
-        SetPinConfig (PINC_MONOOUT_PRESENT, FALSE);
-
-    // Check if OEM wants to disable mono output.
-    if (DisableAC97Pin (PINC_MONOOUT_PRESENT))
-        SetPinConfig (PINC_MONOOUT_PRESENT, FALSE);
-
-    //
-    // Test for PC beeper support.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_BEEP_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // default is x0 or x8000. If it's 0x8000 then we know for sure that the
-    // CoDec has a PcBeep, otherwise we have to check the register
-    if (wCodecReg == 0x8000)
-        SetPinConfig (PINC_PCBEEP_PRESENT, TRUE);
-    else if (!wCodecReg)
-    {
-        // mute the pc beeper.
-        ntStatus = WriteCodecRegister (AC97REG_BEEP_VOLUME, 0x8000, -1);
-        if (!NT_SUCCESS (ntStatus))
-            return ntStatus;
-
-        // read back
-        ntStatus = ReadCodecRegister (AC97REG_BEEP_VOLUME, &wCodecReg);
-        if (!NT_SUCCESS (ntStatus))
-            return ntStatus;
-
-        if (wCodecReg == 0x8000)
-        {
-            // yep, we have support.
-            SetPinConfig (PINC_PCBEEP_PRESENT, TRUE);
-            // reset to default value.
-            WriteCodecRegister (AC97REG_BEEP_VOLUME, 0x0, -1);
-        }
-        else
-            // nope, not present
-            SetPinConfig (PINC_PCBEEP_PRESENT, FALSE);
-    }
-    else
-        // any other value then 0x0 and 0x8000.
-        SetPinConfig (PINC_PCBEEP_PRESENT, FALSE);
-
-    // Check if OEM wants to disable beeper support.
-    if (DisableAC97Pin (PINC_PCBEEP_PRESENT))
-        SetPinConfig (PINC_PCBEEP_PRESENT, FALSE);
-
-    //
-    // Test for phone support.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_PHONE_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // Default is x8008.
-    if (wCodecReg == 0x8008)
-        SetPinConfig (PINC_PHONE_PRESENT, TRUE);
-    else
-        SetPinConfig (PINC_PHONE_PRESENT, FALSE);
-
-    // Check if OEM wants to disable phone input.
-    if (DisableAC97Pin (PINC_PHONE_PRESENT))
-        SetPinConfig (PINC_PHONE_PRESENT, FALSE);
-
-    //
-    // Test for video support.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_VIDEO_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // Default is x8808.
-    if (wCodecReg == 0x8808)
-        SetPinConfig (PINC_VIDEO_PRESENT, TRUE);
-    else
-        SetPinConfig (PINC_VIDEO_PRESENT, FALSE);
-
-    // Check if OEM wants to disable video input.
-    if (DisableAC97Pin (PINC_VIDEO_PRESENT))
-        SetPinConfig (PINC_VIDEO_PRESENT, FALSE);
-
-    //
-    // Test for Aux support.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_AUX_VOLUME, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // Default is 0x8808.
-    if (wCodecReg == 0x8808)
-        SetPinConfig (PINC_AUX_PRESENT, TRUE);
-    else
-        SetPinConfig (PINC_AUX_PRESENT, FALSE);
-
-    // Check if OEM wants to disable aux input.
-    if (DisableAC97Pin (PINC_AUX_PRESENT))
-        SetPinConfig (PINC_AUX_PRESENT, FALSE);
-
-    //
-    // Test for Mic2 source.
-    //
-    ntStatus = ReadCodecRegister (AC97REG_GENERAL, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-
-    // Test for Mic2 select bit.
-    if (wCodecReg & 0x0100)
-        SetPinConfig (PINC_MIC2_PRESENT, TRUE);
-    else
-    {
-        // Select Mic2 as source.
-        ntStatus = WriteCodecRegister (AC97REG_GENERAL, 0x0100, 0x0100);
-        if (!NT_SUCCESS (ntStatus))
-            return ntStatus;
-
-        // Read back.
-        ntStatus = ReadCodecRegister (AC97REG_GENERAL, &wCodecReg);
-        if (!NT_SUCCESS (ntStatus))
-            return ntStatus;
-
-        if (wCodecReg & 0x0100)
-        {
-            // Yep, we have support so set it to the default value.
-            SetPinConfig (PINC_MIC2_PRESENT, TRUE);
-            // reset to default value.
-            WriteCodecRegister (AC97REG_GENERAL, 0, 0x0100);
-        }
-        else
-            SetPinConfig (PINC_MIC2_PRESENT, FALSE);
-    }
-
-    // Check if OEM wants to disable mic2 input.
-    if (DisableAC97Pin (PINC_MIC2_PRESENT))
-        SetPinConfig (PINC_MIC2_PRESENT, FALSE);
-
-    //
-    // Test the 3D controls.
-    //
-    if (GetNodeConfig (NODEC_3D_PRESENT))
-	{
-		//
-        // First test for fixed 3D controls. Write default value ...
-        //
-		ntStatus = WriteCodecRegister (AC97REG_3D_CONTROL, 0, -1);
-		if (!NT_SUCCESS (ntStatus))
-			return ntStatus;
-
-        // Read 3D register. Default is 0 when adjustable, otherwise it is
-        // a fixed value.
-		ntStatus = ReadCodecRegister (AC97REG_3D_CONTROL, &wCodecReg);
-		if (!NT_SUCCESS (ntStatus))
-			return ntStatus;
-
-        //
-        // Check center and depth separately.
-        //
-		
-        // For center
-        if (wCodecReg & 0x0F00)
-			SetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE, FALSE);
-        else
-			SetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE, TRUE);
-	
-        // For depth
-        if (wCodecReg & 0x000F)
-			SetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE, FALSE);
-        else
-			SetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE, TRUE);
-
-        //
-        // Test for adjustable controls.
-        //
-		WriteCodecRegister (AC97REG_3D_CONTROL, 0x0A0A, -1);
-		
-        // Read 3D register. Now it should be 0x0A0A for adjustable controls,
-        // otherwise it is a fixed control or simply not there.
-		ReadCodecRegister (AC97REG_3D_CONTROL, &wCodecReg);
-
-        // Restore the default value
-		WriteCodecRegister (AC97REG_3D_CONTROL, 0, -1);
-
-        // Check the center control for beeing adjustable
-        if (GetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE) &&
-            (wCodecReg & 0x0F00) != 0x0A00)
-        {
-            SetNodeConfig (NODEC_3D_CENTER_ADJUSTABLE, FALSE);
-        }
-        
-        // Check the depth control for beeing adjustable
-        if (GetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE) &&
-            (wCodecReg & 0x000F) != 0x000A)
-        {
-            SetNodeConfig (NODEC_3D_DEPTH_ADJUSTABLE, FALSE);
-        }
-    }
-
-    //
-	// Check for 6th bit support in volume controls.  To check the 6th bit, 
-    // we first have to write a value (with 6th bit set) and then read it 
-    // back.  After that, we should restore the register to its default value.
-    //
-
-    //
-    // Start with the master volume.
-    //
-    ntStatus = WriteCodecRegister (AC97REG_MASTER_VOLUME, 0xA020, -1);
-	if (!NT_SUCCESS (ntStatus))
-		return ntStatus;
-
-    // Read back.
-	ntStatus = ReadCodecRegister (AC97REG_MASTER_VOLUME, &wCodecReg);
-	if (!NT_SUCCESS (ntStatus))
-		return ntStatus;
-
-    // Check return.
-    if (wCodecReg & 0x2020)
-        SetNodeConfig (NODEC_6BIT_MASTER_VOLUME, TRUE);
-    else
-        SetNodeConfig (NODEC_6BIT_MASTER_VOLUME, FALSE);
-
-    // Restore default value.
-    WriteCodecRegister (AC97REG_MASTER_VOLUME, 0x8000, -1);
-
-    //
-    // Check for a headphone volume control.
-    //
-    if (GetPinConfig (PINC_HPOUT_PRESENT))
-    {
-        // Check headphone volume.
-        ntStatus = WriteCodecRegister (AC97REG_HPHONE_VOLUME, 0xA020, -1);
-	    if (!NT_SUCCESS (ntStatus))
-		    return ntStatus;
-
-        // Read back
-	    ntStatus = ReadCodecRegister (AC97REG_HPHONE_VOLUME, &wCodecReg);
-	    if (!NT_SUCCESS (ntStatus))
-		    return ntStatus;
-
-        // Check return
-        if (wCodecReg & 0x2020)
-            SetNodeConfig (NODEC_6BIT_HPOUT_VOLUME, TRUE);
-        else
-            SetNodeConfig (NODEC_6BIT_HPOUT_VOLUME, FALSE);
-
-        // Restore default value.
-        WriteCodecRegister (AC97REG_HPHONE_VOLUME, 0x8000, -1);
-    }
-
-    //
-    // Mono out there?
-    //
-    if (GetPinConfig (PINC_MONOOUT_PRESENT))
-    {
-        // Check headphone volume.
-        ntStatus = WriteCodecRegister (AC97REG_MMONO_VOLUME, 0x8020, -1);
-	    if (!NT_SUCCESS (ntStatus))
-		    return ntStatus;
-
-        // Read back
-	    ntStatus = ReadCodecRegister (AC97REG_MMONO_VOLUME, &wCodecReg);
-	    if (!NT_SUCCESS (ntStatus))
-		    return ntStatus;
-
-        // Check return
-        if (wCodecReg & 0x0020)
-            SetNodeConfig (NODEC_6BIT_MONOOUT_VOLUME, TRUE);
-        else
-            SetNodeConfig (NODEC_6BIT_MONOOUT_VOLUME, FALSE);
-
-        // Restore default value.
-        WriteCodecRegister (AC97REG_MMONO_VOLUME, 0x8000, -1);
-    }
-
-    //
-    // Get extended AC97 V2.0 information
-    //
-
-    // First check for V2 codec.
-    ntStatus = ReadCodecRegister (AC97REG_PCM_FRONT_RATE, &wCodecReg);
-	if (!NT_SUCCESS (ntStatus))
-		return ntStatus;
-
-    // The V2 codec have the default value of 0xBB80. A V1 codec would
-    // have 0x0000.
-    if (wCodecReg == 0xBB80)
-    {
-        // We are lucky. Just read the register.
-        ntStatus = ReadCodecRegister (AC97REG_EXT_AUDIO_ID, &wCodecReg);
-        if (!NT_SUCCESS (ntStatus))
-            return ntStatus;
-    }
-    else
-    {
-        // We want to disable all features, so lets assume a read with
-        // value 0, that will disable all features (see above).
-        wCodecReg = 0;
-    }
 
 
     //
@@ -1899,19 +1523,6 @@ NTSTATUS CAdapterCommon::ProbeHWConfig (void)
     SetNodeConfig (NODEC_CENTER_DAC_PRESENT, wCodecReg & 0x0040);
     SetNodeConfig (NODEC_SURROUND_DAC_PRESENT, wCodecReg & 0x0080);
     SetNodeConfig (NODEC_LFE_DAC_PRESENT, wCodecReg & 0x0100);
-
-
-    //
-    // Enable variable sample rate in the control register and disable
-    // double rate.
-    //
-    WriteCodecRegister (AC97REG_EXT_AUDIO_CTRL, wCodecReg & 0x0009, 0x000B);
-
-    //
-    // We read these registers because they are dependent on the codec.
-    //
-    ReadCodecRegister (AC97REG_VENDOR_ID1, &wCodecReg);
-    ReadCodecRegister (AC97REG_VENDOR_ID2, &wCodecReg);
 
     return STATUS_SUCCESS;
 }
@@ -1928,6 +1539,7 @@ NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
     PAGED_CODE ();
 
 	//TODO how to rewrite this for HDA?
+	/*
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::AcquireCodecSemiphore]"));
 
@@ -1948,7 +1560,7 @@ NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
         //
         KeStallExecutionProcessor (40L);
     }
-
+	*/
     return STATUS_SUCCESS;
 }
 
@@ -1972,8 +1584,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ReadCodecRegister
     NTSTATUS ntStatus;
     ULONG    Status;
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::ReadCodecRegister]"));
-    
+    DOUT (DBG_PRINT, ("Trying to read AC97 register 0x%X", reg));
+    /*
     //
     // Check if we have to access the HW directly.
     //
@@ -2042,6 +1654,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ReadCodecRegister
                 reg == AC97REG_VENDOR_ID2 ? "REG_VENDOR_ID2" : 
                 "REG_INVALID", *wData));
     }
+	*/
 
     return STATUS_SUCCESS;
 }
@@ -2067,8 +1680,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteCodecRegister
     WORD TempData = 0;
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::WriteCodecRegister]"));
-
+   DOUT (DBG_PRINT, ("Trying to write AC97 register 0x%X with 0x%X", reg, wData));
+   /*
     //
     // No mask?  Could happen when you try to prg. left channel of a
     // mono volume.
@@ -2133,7 +1746,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteCodecRegister
                    reg == AC97REG_VENDOR_ID2 ? "REG_VENDOR_ID2" : 
                    "REG_INVALID", TempData));
     
-    
+    */
     return STATUS_SUCCESS;
 }
 
@@ -2151,6 +1764,7 @@ NTSTATUS CAdapterCommon::PrimaryCodecReady (void)
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::PrimaryCodecReady]"));
 
+	/*
     
     //
     // Enable the AC link and raise the reset line.
@@ -2182,6 +1796,8 @@ NTSTATUS CAdapterCommon::PrimaryCodecReady (void)
 
     DOUT (DBG_ERROR, ("PrimaryCodecReady timed out!"));
     return STATUS_IO_TIMEOUT;
+	*/
+	return STATUS_SUCCESS;
 }
 
 
@@ -2196,49 +1812,49 @@ NTSTATUS CAdapterCommon::PowerUpCodec (void)
     PAGED_CODE ();
 
     WORD        wCodecReg;
-    NTSTATUS    ntStatus;
+    NTSTATUS    ntStatus = STATUS_SUCCESS;
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::PowerUpCodec]"));
 
     //
     // Power up the Codec.
     //
-    WriteCodecRegister (AC97REG_POWERDOWN, 0x00, -1);
+    //WriteCodecRegister (AC97REG_POWERDOWN, 0x00, -1);
 
     //
     // Wait for the Codec to be powered up.
     //
-    ULONGLONG ullStartTime = PcGetTimeInterval (0);
-    do
-    {
+    //ULONGLONG ullStartTime = PcGetTimeInterval (0);
+    //do
+    //{
         //
         // Read the power management register.
         //
-        ntStatus = ReadCodecRegister (AC97REG_POWERDOWN, &wCodecReg);
-        if (!NT_SUCCESS (ntStatus))
-        {
-            wCodecReg = 0;      // Will cause an error.
-            break;
-        }
+     //   ntStatus = ReadCodecRegister (AC97REG_POWERDOWN, &wCodecReg);
+      //  if (!NT_SUCCESS (ntStatus))
+      //  {
+      //      wCodecReg = 0;      // Will cause an error.
+      //      break;
+      //  }
 
         //
         // Check the power state. Should be ready.
         //
-        if ((wCodecReg & 0x0f) == 0x0f)
-            break;
+       // if ((wCodecReg & 0x0f) == 0x0f)
+      //      break;
 
         //
         // Let's wait a little, 50us and then try again.
         //
-        KeStallExecutionProcessor (50L);
-    } while (PcGetTimeInterval (ullStartTime) < GTI_MILLISECONDS (1000));
+       // KeStallExecutionProcessor (50L);
+    //} while (PcGetTimeInterval (ullStartTime) < GTI_MILLISECONDS (1000));
 
     // Check if we timed out.
-    if ((wCodecReg & 0x0f) != 0x0f)
-    {
-        DOUT (DBG_ERROR, ("PowerUpCodec timed out. CoDec not powered up."));
-        ntStatus = STATUS_DEVICE_NOT_READY;
-    }
+    //if ((wCodecReg & 0x0f) != 0x0f)
+    //{
+    //    DOUT (DBG_ERROR, ("PowerUpCodec timed out. CoDec not powered up."));
+    //    ntStatus = STATUS_DEVICE_NOT_READY;
+    //}
 
     return ntStatus;
 }
@@ -2249,10 +1865,6 @@ NTSTATUS CAdapterCommon::PowerUpCodec (void)
  *****************************************************************************
  * Programs the sample rate. If the rate cannot be programmed, the routine
  * restores the register and returns STATUS_UNSUCCESSFUL.
- * We don't handle double rate sample rates here, because the Intel ICH con-
- * troller cannot serve CoDecs with double rate or surround sound. If you want
- * to modify this driver for another AC97 controller, then you might want to
- * change this function too.
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 (
@@ -2265,119 +1877,86 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
     WORD     wOldRateReg, wCodecReg;
     NTSTATUS ntStatus;
 
+	//TODO: use reg param to select between
+	//primary or secondary audio output or capture input
+
     DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
 
     //
-    // Check if we support variable sample rate.
+    // Check what sample rates we support based on
+	// afg_node_sample_capabilities & audio_output_node_sample_capabilities
     //
-    switch(Register)
-    {
-        case AC97REG_MIC_RATE:
-            //
-            // Variable sample rate supported?
-            //
-            if (GetNodeConfig (NODEC_MIC_VARIABLERATE_SUPPORTED))
-            {
-                // Range supported?
-                if (dwSampleRate > 48000ul)
-                {
-                    // Not possible.
-                    DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
-                    return STATUS_NOT_SUPPORTED;
-                }
-            }
-            else
-            {
-                // Only 48000KHz possible.
-                if (dwSampleRate != 48000ul)
-                {
-                    DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
-                    return STATUS_NOT_SUPPORTED;
-                }
-
-                return STATUS_SUCCESS;
-            }
-            break;
-
-        case AC97REG_PCM_FRONT_RATE:
-        case AC97REG_PCM_SURR_RATE:
-        case AC97REG_PCM_LFE_RATE:
-        case AC97REG_PCM_LR_RATE:
-            //
-            // Variable sample rate supported?
-            //
-            if (GetNodeConfig (NODEC_PCM_VARIABLERATE_SUPPORTED))
-            {
-                //
-                // Check range supported
-                //
-                if (dwSampleRate > 48000ul)
-                {
-                    DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
-                    return STATUS_NOT_SUPPORTED;
-                }
-            }
-            else
-            {
-                // Only 48KHz possible.
-                if (dwSampleRate != 48000)
-                {
-                    DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
-                    return STATUS_NOT_SUPPORTED;
-                }
-
-                return STATUS_SUCCESS;
-            }
-            break;
-
-        default:
-            DOUT (DBG_ERROR, ("Invalid sample rate register!"));
+	// if either is zero, give up as nothing has been inited yet
+	if((!afg_node_sample_capabilities) || (!audio_output_node_sample_capabilities)){
+		    DOUT (DBG_ERROR, ("Invalid sample rate register!"));
             return STATUS_UNSUCCESSFUL;
-    }
+	}
 
-    
-    //
-    // Save the old sample rate register.
-    //
-    ntStatus = ReadCodecRegister (Register, &wOldRateReg);
-    if (!NT_SUCCESS (ntStatus))
-        return ntStatus;
-    
-    //
-    // program the rate.
-    //
-    ntStatus = WriteCodecRegister (Register, (WORD)dwSampleRate, -1);
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Cannot program sample rate."));
-        return ntStatus;
-    }
+	if (!hda_is_supported_sample_rate(dwSampleRate)) {
+		// Not a supported sample rate
+		DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
+		return STATUS_NOT_SUPPORTED;
+	}
 
-    //
-    // Read it back.
-    //
-    ntStatus = ReadCodecRegister (Register, &wCodecReg);
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Cannot read sample rate."));
-        return ntStatus;
-    }
+	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
 
-    //
-    // Validate.
-    //
-    if (wCodecReg != dwSampleRate)
-    {
-        //
-        // restore sample rate and ctrl register.
-        //
-        WriteCodecRegister (Register, wOldRateReg, -1);
-        
-        DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
-        return STATUS_NOT_SUPPORTED;
-    }
+	//set stream data format
+	writeUSHORT(OutputStreamBase + 0x12, format);
+
+	//set Audio Output nodes data format
+	hda_send_verb(codecNumber, audio_output_node_number, 0x200, format);
+	if(second_audio_output_node_number != 0) {
+		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, format);
+	}
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
+    return STATUS_SUCCESS;
+}
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
+     //stop output DMA engine
+ writeUCHAR(OutputStreamBase + 0x00, 0x00);
+ ULONG ticks = 0;
+ while(ticks++<2) {
+  KeStallExecutionProcessor(1);
+  if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
+   break;
+  }
+ }
+ if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
+  DOUT (DBG_ERROR, ("HDA: can not stop stream"));
+  return STATUS_TIMEOUT;
+ }
+ 
+ //reset stream registers
+ writeUCHAR(OutputStreamBase + 0x00, 0x01);
+ ticks = 0;
+ while(ticks++<10) {
+  KeStallExecutionProcessor(1);
+  if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+   break;
+  }
+ }
+ if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+  DOUT (DBG_ERROR, ("HDA: can not start resetting stream"));
+ }
+ KeStallExecutionProcessor(5);
+ writeUCHAR(OutputStreamBase + 0x00, 0x00);
+ ticks = 0;
+ while(ticks++<10) {
+  KeStallExecutionProcessor(1);
+  if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+   break;
+  }
+ }
+ if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+  DOUT (DBG_ERROR, ("HDA: can not stop resetting stream"));
+  return STATUS_TIMEOUT;
+ }
+	KeStallExecutionProcessor(5);
+
+	//clear error bits
+	writeUCHAR(OutputStreamBase + 0x03, 0x1C);
     return STATUS_SUCCESS;
 }
 
@@ -2610,6 +2189,7 @@ NTSTATUS CAdapterCommon::SetAC97Default (void)
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::SetAC97Default]"));
     
+	/*
     // open the driver registry key
     NTSTATUS ntStatus = PcNewRegistryKey (&DriverKey,        // IRegistryKey
                                           NULL,              // OuterUnknown
@@ -2718,8 +2298,9 @@ NTSTATUS CAdapterCommon::SetAC97Default (void)
 
         ntStatus = STATUS_INSUFFICIENT_RESOURCES;
     }
+	*/
 
-    return ntStatus;
+    return STATUS_SUCCESS;
 }
 
 
@@ -2930,9 +2511,9 @@ STDMETHODIMP_(void) CAdapterCommon::WriteBMControlRegister
 {
     DOUT (DBG_PRINT, ("[CAdapterCommon::WriteBMControlRegister] (UCHAR)"));
     
-    WRITE_PORT_UCHAR ((PUCHAR)(m_pBusMasterBase + ulOffset), ucValue);
+    //WRITE_PORT_UCHAR ((PUCHAR)(m_pBusMasterBase + ulOffset), ucValue);
 
-    DOUT (DBG_REGS, ("WriteBMControlRegister wrote 0x%2x to 0x%4x.", 
+    DOUT (DBG_REGS, ("WriteBMControlRegister tried to write 0x%2x to 0x%4x.", 
                    ucValue, m_pBusMasterBase + ulOffset));
 }
 
@@ -2949,9 +2530,9 @@ STDMETHODIMP_(void) CAdapterCommon::WriteBMControlRegister
 {
     DOUT (DBG_PRINT, ("[CAdapterCommon::WriteBMControlRegister (USHORT)]"));
 	
-    WRITE_PORT_USHORT ((PUSHORT)(m_pBusMasterBase + ulOffset), usValue);
+    //WRITE_PORT_USHORT ((PUSHORT)(m_pBusMasterBase + ulOffset), usValue);
 
-    DOUT (DBG_REGS, ("WriteBMControlRegister wrote 0x%4x to 0x%4x", 
+    DOUT (DBG_REGS, ("WriteBMControlRegister tried to write 0x%4x to 0x%4x", 
                    usValue, m_pBusMasterBase + ulOffset));
 }
 
@@ -2968,9 +2549,9 @@ STDMETHODIMP_(void) CAdapterCommon::WriteBMControlRegister
 {
     DOUT (DBG_PRINT, ("[CAdapterCommon::WriteBMControlRegister (ULONG)]"));
 	
-    WRITE_PORT_ULONG ((PULONG)(m_pBusMasterBase + ulOffset), ulValue);
+    //WRITE_PORT_ULONG ((PULONG)(m_pBusMasterBase + ulOffset), ulValue);
 
-    DOUT (DBG_REGS, ("WriteBMControlRegister wrote 0x%8x to 0x%4x.", 
+    DOUT (DBG_REGS, ("WriteBMControlRegister tried to write 0x%8x to 0x%4x.", 
                    ulValue, m_pBusMasterBase + ulOffset));
 }
 
@@ -2988,9 +2569,9 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::ReadBMControlRegister8
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ReadBMControlRegister8]"));
 	
-    ucValue = READ_PORT_UCHAR ((PUCHAR)(m_pBusMasterBase + ulOffset));
+    //ucValue = READ_PORT_UCHAR ((PUCHAR)(m_pBusMasterBase + ulOffset));
 				
-    DOUT (DBG_REGS, ("ReadBMControlRegister read 0x%2x from 0x%4x.", ucValue,
+    DOUT (DBG_REGS, ("ReadBMControlRegister tried to read read 0x%2x from 0x%4x.", ucValue,
                    m_pBusMasterBase + ulOffset));
 
     return ucValue;
@@ -3010,9 +2591,9 @@ STDMETHODIMP_(USHORT) CAdapterCommon::ReadBMControlRegister16
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ReadBMControlRegister16]"));
 	
-	usValue = READ_PORT_USHORT ((PUSHORT)(m_pBusMasterBase + ulOffset));
+	//usValue = READ_PORT_USHORT ((PUSHORT)(m_pBusMasterBase + ulOffset));
 				
-    DOUT (DBG_REGS, ("ReadBMControlRegister read 0x%4x = 0x%4x", usValue,
+    DOUT (DBG_REGS, ("ReadBMControlRegister tried to read 0x%4x = 0x%4x", usValue,
                    m_pBusMasterBase + ulOffset));
 
     return usValue;
@@ -3032,9 +2613,9 @@ STDMETHODIMP_(ULONG) CAdapterCommon::ReadBMControlRegister32
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ReadBMControlRegister32]"));
 	
-	ulValue = READ_PORT_ULONG ((PULONG)(m_pBusMasterBase + ulOffset));
+	//ulValue = READ_PORT_ULONG ((PULONG)(m_pBusMasterBase + ulOffset));
 				
-    DOUT (DBG_REGS, ("ReadBMControlRegister read 0x%8x = 0x%4x", ulValue,
+    DOUT (DBG_REGS, ("ReadBMControlRegister tried to read 0x%8x = 0x%4x", ulValue,
                    m_pBusMasterBase + ulOffset));
 
     return ulValue;

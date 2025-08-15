@@ -14,7 +14,7 @@ provider=%ProviderName%
 ;;LayoutFile=layout.inf, layout1.inf, layout2.inf
 ;;DriverVer needs to be kept up to date for Windows 2000+
 ;;i think the DLL inherits the VERSIONINFO from the DDK
-DriverVer=07/08/2025,5.00.2195.1
+DriverVer=08/15/2025,5.00.2195.1
 
 ;You must specify which platform is supported by each SourceDisksNames section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
@@ -29,10 +29,10 @@ WDMHDA.sys=101
 [Manufacturer]
 %MfgName%=Intel
 
-;; Excluding drivers from the "Add New Hardware" list (should be done for all PnP)
+;; Excluding drivers from the "Add New Hardware" list (should be done for all PnP?)
 [ControlFlags]
 
-ExcludeFromSelect = *
+;;ExcludeFromSelect = *
 
 [Intel]
 ;;Intel HDA interfaces

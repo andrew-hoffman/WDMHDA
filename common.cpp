@@ -93,7 +93,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
-ULONG audBufSize = 9600 * 2 * 2; //100ms of 2ch 16 bit audio
+ULONG audBufSize = 4410 * 2 * 2; //100ms of 2ch 16 bit audio
 
 #pragma code_seg("PAGE")
 /*****************************************************************************
@@ -420,15 +420,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     // Probe codec configuration
     //
     ntStatus = ProbeHWConfig ();
-    if (!NT_SUCCESS (ntStatus))
-    {
+    if (!NT_SUCCESS (ntStatus)){
         DOUT (DBG_ERROR, ("Probing of hardware configuration failed!"));
         return ntStatus;
     }
 
-
-	//return an error at the end for now so it doesnt run the ac97 specific parts of the driver further
-    //ntStatus = STATUS_INVALID_PARAMETER;
 	
 	//SetAC97Default ();
 
@@ -437,8 +433,75 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
     //
     m_PowerState = PowerDeviceD0;
 
-	//should we set up output stream 1 from here for now?
+	DOUT(DBG_SYSINFO, ("reset streams"));
 
+	ntStatus = hda_stop_stream ();
+	if (!NT_SUCCESS (ntStatus)){
+        DOUT (DBG_ERROR, ("Can't reset stream"));
+        return ntStatus;
+    }
+
+	DOUT(DBG_SYSINFO, ("write to audio ram"));
+
+	//uh can i write to my audio buffer aTall?
+	for(i = 0; i < 10; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
+	for(i = 10; i < 20; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0xaaaa;
+	for(i = 20; i < 30; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0x0000;
+
+	DOUT(DBG_SYSINFO, ("garbage written in"));
+		
+
+	ProgramSampleRate(AC97REG_PCM_LR_RATE, 44100);
+
+	//fill buffer entries
+	BdlMemVirt[0] = BufLogicalAddress.LowPart;
+	BdlMemVirt[1] = BufLogicalAddress.HighPart;
+	BdlMemVirt[2] = audBufSize;
+	BdlMemVirt[3] = 0;
+
+	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
+	BdlMemVirt[4] = BufLogicalAddress.LowPart;
+	BdlMemVirt[5] = BufLogicalAddress.HighPart;
+	BdlMemVirt[6] = audBufSize;
+	BdlMemVirt[7] = 0;
+
+	DOUT(DBG_SYSINFO, ("BDL all set up"));
+
+	KeFlushIoBuffers(mdl, FALSE, TRUE); 
+	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
+
+	//set buffer registers
+	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
+	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
+	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
+	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
+
+	DOUT(DBG_SYSINFO, ("buffer address programmed"));
+
+
+	//set stream data format
+	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
+
+	//set Audio Output node data format
+	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
+	if(second_audio_output_node_number != 0) {
+		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
+	}
+	KeStallExecutionProcessor(10);
+
+	DOUT(DBG_SYSINFO, ("ready to start the stream"));
+
+
+	//start streaming to stream 1
+	writeUCHAR(OutputStreamBase + 0x02, 0x14);
+	writeUCHAR(OutputStreamBase + 0x00, 0x02);
+
+	DOUT(DBG_SYSINFO, ("done with innit"));
+
+	
     return ntStatus;
 }
 
@@ -454,8 +517,9 @@ CAdapterCommon::~CAdapterCommon ()
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::~CAdapterCommon]"));
 
+	//At least try to stop the stream before destruction
+	hda_stop_stream ();
 	//Free audio buffer
-	//TODO: ensure everything is stopped before the destructor!
 	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
 		DOUT (DBG_PRINT, ("freeing audio buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
@@ -1539,10 +1603,10 @@ NTSTATUS CAdapterCommon::AcquireCodecSemiphore ()
     PAGED_CODE ();
 
 	//TODO how to rewrite this for HDA?
-	/*
+
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::AcquireCodecSemiphore]"));
-
+	/*
     ULONG ulCount = 0;
     while (READ_PORT_UCHAR (m_pBusMasterBase + CAS) & CAS_CAS)
     {
@@ -1910,53 +1974,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 	}
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
-    return STATUS_SUCCESS;
-}
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
-	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
-     //stop output DMA engine
- writeUCHAR(OutputStreamBase + 0x00, 0x00);
- ULONG ticks = 0;
- while(ticks++<2) {
-  KeStallExecutionProcessor(1);
-  if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
-   break;
-  }
- }
- if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
-  DOUT (DBG_ERROR, ("HDA: can not stop stream"));
-  return STATUS_TIMEOUT;
- }
- 
- //reset stream registers
- writeUCHAR(OutputStreamBase + 0x00, 0x01);
- ticks = 0;
- while(ticks++<10) {
-  KeStallExecutionProcessor(1);
-  if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
-   break;
-  }
- }
- if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
-  DOUT (DBG_ERROR, ("HDA: can not start resetting stream"));
- }
- KeStallExecutionProcessor(5);
- writeUCHAR(OutputStreamBase + 0x00, 0x00);
- ticks = 0;
- while(ticks++<10) {
-  KeStallExecutionProcessor(1);
-  if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
-   break;
-  }
- }
- if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
-  DOUT (DBG_ERROR, ("HDA: can not stop resetting stream"));
-  return STATUS_TIMEOUT;
- }
-	KeStallExecutionProcessor(5);
-
-	//clear error bits
-	writeUCHAR(OutputStreamBase + 0x03, 0x1C);
     return STATUS_SUCCESS;
 }
 
@@ -2447,8 +2464,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
 	//using CORB/RIRB interface only (immediate cmd interface is not supported)
 
-	//TODO: check sizes of components passed in
-	//TODO: locking (mutex?) 
+	//TODO: check sizes of components passed in 
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
@@ -2494,6 +2510,56 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	//return response
 	return value;
 	//TODO: implement immediate command interface if it is ever necessary
+}
+
+
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
+    //stop output DMA engine
+	
+	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+	ULONG ticks = 0;
+	while(ticks++<2) {
+		KeStallExecutionProcessor(1);
+		if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
+			break;
+		}
+	}
+	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
+		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
+		return STATUS_TIMEOUT;
+	}
+ 
+	//reset stream registers
+	writeUCHAR(OutputStreamBase + 0x00, 0x01);
+	ticks = 0;
+	while(ticks++<10) {
+		KeStallExecutionProcessor(1);
+		if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+			break;
+		}
+	}
+	if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+		DOUT (DBG_ERROR, ("HDA: can not start resetting stream"));
+	}
+	KeStallExecutionProcessor(5);
+	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+	ticks = 0;
+	while(ticks++<10) {
+		KeStallExecutionProcessor(1);
+			if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+			break;
+		}
+	}
+	if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+		DOUT (DBG_ERROR, ("HDA: can not stop resetting stream"));
+	return STATUS_TIMEOUT;
+	}
+	KeStallExecutionProcessor(5);
+
+	//clear error bits
+	writeUCHAR(OutputStreamBase + 0x03, 0x1C);
+    return STATUS_SUCCESS;
 }
 
 

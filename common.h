@@ -452,6 +452,7 @@ public:
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
+	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
     STDMETHODIMP_(void)		writeUCHAR(USHORT reg, UCHAR value);
 

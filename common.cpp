@@ -17,64 +17,12 @@ static char STR_MODULENAME[] = "ICH Common: ";
  */
 
 //
-// This is the register cache including registry names and default values. The
-// first WORD contains the register value and the second WORD contains a flag.
-// Currently, we only set SHREG_INVALID if we have to read the register at
-// startup (that's true when there is no constant default value for the
-// register).  Note that we cache the registers only to prevent read access to
-// the AC97 CoDec during runtime, because this is slow (40us).
-// We only set SHREG_INIT if we want to set the register to default at driver
-// startup.  If needed, the third field contains the registry name and the
-// forth field contains a default value that is used when there is no registry
-// entry.
-// The flag SHREG_NOCACHE is used when we don't want to cache the register
-// at all.  This is neccessary for status registers and sample rate registers.
-//
-tAC97Registers CAdapterCommon::m_stAC97Registers[] =
-{
-{0x0000, SHREG_INVALID, NULL,               0},         // AC97REG_RESET
-{0x8000, SHREG_INIT,    L"MasterVolume",    0x0000},	// AC97REG_MASTER_VOLUME
-{0x8000, SHREG_INIT,    L"HeadphoneVolume", 0x0000},    // AC97REG_HPHONE_VOLUME
-{0x8000, SHREG_INIT,    L"MonooutVolume",   0x0000},    // AC97REG_MMONO_VOLUME
-{0x0F0F, SHREG_INIT,    L"ToneControls",    0x0F0F},    // AC97REG_MASTER_TONE
-{0x0000, SHREG_INVALID |
-         SHREG_INIT,    L"BeepVolume",      0x0000},    // AC97REG_BEEP_VOLUME
-{0x8008, SHREG_INIT,    L"PhoneVolume",     0x8008},    // AC97REG_PHONE_VOLUME
-{0x8008, SHREG_INIT,    L"MicVolume",       0x8008},    // AC97REG_MIC_VOLUME
-{0x8808, SHREG_INIT,    L"LineInVolume",    0x0808},    // AC97REG_LINE_IN_VOLUME
-{0x8808, SHREG_INIT,    L"CDVolume",        0x0808},    // AC97REG_CD_VOLUME
-{0x8808, SHREG_INIT,    L"VideoVolume",     0x0808},    // AC97REG_VIDEO_VOLUME
-{0x8808, SHREG_INIT,    L"AUXVolume",       0x0808},    // AC97REG_AUX_VOLUME
-{0x8808, SHREG_INIT,    L"WaveOutVolume",   0x0808},    // AC97REG_PCM_OUT_VOLUME
-{0x0000, SHREG_INIT,    L"RecordSelect",    0x0404},    // AC97REG_RECORD_SELECT
-{0x8000, SHREG_INIT,    L"RecordGain",      0x0000},    // AC97REG_RECORD_GAIN
-{0x8000, SHREG_INIT,    L"RecordGainMic",   0x0000},    // AC97REG_RECORD_GAIN_MIC
-{0x0000, SHREG_INIT,    L"GeneralPurpose",  0x0000},    // AC97REG_GENERAL
-{0x0000, SHREG_INIT,    L"3DControl",       0x0000},    // AC97REG_3D_CONTROL
-{0x0000, SHREG_NOCACHE, NULL,               0},         // AC97REG_RESERVED
-{0x0000, SHREG_NOCACHE |
-         SHREG_INIT,    L"PowerDown",       0},         // AC97REG_POWERDOWN
-// AC97-2.0 registers
-{0x0000, SHREG_INVALID, NULL,               0},         // AC97REG_EXT_AUDIO_ID
-{0x0000, SHREG_NOCACHE, NULL,               0},         // AC97REG_EXT_AUDIO_CTRL
-{0xBB80, SHREG_NOCACHE, NULL,               0},         // AC97REG_PCM_FRONT_RATE
-{0xBB80, SHREG_NOCACHE, NULL,               0},         // AC97REG_PCM_SURR_RATE
-{0xBB80, SHREG_NOCACHE, NULL,               0},         // AC97REG_PCM_LFE_RATE
-{0xBB80, SHREG_NOCACHE, NULL,               0},         // AC97REG_PCM_LR_RATE
-{0xBB80, SHREG_NOCACHE, NULL,               0},         // AC97REG_MIC_RATE
-{0x8080, 0,             NULL,               0},         // AC97REG_6CH_VOL_CLFE
-{0x8080, 0,             NULL,               0},         // AC97REG_6CH_VOL_LRSURR
-{0x0000, SHREG_NOCACHE, NULL,               0}          // AC97REG_RESERVED2
-
-};
-
-
-//
 // This is the hardware configuration information.  The first struct is for 
 // nodes, which we default to FALSE.  The second struct is for Pins, which 
 // contains the configuration (FALSE) and the registry string which is the
 // reason for making a static struct so we can just fill in the name.
 //
+
 tHardwareConfig CAdapterCommon::m_stHardwareConfig =
 {
     // Nodes
@@ -93,6 +41,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
      {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
      {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
 };
+
 ULONG audBufSize = 4410 * 2 * 2; //100ms of 2ch 16 bit audio
 
 #pragma code_seg("PAGE")
@@ -443,7 +392,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 
 	DOUT(DBG_SYSINFO, ("write to audio ram"));
 
-	//uh can i write to my audio buffer aTall?
+	// can i write to my audio buffer at all?
 	for(i = 0; i < 10; ++i)
 		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
 	for(i = 10; i < 20; ++i)
@@ -452,57 +401,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		((PUSHORT)BufVirtualAddress)[i] = 0x0000;
 
 	DOUT(DBG_SYSINFO, ("garbage written in"));
-		
-
 	ProgramSampleRate(AC97REG_PCM_LR_RATE, 44100);
 
-	//fill buffer entries
-	BdlMemVirt[0] = BufLogicalAddress.LowPart;
-	BdlMemVirt[1] = BufLogicalAddress.HighPart;
-	BdlMemVirt[2] = audBufSize;
-	BdlMemVirt[3] = 0;
-
-	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
-	BdlMemVirt[4] = BufLogicalAddress.LowPart;
-	BdlMemVirt[5] = BufLogicalAddress.HighPart;
-	BdlMemVirt[6] = audBufSize;
-	BdlMemVirt[7] = 0;
-
-	DOUT(DBG_SYSINFO, ("BDL all set up"));
-
-	KeFlushIoBuffers(mdl, FALSE, TRUE); 
-	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
-
-	//set buffer registers
-	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
-	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
-	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
-	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
-
-	DOUT(DBG_SYSINFO, ("buffer address programmed"));
-
-
-	//set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
-
-	//set Audio Output node data format
-	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	if(second_audio_output_node_number != 0) {
-		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	}
-	KeStallExecutionProcessor(10);
-
-	DOUT(DBG_SYSINFO, ("ready to start the stream"));
-
-
-	//start streaming to stream 1
-	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x02);
-
-	DOUT(DBG_SYSINFO, ("done with innit"));
-
-	
-    return ntStatus;
+	ntStatus = hda_play_pcm_data_in_loop(BufLogicalAddress, audBufSize, 44100);
+	if (!NT_SUCCESS (ntStatus)){
+        DOUT (DBG_ERROR, ("Can't play anything"));
+        return ntStatus;
+    }
+	return ntStatus;	
 }
 
 
@@ -584,6 +490,8 @@ CAdapterCommon::~CAdapterCommon ()
 	}
 
 }
+
+
 
 #if (DBG)
 /*****************************************************************************
@@ -1410,14 +1318,6 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
 	}
 }
-
-void CAdapterCommon::hda_set_volume(ULONG volume) {
-	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume);
-	if(second_output_amp_node_number != 0) {
-		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume);
-	}
-}
-
 /*
 void CAdapterCommon::hda_check_headphone_connection_change(void) {
 	//TODO: schedule as a periodic task
@@ -1472,63 +1372,6 @@ UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 	}
 }
 
-USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
- USHORT data_format = 0;
-
- //channels
- data_format = (USHORT)(channels-1);
-
- //bits per sample
- if(bits_per_sample==16) {
-  data_format |= ((0x1)<<4);
- }
- else if(bits_per_sample==20) {
-  data_format |= ((0x2)<<4);
- }
- else if(bits_per_sample==24) {
-  data_format |= ((0x3)<<4);
- }
- else if(bits_per_sample==32) {
-  data_format |= ((0x4)<<4);
- }
-
- //sample rate
- if(sample_rate==48000) {
-  data_format |= ((0x0)<<8);
- }
- else if(sample_rate==44100) {
-  data_format |= ((0x40)<<8);
- }
- else if(sample_rate==32000) {
-  data_format |= ((0xA)<<8);
- }
- else if(sample_rate==22050) {
-  data_format |= ((0x41)<<8);
- }
- else if(sample_rate==16000) {
-  data_format |= ((0x2)<<8);
- }
- else if(sample_rate==11025) {
-  data_format |= ((0x43)<<8);
- }
- else if(sample_rate==8000) {
-  data_format |= ((0x5)<<8);
- }
- else if(sample_rate==88200) {
-  data_format |= ((0x48)<<8);
- }
- else if(sample_rate==96000) {
-  data_format |= ((0x8)<<8);
- }
- else if(sample_rate==176400) {
-  data_format |= ((0x58)<<8);
- }
- else if(sample_rate==192000) {
-  data_format |= ((0x18)<<8);
- }
-
- return data_format;
-}
 
 
 
@@ -2562,6 +2405,29 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
     return STATUS_SUCCESS;
 }
 
+STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
+	//TODO: this may freeze Virtualbox. Why?
+	writeUCHAR(OutputStreamBase + 0x02, 0x14);
+	writeUCHAR(OutputStreamBase + 0x00, 0x02);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
+	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+}
+
+
+STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
+	return readULONG(OutputStreamBase + 0x04);
+}
+
+void CAdapterCommon::hda_set_volume(ULONG volume) {
+	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume);
+	if(second_output_amp_node_number != 0) {
+		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume);
+	}
+}
+
+
 
 
 /*****************************************************************************
@@ -2738,5 +2604,117 @@ STDMETHODIMP_(void) CAdapterCommon::setULONGBit(USHORT reg, ULONG flag)
 STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 {
 	writeULONG(reg, readULONG(reg) & ~flag);
+}
+
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate) {
+
+	NTSTATUS ntStatus = STATUS_SUCCESS;
+
+	//fill buffer entries
+	BdlMemVirt[0] = physAddress.LowPart;
+	BdlMemVirt[1] = physAddress.HighPart;
+	BdlMemVirt[2] = bufSize;
+	BdlMemVirt[3] = 0;
+
+	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
+	//writing all-zeros does not seem to work on Virtualbox for some reason.
+	BdlMemVirt[4] = physAddress.LowPart;
+	BdlMemVirt[5] = physAddress.HighPart;
+	BdlMemVirt[6] = bufSize;
+	BdlMemVirt[7] = 0;
+
+	DOUT(DBG_SYSINFO, ("Playing buffer at at 0x%X%X size %d", physAddress.HighPart, physAddress.LowPart, bufSize));
+
+	KeFlushIoBuffers(mdl, FALSE, TRUE); 
+	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
+
+	//set buffer registers
+	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
+	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
+	writeULONG(OutputStreamBase + 0x08, bufSize * 2);
+	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
+
+	DOUT(DBG_SYSINFO, ("buffer address programmed"));
+
+
+	//set stream data format
+	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(sample_rate, 2, 16));
+
+	//set Audio Output node data format
+	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(sample_rate, 2, 16));
+	if(second_audio_output_node_number != 0) {
+		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(sample_rate, 2, 16));
+	}
+	KeStallExecutionProcessor(10);
+
+	DOUT(DBG_SYSINFO, ("ready to start the stream"));
+
+
+	//start streaming to stream 1
+	writeUCHAR(OutputStreamBase + 0x02, 0x14);
+	writeUCHAR(OutputStreamBase + 0x00, 0x02);
+
+	DOUT(DBG_SYSINFO, ("playing"));
+
+	
+    return ntStatus;
+}
+
+USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
+ USHORT data_format = 0;
+
+ //channels
+ data_format = (USHORT)(channels-1);
+
+ //bits per sample
+ if(bits_per_sample==16) {
+  data_format |= ((0x1)<<4);
+ }
+ else if(bits_per_sample==20) {
+  data_format |= ((0x2)<<4);
+ }
+ else if(bits_per_sample==24) {
+  data_format |= ((0x3)<<4);
+ }
+ else if(bits_per_sample==32) {
+  data_format |= ((0x4)<<4);
+ }
+
+ //sample rate
+ if(sample_rate==48000) {
+  data_format |= ((0x0)<<8);
+ }
+ else if(sample_rate==44100) {
+  data_format |= ((0x40)<<8);
+ }
+ else if(sample_rate==32000) {
+  data_format |= ((0xA)<<8);
+ }
+ else if(sample_rate==22050) {
+  data_format |= ((0x41)<<8);
+ }
+ else if(sample_rate==16000) {
+  data_format |= ((0x2)<<8);
+ }
+ else if(sample_rate==11025) {
+  data_format |= ((0x43)<<8);
+ }
+ else if(sample_rate==8000) {
+  data_format |= ((0x5)<<8);
+ }
+ else if(sample_rate==88200) {
+  data_format |= ((0x48)<<8);
+ }
+ else if(sample_rate==96000) {
+  data_format |= ((0x8)<<8);
+ }
+ else if(sample_rate==176400) {
+  data_format |= ((0x58)<<8);
+ }
+ else if(sample_rate==192000) {
+  data_format |= ((0x18)<<8);
+ }
+
+ return data_format;
 }
 

@@ -436,6 +436,7 @@ public:
 
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
 	STDMETHODIMP_(void)		hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number); 
+	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(void);
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entry(ULONG codec, ULONG node, ULONG connection_entry_number);
 	STDMETHODIMP_(void)		hda_initialize_output_pin(ULONG pin_node_number);
@@ -445,12 +446,15 @@ public:
 	STDMETHODIMP_(BOOL)		hda_is_headphone_connected (void);
 	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain);
 	STDMETHODIMP_(void)		hda_set_volume(ULONG volume);
+	STDMETHODIMP_(void)		hda_start_sound (void);
 	STDMETHODIMP_(NTSTATUS)	hda_stop_stream (void);
+	STDMETHODIMP_(void)		hda_stop_sound (void);
 	//STDMETHODIMP_(void)	hda_check_headphone_connection_change(void);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
+	STDMETHODIMP_(NTSTATUS)	hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);

@@ -72,7 +72,7 @@ CMiniportWaveICHStream::~CMiniportWaveICHStream ()
         //
         if (Wave->AdapterCommon)
         {
-            Wave->AdapterCommon->WriteBMControlRegister (m_ulBDAddr + X_CR, (UCHAR)0);
+            Wave->AdapterCommon->hda_stop_stream();
         }
         
         //
@@ -1403,6 +1403,11 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
     //
     nTail = (stBDList.nTail - 1) & BDL_MASK;
 
+	//just as a test let's try to play out of the last mapping we got...
+	Wave->AdapterCommon->hda_play_pcm_data_in_loop(	stBDList.pMapData[nTail].PhysAddr,
+													stBDList.pMapData[nTail].ulBufferLength,
+													CurrentRate);
+
     //
     // If there were processed mappings, program the DMA registers.
     //
@@ -1710,12 +1715,7 @@ NTSTATUS CMiniportWaveICHStream::PauseDMA (void)
     // Turn off DMA engine by resetting the RPBM bit to 0. Don't reset any 
     // registers.
     //
-    UCHAR RegisterValue = Wave->AdapterCommon->
-        ReadBMControlRegister8 (m_ulBDAddr + X_CR);
-    RegisterValue &= ~CR_RPBM;
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr + X_CR, RegisterValue);
-
+	Wave->AdapterCommon->hda_stop_sound();
     //
     // Set the DMA engine state.
     //
@@ -1741,10 +1741,9 @@ NTSTATUS CMiniportWaveICHStream::ResumeDMA (void)
     // Turn DMA engine on by setting the RPBM bit to 1. Don't do anything to 
     // the registers.
     //
-    UCHAR RegisterValue = Wave->AdapterCommon->
-        ReadBMControlRegister8 (m_ulBDAddr + X_CR) | CR_RPBM;
-    Wave->AdapterCommon->
-        WriteBMControlRegister (m_ulBDAddr + X_CR, RegisterValue);
+	DOUT (DBG_PRINT, ("FIX THIS!"));
+	//TODO: this freezes the VM!! something is NOT set up right
+	//Wave->AdapterCommon->hda_start_sound();
     
     //
     // Set the DMA engine state.

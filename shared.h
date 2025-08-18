@@ -377,8 +377,23 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      AC97Register  Register,
         IN      DWORD         dwSampleRate
     )   PURE;
-	    STDMETHOD_(NTSTATUS, hda_stop_stream)
+	STDMETHOD_(NTSTATUS, hda_play_pcm_data_in_loop)
     (   THIS_
+        IN      PHYSICAL_ADDRESS physAddress,
+        IN      ULONG bufSize,
+		IN		ULONG sample_rate
+    )   PURE;
+	STDMETHOD_(NTSTATUS, hda_stop_stream)
+    (   THIS_
+		void
+    )   PURE;
+	STDMETHOD_(void, hda_start_sound)
+    (   THIS_
+		void
+    )   PURE;
+	STDMETHOD_(void, hda_stop_sound)
+    (   THIS_
+		void
     )   PURE;
 };
 

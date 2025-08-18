@@ -50,7 +50,7 @@ typedef struct tagMapData
 } tMapData;
 
 //
-// Structure to describe the ICH Buffer Descriptor List (BDL).
+// Structure to describe the HDA Buffer Descriptor List (BDL).
 // The ICH can handle 32 entries, they are allocated at once in common
 // memory (non-cached memory). To avoid slow-down of CPU, the additional
 // information for handling this structure is stored in tBDList.
@@ -58,8 +58,9 @@ typedef struct tagMapData
 typedef struct tagBDEntry
 {
     DWORD   dwPtrToPhyAddress;
-    WORD    wLength;
-    WORD    wPolicyBits;
+	DWORD	padding;
+    DWORD    wLength;
+    DWORD    wPolicyBits;
 } tBDEntry;
 
 //

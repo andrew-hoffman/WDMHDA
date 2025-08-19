@@ -15,14 +15,14 @@
 //*****************************************************************************
 
 //
-// The scatter gather can (only) handle 32 entries
+// The scatter gather list can handle 256 16-byte entries
 //
-const int MAX_BDL_ENTRIES = 32;
+const int MAX_BDL_ENTRIES = 256;
 
 //
 // Mask for accessing the scatter gather entries with a counter.
 //
-const int BDL_MASK = 31;
+const int BDL_MASK = 255;
 
 //
 // These defines reflect what the DMA is supposed to be.
@@ -51,16 +51,16 @@ typedef struct tagMapData
 
 //
 // Structure to describe the HDA Buffer Descriptor List (BDL).
-// The ICH can handle 32 entries, they are allocated at once in common
+// The HDA can handle 256 entries, they are allocated at once in common
 // memory (non-cached memory). To avoid slow-down of CPU, the additional
 // information for handling this structure is stored in tBDList.
 //
 typedef struct tagBDEntry
 {
     DWORD   dwPtrToPhyAddress;
-	DWORD	padding;
-    DWORD    wLength;
-    DWORD    wPolicyBits;
+	DWORD	dwPtrHiPhyAddress; //top 32 bits of physical address
+    DWORD    wLength; //length of buffer in BYTES
+    DWORD    wPolicyBits; //bit 31=interrupt on completion enable
 } tBDEntry;
 
 //

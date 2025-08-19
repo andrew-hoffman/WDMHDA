@@ -401,9 +401,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		((PUSHORT)BufVirtualAddress)[i] = 0x0000;
 
 	DOUT(DBG_SYSINFO, ("garbage written in"));
-	ProgramSampleRate(AC97REG_PCM_LR_RATE, 44100);
+	//ProgramSampleRate(AC97REG_PCM_LR_RATE, 44100);
 
-	ntStatus = hda_play_pcm_data_in_loop(BufLogicalAddress, audBufSize, 44100);
+	//ntStatus = hda_play_pcm_data_in_loop(BufLogicalAddress, audBufSize, 44100);
 	if (!NT_SUCCESS (ntStatus)){
         DOUT (DBG_ERROR, ("Can't play anything"));
         return ntStatus;
@@ -2609,6 +2609,8 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate) {
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
+
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_play_pcm_data_in_loop]"));
 
 	//fill buffer entries
 	BdlMemVirt[0] = physAddress.LowPart;

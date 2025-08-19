@@ -546,7 +546,7 @@ NTSTATUS CMiniportWaveICH::ProcessResources
                                           FALSE,            // IgnoreCount
                                           Width32Bits,      // DmaWidth
                                           MaximumDmaSpeed,  // DmaSpeed
-                                          0x10000,          // MaximumLength (64KByte)
+                                          0x1000000,          // MaximumLength 16mb
                                           0);               // DmaPort
     if (!NT_SUCCESS (ntStatus))
     {

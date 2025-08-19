@@ -1339,7 +1339,7 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
 #endif
 
     //
-    // Get available mappings up to the max of 31 that we can hold in the BDL.
+    // Get available mappings up to the max of 256 that we can hold in the BDL.
     //
     while (stBDList.nBDEntries < (MAX_BDL_ENTRIES - 1))
     {
@@ -1382,9 +1382,11 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
         //
         stBDList.pBDEntry[nTail].dwPtrToPhyAddress =
             stBDList.pMapData[nTail].PhysAddr.LowPart;
+		stBDList.pBDEntry[nTail].dwPtrHiPhyAddress =
+            stBDList.pMapData[nTail].PhysAddr.HighPart;
         stBDList.pBDEntry[nTail].wLength = 
             (WORD)(stBDList.pMapData[nTail].ulBufferLength >> 1);
-        stBDList.pBDEntry[nTail].wPolicyBits = BUP_SET;
+        stBDList.pBDEntry[nTail].wPolicyBits = 0;
         if (Flags)
         {
             stBDList.pBDEntry[nTail].wPolicyBits |= IOC_ENABLE; 
@@ -1404,6 +1406,16 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
     nTail = (stBDList.nTail - 1) & BDL_MASK;
 
 	//just as a test let's try to play out of the last mapping we got...
+
+
+	//does it look like there's audio in the buffer?
+	for (ULONG i = 0; i < stBDList.pMapData[nTail].ulBufferLength; i++) {
+		DOUT(DBG_SYSINFO, ("buf %d 0x%X", i, ((PUSHORT)stBDList.pMapData[nTail].pVirtAddr)[i] ));
+	}
+
+
+
+	Wave->AdapterCommon->hda_stop_stream();
 	Wave->AdapterCommon->hda_play_pcm_data_in_loop(	stBDList.pMapData[nTail].PhysAddr,
 													stBDList.pMapData[nTail].ulBufferLength,
 													CurrentRate);

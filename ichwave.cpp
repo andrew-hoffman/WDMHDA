@@ -217,14 +217,17 @@ NTSTATUS CMiniportWaveICHStream::Init
 
     // 
     // Setup the Buffer Descriptor List (BDL)
-    // Allocate 32 entries of 8 bytes (one BDL entry). We allocate two tables
+    // Allocate 256 entries of 16 bytes (one BDL entry). We allocate two tables
     // because we need one table as a backup.
     // The pointer is aligned on a 8 byte boundary (that's what we need).
     //
-    stBDList.pBDEntry = (tBDEntry *)HalAllocateCommonBuffer (Wave->AdapterObject,
+
+    /*stBDList.pBDEntry = (tBDEntry *)HalAllocateCommonBuffer (Wave->AdapterObject,
                                MAX_BDL_ENTRIES * sizeof (tBDEntry) * 2,
                                &stBDList.PhysAddr,
                                FALSE);
+	*/
+	stBDList.pBDEntry = (tBDEntry *) Wave->AdapterCommon->get_bdl_mem();
     if (!stBDList.pBDEntry)
     {
         DOUT (DBG_ERROR, ("Failed HalAllocateCommonBuffer!"));
@@ -1312,10 +1315,11 @@ STDMETHODIMP_(void) CMiniportWaveICHStream::MappingAvailable (void)
  * CMiniportWaveICHStream::GetNewMappings
  *****************************************************************************
  * This routine is called when new mappings are available from the port driver.
- * The routine places mappings into the input mapping queue. ICH can handle up
- * to 32 entries (descriptors). We program the DMA registers if we have at least
+ * The routine places mappings into the input mapping queue. HDA can handle up
+ * to 256 entries (descriptors). We program the DMA registers if we have at least
  * one mapping in the queue. The mapping spin lock must be held when calling
  * this routine.
+ * we seem to get buffers in ~10ms chunks (880 samples @ 44100).
  */
 NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
 {
@@ -1385,11 +1389,11 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
 		stBDList.pBDEntry[nTail].dwPtrHiPhyAddress =
             stBDList.pMapData[nTail].PhysAddr.HighPart;
         stBDList.pBDEntry[nTail].wLength = 
-            (WORD)(stBDList.pMapData[nTail].ulBufferLength >> 1);
+            (WORD)(stBDList.pMapData[nTail].ulBufferLength);
         stBDList.pBDEntry[nTail].wPolicyBits = 0;
         if (Flags)
         {
-            stBDList.pBDEntry[nTail].wPolicyBits |= IOC_ENABLE; 
+          //  stBDList.pBDEntry[nTail].wPolicyBits |= IOC_ENABLE; 
         }
 
     
@@ -1416,8 +1420,8 @@ NTSTATUS CMiniportWaveICHStream::GetNewMappings (void)
 
 
 	Wave->AdapterCommon->hda_stop_stream();
-	Wave->AdapterCommon->hda_play_pcm_data_in_loop(	stBDList.pMapData[nTail].PhysAddr,
-													stBDList.pMapData[nTail].ulBufferLength,
+	Wave->AdapterCommon->hda_play_pcm_data_in_loop((UCHAR)stBDList.nBDEntries,
+													(ULONG)TotalBytesMapped,
 													CurrentRate);
 
     //

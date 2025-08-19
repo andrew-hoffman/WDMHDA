@@ -435,6 +435,7 @@ public:
     );
 
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
+	STDMETHODIMP_(PULONG)	get_bdl_mem(void);
 	STDMETHODIMP_(void)		hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number); 
 	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(void);
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
@@ -454,7 +455,7 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
-	STDMETHODIMP_(NTSTATUS)	hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate);
+	STDMETHODIMP_(NTSTATUS)	hda_play_pcm_data_in_loop(UCHAR nEntries, ULONG bufSize, ULONG sample_rate);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);

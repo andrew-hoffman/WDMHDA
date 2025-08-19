@@ -379,7 +379,7 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     )   PURE;
 	STDMETHOD_(NTSTATUS, hda_play_pcm_data_in_loop)
     (   THIS_
-        IN      PHYSICAL_ADDRESS physAddress,
+        IN      UCHAR nEntries,
         IN      ULONG bufSize,
 		IN		ULONG sample_rate
     )   PURE;
@@ -392,6 +392,10 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
 		void
     )   PURE;
 	STDMETHOD_(void, hda_stop_sound)
+    (   THIS_
+		void
+    )   PURE;
+	STDMETHOD_(PULONG, get_bdl_mem)
     (   THIS_
 		void
     )   PURE;

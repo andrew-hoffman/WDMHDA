@@ -307,7 +307,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	
 	BdlVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		1024,
+		1024 * 2,
 		pBdlLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
 
@@ -2606,12 +2606,14 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 	writeULONG(reg, readULONG(reg) & ~flag);
 }
 
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate) {
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(UCHAR nEntries, ULONG bufSize, ULONG sample_rate) {
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_play_pcm_data_in_loop]"));
 
+	//now assuming that ichwave.cpp has filled the BDL entries in for us
+/*
 	//fill buffer entries
 	BdlMemVirt[0] = physAddress.LowPart;
 	BdlMemVirt[1] = physAddress.HighPart;
@@ -2624,8 +2626,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRE
 	BdlMemVirt[5] = physAddress.HighPart;
 	BdlMemVirt[6] = bufSize;
 	BdlMemVirt[7] = 0;
+*/
 
-	DOUT(DBG_SYSINFO, ("Playing buffer at at 0x%X%X size %d", physAddress.HighPart, physAddress.LowPart, bufSize));
+	DOUT(DBG_SYSINFO, ("Playing %d buffers size %d", nEntries, bufSize));
+
+	//lets check that the BDL looks good from here
+	for(ULONG i = 0; i < 1024; ++i){
+		DOUT(DBG_SYSINFO, ("bdl %d %X", i, BdlMemVirt[i]));
+	}
 
 	KeFlushIoBuffers(mdl, FALSE, TRUE); 
 	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
@@ -2633,9 +2641,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRE
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
-	writeULONG(OutputStreamBase + 0x08, bufSize * 2);
-	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
-
+	writeULONG(OutputStreamBase + 0x08, bufSize);
+	writeUSHORT(OutputStreamBase + 0x0C, nEntries - 1);
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
 
 
@@ -2662,7 +2669,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRE
     return ntStatus;
 }
 
-USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
+STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
  USHORT data_format = 0;
 
  //channels
@@ -2720,3 +2727,6 @@ USHORT CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG cha
  return data_format;
 }
 
+STDMETHODIMP_(PULONG) CAdapterCommon::get_bdl_mem(void){
+	return BdlMemVirt;
+}

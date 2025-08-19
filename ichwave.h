@@ -55,7 +55,7 @@ typedef struct tagMapData
 // memory (non-cached memory). To avoid slow-down of CPU, the additional
 // information for handling this structure is stored in tBDList.
 //
-typedef struct tagBDEntry
+typedef struct tagBDEntry //16 bytes
 {
     DWORD   dwPtrToPhyAddress;
 	DWORD	dwPtrHiPhyAddress; //top 32 bits of physical address

@@ -43,6 +43,7 @@ tHardwareConfig CAdapterCommon::m_stHardwareConfig =
 };
 
 ULONG audBufSize = 4410 * 2 * 2; //100ms of 2ch 16 bit audio
+ULONG BdlSize = 256 * 16 * 2; //256 entries, 16 bytes, x2 for shadow bdl;
 
 #pragma code_seg("PAGE")
 /*****************************************************************************
@@ -111,6 +112,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
 				m_pDeviceObject -> AlignmentRequirement));
 	}
+
+	//init spin lock for protecting the CORB/RIRB
+	KeInitializeSpinLock(&QLock);
 
 	//is there anything in config space we need to set?
 
@@ -307,7 +311,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	
 	BdlVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
-		1024 * 2,
+		BdlSize,
 		pBdlLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
 
@@ -2310,8 +2314,15 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	//TODO: check sizes of components passed in 
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 
+
+
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
 	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
+
+	//acquire spin lock: this isnt great to do as well as blocking but what can i do
+	KIRQL oldirql;
+	KeAcquireSpinLock(&QLock, &oldirql);
+
  
 	//write verb
 	WRITE_REGISTER_ULONG(CorbMemVirt + (CorbPointer), value);
@@ -2330,7 +2341,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		}
 		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 4)) {
 			DOUT (DBG_ERROR, ("No Response to Codec Verb"));
-			//	communication_type = HDA_UNinitializeD;
+			//	communication_type = HDA_UNINITIALIZED;
 			return STATUS_TIMEOUT;
 		}
 	}
@@ -2348,7 +2359,8 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		RirbPointer = 0;
 	}
 
-	//TODO: unlock mutex
+	//unlock
+	KeReleaseSpinLock(&QLock, oldirql);
 
 	//return response
 	return value;

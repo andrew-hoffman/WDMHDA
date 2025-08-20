@@ -605,8 +605,10 @@ NTSTATUS CMiniportWaveICHStream::PowerChangeNotify
             // ((current - head) & mask) is the difference between head and
             // current index, no matter where they are :)
             //
-            MoveBDList (stBDList.nHead, (stBDList.nTail - 1) & BDL_MASK,
-                    (0 - ((nCurrentIndex - stBDList.nHead) & BDL_MASK)) & BDL_MASK);
+
+			//TODO: this bugchecks
+            //MoveBDList (stBDList.nHead, (stBDList.nTail - 1) & BDL_MASK,
+            //        (0 - ((nCurrentIndex - stBDList.nHead) & BDL_MASK)) & BDL_MASK);
         
             //
             // Update structure.

@@ -15,7 +15,7 @@
  *****************************************************************************/
 
 // Communication types
-#define HDA_UNinitializeD 0
+#define HDA_UNINITIALIZED 0
 #define HDA_CORB_RIRB 1
 #define HDA_PIO 2
 
@@ -140,6 +140,7 @@ private:
     USHORT InputStreamBase;
     USHORT OutputStreamBase;
 	PMDL mdl;
+	KSPIN_LOCK QLock;
 
 	// CORB/RIRB buffers
 	// RIRB is at the beginning of the block, then CORB, then BDL

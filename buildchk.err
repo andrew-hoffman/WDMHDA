@@ -1,0 +1,89 @@
+ichwave.cpp(430) : error C2065: 'DataFormat' : undeclared identifier
+ichwave.cpp(430) : error C2227: left of '->WaveFormatEx' must point to class/struct/union
+ichwave.cpp(430) : error C2228: left of '.nChannels' must have class/struct/union type
+ichwave.cpp(435) : error C2227: left of '->WaveFormatEx' must point to class/struct/union
+ichwave.cpp(435) : error C2228: left of '.nSamplesPerSec' must have class/struct/union type
+ichwave.cpp(922) : error C2511: 'GetPosition' : overloaded member function 'long (unsigned __int64 *)' not found in 'CMiniportWaveICHStream'
+ichwave.h(95) : error see declaration of 'CMiniportWaveICHStream'
+ichwave.cpp(1004) : error C2039: 'RevokeMappings' : is not a member of 'CMiniportWaveICHStream'
+ichwave.h(95) : error see declaration of 'CMiniportWaveICHStream'
+ichwave.cpp(1023) : error C2065: 'stBDList' : undeclared identifier
+ichwave.cpp(1023) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1023) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1023) : error C2228: left of '.nTagCounter' must have class/struct/union type
+ichwave.cpp(1023) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1028) : error C2065: 'MapLock' : undeclared identifier
+ichwave.cpp(1033) : error C2065: 'DMAEngineState' : undeclared identifier
+ichwave.cpp(1039) : error C2065: 'PauseDMA' : undeclared identifier
+ichwave.cpp(1043) : error C2065: 'CheckBDList' : undeclared identifier
+ichwave.cpp(1047) : error C2065: 'Wave' : undeclared identifier
+ichwave.cpp(1047) : error C2227: left of '->AdapterCommon' must point to class/struct/union
+ichwave.cpp(1048) : error C2227: left of '->ReadBMControlRegister8' must point to class/struct/union
+ichwave.cpp(1048) : error C2065: 'm_ulBDAddr' : undeclared identifier
+ichwave.cpp(1055) : error C2065: 'ResetDMA' : undeclared identifier
+ichwave.cpp(1060) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1060) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1062) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1063) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1063) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1063) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1076) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1077) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1079) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1087) : error C2065: 'MoveBDList' : undeclared identifier
+ichwave.cpp(1087) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1087) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1088) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1093) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1093) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1095) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1095) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1095) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1105) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1108) : error C2228: left of '.pMapData' must have class/struct/union type
+ichwave.cpp(1108) : error C2228: left of '.ulTag' must have class/struct/union type
+ichwave.cpp(1111) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1117) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1120) : error C2228: left of '.pMapData' must have class/struct/union type
+ichwave.cpp(1120) : error C2228: left of '.ulTag' must have class/struct/union type
+ichwave.cpp(1123) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1130) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1130) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1137) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1138) : error C2065: 'ResumeDMA' : undeclared identifier
+ichwave.cpp(1170) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1175) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1180) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1183) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1183) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1194) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1200) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1205) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1206) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1213) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1213) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1219) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1224) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1230) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1230) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1241) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1246) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1253) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1253) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1260) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1266) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1266) : error C2228: left of '.nHead' must have class/struct/union type
+ichwave.cpp(1266) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1271) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1273) : error C2227: left of '->AdapterCommon' must point to class/struct/union
+ichwave.cpp(1273) : error C2227: left of '->WriteBMControlRegister' must point to class/struct/union
+ichwave.cpp(1274) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1282) : error C2228: left of '.nBDEntries' must have class/struct/union type
+ichwave.cpp(1282) : error C2228: left of '.nTail' must have class/struct/union type
+ichwave.cpp(1315) : error C2039: 'MappingAvailable' : is not a member of 'CMiniportWaveICHStream'
+ichwave.h(95) : error see declaration of 'CMiniportWaveICHStream'
+ichwave.cpp(1329) : error C2065: 'ReleaseUsedMappings' : undeclared identifier
+ichwave.cpp(1334) : error C2065: 'GetNewMappings' : undeclared identifier
+ichwave.cpp(1387) : error C2065: 'PortStream' : undeclared identifier
+ichwave.cpp(1388) : error C2227: left of '->GetMapping' must point to class/struct/union
+ichwave.cpp(1608) : error C2227: left of '->ReleaseMapping' must point to class/struct/union

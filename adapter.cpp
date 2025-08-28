@@ -335,19 +335,19 @@ NTSTATUS StartDevice
         ntStatus = InstallSubdevice (DeviceObject,
                                      Irp,
                                      L"Wave",
-                                     CLSID_PortWavePci,
-                                     CLSID_PortWavePci,   // not used
+                                     CLSID_PortWaveCyclic,
+                                     CLSID_PortWaveCyclic,   // not used
                                      CreateMiniportWaveICH,
                                      pAdapterCommon,
                                      ResourceList,
-                                     IID_IPortWavePci,
+                                     IID_IPortWaveCyclic,
                                      NULL,
                                      &unknownWave);
   
         // print error message.
         if (!NT_SUCCESS (ntStatus))
         {
-            DOUT (DBG_ERROR, ("WavePCI miniport installation failed!"));
+            DOUT (DBG_ERROR, ("WaveCyclic miniport installation failed!"));
         }
     }
 

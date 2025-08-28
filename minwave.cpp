@@ -288,7 +288,7 @@ NTSTATUS CreateMiniportWaveICH
     DOUT (DBG_PRINT, ("[CreateMiniportWaveICH]"));
 
 	STD_CREATE_BODY_(CMiniportWaveICH,Unknown,UnknownOuter,PoolType,
-                     PMINIPORTWAVEPCI);
+                     PMINIPORTWAVECYCLIC);
 }
 
 
@@ -313,17 +313,17 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::NonDelegatingQueryInterface
     // Is it IID_IUnknown?
     if (IsEqualGUIDAligned (Interface, IID_IUnknown))
     {
-        *Object = (PVOID)(PUNKNOWN)(PMINIPORTWAVEPCI)this;
+        *Object = (PVOID)(PUNKNOWN)(PMINIPORTWAVECYCLIC)this;
     } 
     // or IID_IMiniport ...
     else if (IsEqualGUIDAligned (Interface, IID_IMiniport))
     {
         *Object = (PVOID)(PMINIPORT)this;
     } 
-    // or IID_IMiniportWavePci ...
-    else if (IsEqualGUIDAligned (Interface, IID_IMiniportWavePci))
+    // or IID_IMiniportWaveCyclic ...
+    else if (IsEqualGUIDAligned (Interface, IID_IMiniportWaveCyclic))
     {
-        *Object = (PVOID)(PMINIPORTWAVEPCI)this;
+        *Object = (PVOID)(PMINIPORTWAVECYCLIC)this;
     } 
     // or IID_IPowerNotify ...
     else if (IsEqualGUIDAligned (Interface, IID_IPowerNotify))
@@ -404,8 +404,8 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::Init
 (
     IN  PUNKNOWN       UnknownAdapter,
     IN  PRESOURCELIST  ResourceList,
-    IN  PPORTWAVEPCI   Port_,
-    OUT PSERVICEGROUP *ServiceGroup_
+    IN  PPORTWAVECYCLIC   Port_
+    //OUT PSERVICEGROUP *ServiceGroup_
 )
 {
     PAGED_CODE ();
@@ -425,7 +425,7 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::Init
     //
     // No miniport service group
 	//
-    *ServiceGroup_ = NULL;
+    //*ServiceGroup_ = NULL;
 
     //
     // Set initial device power state
@@ -538,16 +538,16 @@ NTSTATUS CMiniportWaveICH::ProcessResources
     //
     ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
                                           NULL,             // OuterUnknown (opt)
-                                          NonPagedPool,     // Pool Type
+                                          //NonPagedPool,   // Pool Type
                                           NULL,             // ResourceList (opt)
-                                          TRUE,             // ScatterGather
+										  16 * 1024 * 1024,	// MaximumLength
+                                          //TRUE,           // ScatterGather
                                           TRUE,             // Dma32BitAddresses
                                           FALSE,            // Dma64BitAddresses
-                                          FALSE,            // IgnoreCount
+                                          //FALSE,          // IgnoreCount
                                           Width32Bits,      // DmaWidth
-                                          MaximumDmaSpeed,  // DmaSpeed
-                                          0x1000000,          // MaximumLength 16mb
-                                          0);               // DmaPort
+                                          MaximumDmaSpeed  // DmaSpeed
+										  );               
     if (!NT_SUCCESS (ntStatus))
     {
         DOUT (DBG_ERROR, ("Failed on NewMasterDmaChannel!"));
@@ -710,10 +710,10 @@ NTSTATUS CMiniportWaveICH::BuildDataRangeInformation (void)
  */
 STDMETHODIMP CMiniportWaveICH::NewStream
 (
-    OUT PMINIPORTWAVEPCISTREAM *Stream,
+    OUT PMINIPORTWAVECYCLICSTREAM *Stream,
     IN  PUNKNOWN                OuterUnknown,
     IN  POOL_TYPE               PoolType,
-    IN  PPORTWAVEPCISTREAM      PortStream,
+    //IN  PPORTWAVECYCLICSTREAM      PortStream,
     IN  ULONG                   Channel_,
     IN  BOOLEAN                 Capture,
     IN  PKSDATAFORMAT           DataFormat,
@@ -724,7 +724,7 @@ STDMETHODIMP CMiniportWaveICH::NewStream
     PAGED_CODE ();
 
     ASSERT (Stream);
-    ASSERT (PortStream);
+    //ASSERT (PortStream);
     ASSERT (DataFormat);
     ASSERT (DmaChannel_);
     ASSERT (ServiceGroup);
@@ -783,7 +783,7 @@ STDMETHODIMP CMiniportWaveICH::NewStream
     // Initialize the stream.
     //
     ntStatus = pWaveICHStream->Init (this,
-                                    PortStream,
+                                    //PortStream,
                                     Channel,
                                     Capture,
                                     DataFormat,
@@ -802,7 +802,7 @@ STDMETHODIMP CMiniportWaveICH::NewStream
     // 
     // Save the pointers.
     //
-    *Stream = (PMINIPORTWAVEPCISTREAM)pWaveICHStream;
+    *Stream = (PMINIPORTWAVECYCLICSTREAM)pWaveICHStream;
     *DmaChannel_ = DmaChannel;
     
     
@@ -1092,10 +1092,10 @@ STDMETHODIMP_(void) CMiniportWaveICH::PowerChangeNotify
  * Processing routine for dealing with miniport interrupts.  This routine is
  * called at DISPATCH_LEVEL.
  */
-STDMETHODIMP_(void) CMiniportWaveICH::Service (void)
-{
-    // not needed
-}
+//STDMETHODIMP_(void) CMiniportWaveICH::Service (void)
+//{
+//    // not needed
+//}
 
 
 /*****************************************************************************

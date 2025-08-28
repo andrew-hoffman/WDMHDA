@@ -219,7 +219,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= audBufSize + 8192;
+	pDeviceDescription -> MaximumLength		= audBufSize + BdlSize + 8192;
 
 	//we have to pretend we're on an Alpha and have "map registers" to allocate
 	ULONG nMapRegisters = 0;

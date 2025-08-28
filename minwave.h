@@ -47,13 +47,13 @@ extern NTSTATUS CreateMiniportWaveICHStream
 /*****************************************************************************
  * CMiniportWaveICH
  *****************************************************************************
- * ICH wave PCI miniport.  This object is associated with the device and is
- * created when the device is started.  The class inherits IMiniportWavePci
+ * ICH wave cyclic miniport.  This object is associated with the device and is
+ * created when the device is started.  The class inherits IMiniportWaveCyclic
  * so it can expose this interface, CUnknown so it automatically gets
  * reference counting and aggregation support, and IPowerNotify for ACPI 
  * power management notification.
  */
-class CMiniportWaveICH : public IMiniportWavePci,
+class CMiniportWaveICH : public IMiniportWaveCyclic,
 						 public IPowerNotify,
                          public CUnknown
 {
@@ -68,7 +68,7 @@ private:
     // CMiniportWaveICH private variables
     //
     CMiniportWaveICHStream *Streams[PIN_MICIN_OFFSET + 1];
-    PPORTWAVEPCI        Port;           // Port driver object
+    PPORTWAVECYCLIC        Port;           // Port driver object
     PADAPTERCOMMON      AdapterCommon;  // Adapter common object
     PADAPTER_OBJECT     AdapterObject;
     PINTERRUPTSYNC      InterruptSync;  // Interrupt Sync
@@ -118,9 +118,9 @@ public:
     ~CMiniportWaveICH ();
 
     //
-    // Include IMiniportWavePci (public/exported) methods
+    // Include IMiniportWaveCyclic (public/exported) methods
     //
-    IMP_IMiniportWavePci;
+    IMP_IMiniportWaveCyclic;
 
 	//
     // IPowerNotify methods

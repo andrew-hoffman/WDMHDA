@@ -92,7 +92,7 @@ typedef struct tagBDList
  *****************************************************************************
  * ICH wave miniport stream.
  */
-class CMiniportWaveICHStream : public IMiniportWavePciStream,
+class CMiniportWaveICHStream : public IMiniportWaveCyclicStream,
                                public CUnknown
 {
 private:
@@ -105,7 +105,7 @@ private:
     ULONG                       CurrentRate;    // Current Sample Rate
     PSERVICEGROUP               ServiceGroup;   // service group helps with DPCs
     tBDList                     stBDList;       // needed for scatter gather org.
-    PPORTWAVEPCISTREAM          PortStream;     // Port Stream Interface
+    //PPORTWAVECYCLICSTREAM          PortStream;     // Port Stream Interface
     PKSDATAFORMAT_WAVEFORMATEX  DataFormat;     // Data Format
     KSPIN_LOCK                  MapLock;        // for processing mappings.
     ULONG               m_ulBDAddr;         // Offset of the stream's DMA registers.
@@ -174,10 +174,10 @@ public:
     ~CMiniportWaveICHStream ();
     
     /*************************************************************************
-     * Include IMiniportWavePciStream (public/exported) methods.
+     * Include IMiniportWaveCyclicStream (public/exported) methods.
      *************************************************************************
      */
-    IMP_IMiniportWavePciStream;
+    IMP_IMiniportWaveCyclicStream;
 
 
     /*************************************************************************
@@ -191,7 +191,7 @@ public:
     NTSTATUS Init
     (
         IN  CMiniportWaveICH    *Miniport_,
-        IN  PPORTWAVEPCISTREAM  PortStream,
+        //IN  PPORTWAVECYCLICSTREAM  PortStream,
         IN  ULONG               Channel,
         IN  BOOLEAN             Capture,
         IN  PKSDATAFORMAT       DataFormat,

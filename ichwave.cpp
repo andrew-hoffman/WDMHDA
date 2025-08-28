@@ -124,11 +124,11 @@ CMiniportWaveICHStream::~CMiniportWaveICHStream ()
     //
     // Release the port stream.
     //
-    if (PortStream)
-    {
-        PortStream->Release ();
-        PortStream = NULL;
-    }
+    //if (PortStream)
+    //{
+    //    PortStream->Release ();
+    //    PortStream = NULL;
+    //}
 }
 
 
@@ -142,7 +142,7 @@ CMiniportWaveICHStream::~CMiniportWaveICHStream ()
 NTSTATUS CMiniportWaveICHStream::Init
 (
     IN  CMiniportWaveICH        *Miniport_,
-    IN  PPORTWAVEPCISTREAM      PortStream_,
+    //IN  PPORTWAVECYCLICSTREAM      PortStream_,
     IN  ULONG                   Channel_,
     IN  BOOLEAN                 Capture_,
     IN  PKSDATAFORMAT           DataFormat_,
@@ -154,7 +154,7 @@ NTSTATUS CMiniportWaveICHStream::Init
     DOUT (DBG_PRINT, ("[CMiniportWaveICHStream::Init]"));
 
     ASSERT (Miniport_);
-    ASSERT (PortStream_);
+    //ASSERT (PortStream_);
     ASSERT (DataFormat_);
     ASSERT (ServiceGroup_);
 
@@ -173,8 +173,8 @@ NTSTATUS CMiniportWaveICHStream::Init
     //
     // Save portstream interface pointer and addref it.
     //
-    PortStream = PortStream_;
-    PortStream->AddRef ();
+    //PortStream = PortStream_;
+    //PortStream->AddRef ();
 
     //
     // Save channel ID and capture flag.
@@ -246,7 +246,7 @@ NTSTATUS CMiniportWaveICHStream::Init
 
 
     //
-    // Allocate a buffer for the 32 possible mappings. We allocate two tabels
+    // Allocate a buffer for the 256 possible mappings. We allocate two tables
     // becuse we need one table as a backup
     //
     stBDList.pMapData = 
@@ -337,11 +337,11 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICHStream::NonDelegatingQueryInterface
     DOUT (DBG_PRINT, ("[CMiniportWaveICHStream::NonDelegatingQueryInterface]"));
 
     //
-    // Convert for IID_IMiniportWavePciStream
+    // Convert for IID_IMiniportWaveCyclicStream
     //
-    if (IsEqualGUIDAligned (Interface, IID_IMiniportWavePciStream))
+    if (IsEqualGUIDAligned (Interface, IID_IMiniportWaveCyclicStream))
     {
-        *Object = (PVOID)(PMINIPORTWAVEPCISTREAM)this;
+        *Object = (PVOID)(PMINIPORTWAVECYCLICSTREAM)this;
     }
     //
     // Convert for IID_IServiceSink
@@ -355,7 +355,7 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICHStream::NonDelegatingQueryInterface
     //
     else if (IsEqualGUIDAligned (Interface, IID_IUnknown))
     {
-        *Object = (PVOID)(PUNKNOWN)(PMINIPORTWAVEPCISTREAM)this;
+        *Object = (PVOID)(PUNKNOWN)(PMINIPORTWAVECYCLICSTREAM)this;
     }
     else
     {
@@ -374,6 +374,7 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICHStream::NonDelegatingQueryInterface
  * Returns the framing requirements for this device.
  * That is sample size (for one sample) and preferred frame (buffer) size.
  */
+/*
 STDMETHODIMP_(NTSTATUS) CMiniportWaveICHStream::GetAllocatorFraming
 (
     OUT PKSALLOCATOR_FRAMING AllocatorFraming
@@ -408,6 +409,32 @@ STDMETHODIMP_(NTSTATUS) CMiniportWaveICHStream::GetAllocatorFraming
     AllocatorFraming->PoolType = NonPagedPool;
 
     return STATUS_SUCCESS;
+}
+*/
+STDMETHODIMP_(ULONG) SetNotificationFreq
+    (   IN      ULONG           Interval,
+        OUT     PULONG          FrameSize
+
+    )
+{
+    PAGED_CODE();
+
+	ULONG SampleSize;
+
+    DOUT (DBG_PRINT, ("[CMiniportWaveICHStream::SetNotificationFreq]"));
+	
+	//
+    // Determine sample size in bytes.  Always number of 
+    // channels * 2 (because 16-bit).
+    //
+    SampleSize = DataFormat->WaveFormatEx.nChannels * 2;
+	
+    //Wave->NotificationInterval = Interval;
+    *FrameSize = 
+        (SampleSize) * 
+            DataFormat->WaveFormatEx.nSamplesPerSec * Interval / 1000;
+
+    return Interval;
 }
 
 
@@ -581,7 +608,7 @@ NTSTATUS CMiniportWaveICHStream::PowerChangeNotify
             KeAcquireSpinLock (&MapLock,&OldIrql);
 
             // Disable interrupts and stop DMA just in case.
-            Wave->AdapterCommon->WriteBMControlRegister (m_ulBDAddr + X_CR, (UCHAR)0);
+            //Wave->AdapterCommon->WriteBMControlRegister (m_ulBDAddr + X_CR, (UCHAR)0);
     
             // Get current index 
             int nCurrentIndex = (int)Wave->AdapterCommon->
@@ -827,7 +854,7 @@ void CMiniportWaveICHStream::CheckBDList (void)
  * Requesting service on the service group results in a DPC being scheduled
  * that calls this routine when it runs.
  */
-STDMETHODIMP_(void) CMiniportWaveICHStream::Service (void)
+/* STDMETHODIMP_(void) CMiniportWaveICHStream::Service (void)
 {
 
     DOUT (DBG_PRINT, ("Service"));
@@ -843,7 +870,7 @@ STDMETHODIMP_(void) CMiniportWaveICHStream::Service (void)
 
     // release the mapping spin lock
     KeReleaseSpinLockFromDpcLevel (&MapLock);
-}
+} */
 
 
 /*****************************************************************************

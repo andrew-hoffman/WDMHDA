@@ -1,30 +1,613 @@
-/********************************************************************************
-**    Copyright (c) 1998-1999 Microsoft Corporation. All Rights Reserved.
-**
-**       Portions Copyright (c) 1998-1999 Intel Corporation
-**
-********************************************************************************/
-
-// Every debug output has "Modulname text"
-static char STR_MODULENAME[] = "ICH Wave: ";
-
-#include "minwave.h"
-#include "ichwave.h"
-
-
 /*****************************************************************************
- * PinDataRangesPCMStream
+ * miniport.cpp - HDA wave miniport implementation
  *****************************************************************************
- * The next 3 arrays contain information about the data ranges of the pin for
- * wave capture, wave render and mic capture.
- * These arrays are filled dynamically by BuildDataRangeInformation().
+ * Copyright (c) Microsoft Corporation 1997-1999.  All rights reserved.
  */
 
-static KSDATARANGE_AUDIO PinDataRangesPCMStreamRender[WAVE_SAMPLERATES_TESTED];
-static KSDATARANGE_AUDIO PinDataRangesPCMStreamCapture[WAVE_SAMPLERATES_TESTED];
-static KSDATARANGE_AUDIO PinDataRangesMicStream[MIC_SAMPLERATES_TESTED];
+#include "minwave.h"
 
-static KSDATARANGE PinDataRangesAnalogBridge[] =
+#define STR_MODULENAME "HDAwave: "
+
+
+
+#pragma code_seg("PAGE")
+
+/*****************************************************************************
+ * CreateMiniportWaveCyclicHDA()
+ *****************************************************************************
+ * Creates a cyclic wave miniport object for the HDA adapter.  This uses a
+ * macro from STDUNK.H to do all the work.
+ */
+NTSTATUS
+CreateMiniportWaveCyclicHDA
+(
+    OUT     PUNKNOWN *  Unknown,
+    IN      REFCLSID,
+    IN      PUNKNOWN    UnknownOuter    OPTIONAL,
+    IN      POOL_TYPE   PoolType
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Unknown);
+
+    STD_CREATE_BODY(CMiniportWaveCyclicHDA,Unknown,UnknownOuter,PoolType);
+}
+
+/*****************************************************************************
+ * MapUsingTable()
+ *****************************************************************************
+ * Performs a table-based mapping, returning the table index of the indicated
+ * value.  -1 is returned if the value is not found.
+ */
+int
+MapUsingTable
+(
+    IN      ULONG   Value,
+    IN      PULONG  Map,
+    IN      ULONG   MapSize
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Map);
+
+    for (int result = 0; result < int(MapSize); result++)
+    {
+        if (*Map++ == Value)
+        {
+            return result;
+        }
+    }
+
+    return -1;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::ConfigureDevice()
+ *****************************************************************************
+ * Configures the hardware to use the indicated interrupt and DMA channels.
+ * Returns FALSE iff the configuration is invalid.
+ */
+BOOLEAN
+CMiniportWaveCyclicHDA::
+ConfigureDevice
+(
+    IN      ULONG   Interrupt,
+    IN      ULONG   Dma8Bit,
+    IN      ULONG   Dma16Bit
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ConfigureDevice]"));
+
+    //
+    // Tables mapping DMA and IRQ values to register bit offsets.
+    //
+    static ULONG validDma[] = { 0, 1, ULONG(-1), 3, ULONG(-1), 5, 6, 7 } ;
+    static ULONG validIrq[] = { 9, 5, 7, 10 } ;
+
+    //
+    // Make sure we are using the right DMA channels.
+    //
+    if (Dma8Bit > 3)
+    {
+        return FALSE;
+    }
+    if (Dma16Bit < 5)
+    {
+        return FALSE;
+    }
+
+    //
+    // Generate the register value for interrupts.
+    //
+    int bit = MapUsingTable(Interrupt,validIrq,SIZEOF_ARRAY(validIrq));
+    if (bit == -1)
+    {
+        return FALSE;
+    }
+
+    BYTE irqConfig = BYTE(1 << bit);
+
+    //
+    // Generate the register value for DMA.
+    //
+    bit = MapUsingTable(Dma8Bit,validDma,SIZEOF_ARRAY(validDma));
+    if (bit == -1)
+    {
+        return FALSE;
+    }
+
+    BYTE dmaConfig = BYTE(1 << bit);
+
+    if (Dma16Bit != ULONG(-1))
+    {
+        bit = MapUsingTable(Dma16Bit,validDma,SIZEOF_ARRAY(validDma));
+        if (bit == -1)
+        {
+            return FALSE;
+        }
+
+        dmaConfig |= BYTE(1 << bit);
+    }
+
+    //
+    // Inform the hardware.
+    //
+    AdapterCommon->MixerRegWrite(DSP_MIX_IRQCONFIG,irqConfig);
+    AdapterCommon->MixerRegWrite(DSP_MIX_DMACONFIG,dmaConfig);
+
+    return TRUE;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::ProcessResources()
+ *****************************************************************************
+ * Processes the resource list, setting up helper objects accordingly.
+ */
+NTSTATUS
+CMiniportWaveCyclicHDA::
+ProcessResources
+(
+    IN      PRESOURCELIST   ResourceList
+)
+{
+    PAGED_CODE();
+
+    ASSERT(ResourceList);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ProcessResources]"));
+
+    ULONG   intNumber   = ULONG(-1);
+    ULONG   dma8Bit     = ULONG(-1);
+    ULONG   dma16Bit    = ULONG(-1);
+
+    //
+    // Get counts for the types of resources.
+    //
+    ULONG   countIO     = ResourceList->NumberOfPorts();
+    ULONG   countIRQ    = ResourceList->NumberOfInterrupts();
+    ULONG   countDMA    = ResourceList->NumberOfDmas();
+
+#if (DBG)
+    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on IRQ 0x%X",
+        ResourceList->FindUntranslatedInterrupt(0)->u.Interrupt.Level) );
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on Port 0x%X",
+        ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart) );
+
+    for (ULONG i = 0; i < countDMA; i++)
+    {
+        _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on DMA 0x%X",
+            ResourceList->FindUntranslatedDma(i)->u.Dma.Channel) );
+    }
+#endif
+
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+
+    //
+    // Make sure we have the expected number of resources.
+    //
+    if  (   (countIO != 1)
+        ||  (countIRQ < 1)
+        ||  (countDMA < 1)
+        )
+    {
+        _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
+        ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    if (NT_SUCCESS(ntStatus))
+    {
+        //
+        // Get the port address.
+        //
+        PortBase =
+            PUCHAR(ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart);
+
+        //
+        // Instantiate a DMA channel for 8-bit transfers.
+        //
+        ntStatus =
+            Port->NewSlaveDmaChannel
+            (
+                &DmaChannel8,
+                NULL,
+                ResourceList,
+                0,
+                MAXLEN_DMA_BUFFER,
+                FALSE,      // DemandMode
+                Compatible
+            );
+
+        //
+        // Allocate the buffer for 8-bit transfers.
+        //
+        if (NT_SUCCESS(ntStatus))
+        {
+            ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
+            
+            do {
+              ntStatus = DmaChannel8->AllocateBuffer(lDMABufferLength,NULL);
+              lDMABufferLength >>= 1;
+            } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE / 2)));
+        }
+
+        if (NT_SUCCESS(ntStatus))
+        {
+            dma8Bit = ResourceList->FindUntranslatedDma(0)->u.Dma.Channel;
+
+            if (countDMA > 1)
+            {
+                //
+                // Instantiate a DMA channel for 16-bit transfers.
+                //
+                ntStatus =
+                    Port->NewSlaveDmaChannel
+                    (
+                        &DmaChannel16,
+                        NULL,
+                        ResourceList,
+                        1,
+                        MAXLEN_DMA_BUFFER,
+                        FALSE,
+                        Compatible
+                    );
+
+                //
+                // Allocate the buffer for 16-bit transfers.
+                //
+                if (NT_SUCCESS(ntStatus))
+                {
+                    ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
+                     
+                    do {
+                        ntStatus = DmaChannel16->AllocateBuffer(lDMABufferLength,NULL);
+                        lDMABufferLength >>= 1;
+                    } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE / 2)));
+                }
+
+                if (NT_SUCCESS(ntStatus))
+                {
+                    dma16Bit =
+                        ResourceList->FindUntranslatedDma(1)->u.Dma.Channel;
+                }
+            }
+
+            if (NT_SUCCESS(ntStatus))
+            {
+                //
+                // Get the interrupt number and configure the device.
+                //
+                intNumber =
+                    ResourceList->
+                        FindUntranslatedInterrupt(0)->u.Interrupt.Level;
+
+                if  (!  ConfigureDevice(intNumber,dma8Bit,dma16Bit))
+                {
+                    _DbgPrintF(DEBUGLVL_TERSE,("ConfigureDevice Failure"));
+                    ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
+                }
+            }
+            else
+            {
+                _DbgPrintF(DEBUGLVL_TERSE,("NewSlaveDmaChannel 2 Failure %X", ntStatus ));
+            }
+        }
+        else
+        {
+            _DbgPrintF(DEBUGLVL_TERSE,("NewSlaveDmaChannel 1 Failure %X", ntStatus ));
+        }
+    }
+
+    //
+    // Release instantiated objects in case of failure.
+    //
+    if (! NT_SUCCESS(ntStatus))
+    {
+        if (DmaChannel8)
+        {
+            DmaChannel8->Release();
+            DmaChannel8 = NULL;
+        }
+        if (DmaChannel16)
+        {
+            DmaChannel16->Release();
+            DmaChannel16 = NULL;
+        }
+    }
+
+    return ntStatus;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::ValidateFormat()
+ *****************************************************************************
+ * Validates a wave format.
+ */
+NTSTATUS
+CMiniportWaveCyclicHDA::
+ValidateFormat
+(
+    IN      PKSDATAFORMAT   Format
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Format);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ValidateFormat]"));
+
+    NTSTATUS ntStatus;
+
+    //
+    // A WAVEFORMATEX structure should appear after the generic KSDATAFORMAT
+    // if the GUIDs turn out as we expect.
+    //
+    PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
+
+    //
+    // KSDATAFORMAT contains three GUIDs to support extensible format.  The
+    // first two GUIDs identify the type of data.  The third indicates the
+    // type of specifier used to indicate format specifics.  We are only
+    // supporting PCM audio formats that use WAVEFORMATEX.
+    //
+    if  (   (Format->FormatSize >= sizeof(KSDATAFORMAT_WAVEFORMATEX))
+        &&  IsEqualGUIDAligned(Format->MajorFormat,KSDATAFORMAT_TYPE_AUDIO)
+        &&  IsEqualGUIDAligned(Format->SubFormat,KSDATAFORMAT_SUBTYPE_PCM)
+        &&  IsEqualGUIDAligned
+            (
+                Format->Specifier,
+                KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
+            )
+        &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
+        &&  (   (waveFormat->wBitsPerSample == 8)
+            ||  (waveFormat->wBitsPerSample == 16)
+            )
+        &&  (   (waveFormat->nChannels == 1)
+            ||  (waveFormat->nChannels == 2)
+            )
+        &&  (   (waveFormat->nSamplesPerSec >= 5000)
+            &&  (waveFormat->nSamplesPerSec <= 44100)
+            )
+        )
+    {
+        ntStatus = STATUS_SUCCESS;
+    }
+    else
+    {
+        ntStatus = STATUS_INVALID_PARAMETER;
+    }
+
+    return ntStatus;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::NonDelegatingQueryInterface()
+ *****************************************************************************
+ * Obtains an interface.  This function works just like a COM QueryInterface
+ * call and is used if the object is not being aggregated.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicHDA::
+NonDelegatingQueryInterface
+(
+    IN      REFIID  Interface,
+    OUT     PVOID * Object
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Object);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::NonDelegatingQueryInterface]"));
+
+    if (IsEqualGUIDAligned(Interface,IID_IUnknown))
+    {
+        *Object = PVOID(PUNKNOWN(this));
+    }
+    else
+    if (IsEqualGUIDAligned(Interface,IID_IMiniport))
+    {
+        *Object = PVOID(PMINIPORT(this));
+    }
+    else
+    if (IsEqualGUIDAligned(Interface,IID_IMiniportWaveCyclic))
+    {
+        *Object = PVOID(PMINIPORTWAVECYCLIC(this));
+    }
+    else
+    {
+        *Object = NULL;
+    }
+
+    if (*Object)
+    {
+        //
+        // We reference the interface for the caller.
+        //
+        PUNKNOWN(*Object)->AddRef();
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_INVALID_PARAMETER;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::~CMiniportWaveCyclicHDA()
+ *****************************************************************************
+ * Destructor.
+ */
+CMiniportWaveCyclicHDA::
+~CMiniportWaveCyclicHDA
+(   void
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::~CMiniportWaveCyclicHDA]"));
+
+    if (Port)
+    {
+        Port->Release();
+    }
+    if (DmaChannel8)
+    {
+        DmaChannel8->Release();
+    }
+    if (DmaChannel16)
+    {
+        DmaChannel16->Release();
+    }
+    if (ServiceGroup)
+    {
+        ServiceGroup->Release();
+    }
+    if (AdapterCommon)
+    {
+        AdapterCommon->Release();
+    }
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::Init()
+ *****************************************************************************
+ * Initializes a the miniport.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicHDA::
+Init
+(
+    IN      PUNKNOWN        UnknownAdapter,
+    IN      PRESOURCELIST   ResourceList,
+    IN      PPORTWAVECYCLIC Port_
+)
+{
+    PAGED_CODE();
+
+    ASSERT(UnknownAdapter);
+    ASSERT(ResourceList);
+    ASSERT(Port_);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::init]"));
+
+    //
+    // AddRef() is required because we are keeping this pointer.
+    //
+    Port = Port_;
+    Port->AddRef();
+
+    //
+    // We want the IAdapterCommon interface on the adapter common object,
+    // which is given to us as a IUnknown.  The QueryInterface call gives us
+    // an AddRefed pointer to the interface we want.
+    //
+    NTSTATUS ntStatus =
+        UnknownAdapter->QueryInterface
+        (
+            IID_IAdapterCommon,
+            (PVOID *) &AdapterCommon
+        );
+
+    //
+    // We need a service group for notifications.  We will bind all the
+    // streams that are created to this single service group.  All interrupt
+    // notifications ask for service on this group, so all streams will get
+    // serviced.  The PcNewServiceGroup() call returns an AddRefed pointer.
+    // The adapter needs a copy of the service group since it is doing the
+    // ISR.
+    //
+    if (NT_SUCCESS(ntStatus))
+    {
+        KeInitializeMutex(&SampleRateSync,1);
+        ntStatus = PcNewServiceGroup(&ServiceGroup,NULL);
+        if (NT_SUCCESS(ntStatus))
+        {
+            AdapterCommon->SetWaveServiceGroup(ServiceGroup);
+        }
+    }
+
+    if (NT_SUCCESS(ntStatus))
+    {
+        ntStatus = ProcessResources(ResourceList);
+    }
+
+    if( !NT_SUCCESS(ntStatus) )
+    {
+        //
+        // clean up our mess
+        //
+
+        // clean up AdapterCommon
+        if( AdapterCommon )
+        {
+            // clean up the service group
+            if( ServiceGroup )
+            {
+                AdapterCommon->SetWaveServiceGroup(NULL);
+                ServiceGroup->Release();
+                ServiceGroup = NULL;
+            }
+
+            AdapterCommon->Release();
+            AdapterCommon = NULL;
+        }
+
+        // release the port
+        Port->Release();
+        Port = NULL;
+    }
+
+    return ntStatus;
+}
+
+/*****************************************************************************
+ * PinDataRangesStream
+ *****************************************************************************
+ * Structures indicating range of valid format values for streaming pins.
+ */
+static
+KSDATARANGE_AUDIO PinDataRangesStream[] =
+{
+    {
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        2,      // Max number of channels.
+        8,      // Minimum number of bits per sample.
+        16,     // Maximum number of bits per channel.
+        5000,   // Minimum rate.
+        44100   // Maximum rate.
+    }
+};
+
+/*****************************************************************************
+ * PinDataRangePointersStream
+ *****************************************************************************
+ * List of pointers to structures indicating range of valid format values
+ * for streaming pins.
+ */
+static
+PKSDATARANGE PinDataRangePointersStream[] =
+{
+    PKSDATARANGE(&PinDataRangesStream[0])
+};
+
+/*****************************************************************************
+ * PinDataRangesBridge
+ *****************************************************************************
+ * Structures indicating range of valid format values for bridge pins.
+ */
+static
+KSDATARANGE PinDataRangesBridge[] =
 {
    {
       sizeof(KSDATARANGE),
@@ -38,162 +621,96 @@ static KSDATARANGE PinDataRangesAnalogBridge[] =
 };
 
 /*****************************************************************************
- * PinDataRangesPointersPCMStream
+ * PinDataRangePointersBridge
  *****************************************************************************
- * The next 3 arrays contain the pointers to the data range information of
- * the pin for wave capture, wave render and mic capture.
- * These arrays are filled dynamically by BuildDataRangeInformation().
+ * List of pointers to structures indicating range of valid format values
+ * for bridge pins.
  */
-static PKSDATARANGE PinDataRangePointersPCMStreamRender[WAVE_SAMPLERATES_TESTED];
-static PKSDATARANGE PinDataRangePointersPCMStreamCapture[WAVE_SAMPLERATES_TESTED];
-static PKSDATARANGE PinDataRangePointersMicStream[MIC_SAMPLERATES_TESTED];
-
-/*****************************************************************************
- * PinDataRangePointerAnalogStream
- *****************************************************************************
- * This structure pointers to the data range structures for the wave pins.
- */
-static PKSDATARANGE PinDataRangePointersAnalogBridge[] =
+static
+PKSDATARANGE PinDataRangePointersBridge[] =
 {
-    (PKSDATARANGE) PinDataRangesAnalogBridge
+    &PinDataRangesBridge[0]
 };
-
-
-/*****************************************************************************
- * Wave Miniport Topology
- *========================
- *
- *                              +-----------+    
- *                              |           |    
- *    Capture (PIN_WAVEIN)  <---|2 --ADC-- 3|<=== (PIN_WAVEIN_BRIDGE)
- *                              |           |    
- *     Render (PIN_WAVEOUT) --->|0 --DAC-- 1|===> (PIN_WAVEOUT_BRIDGE)
- *                              |           |    
- *        Mic (PIN_MICIN)   <---|4 --ADC-- 5|<=== (PIN_MICIN_BRIDGE)
- *                              +-----------+    
- *
- */
 
 /*****************************************************************************
  * MiniportPins
  *****************************************************************************
- * This structure describes pin (stream) types provided by this miniport.
- * The field that sets the number of data range entries (SIZEOF_ARRAY) is
- * overwritten by BuildDataRangeInformation().
+ * List of pins.
  */
-static PCPIN_DESCRIPTOR MiniportPins[] =
+static
+PCPIN_DESCRIPTOR 
+MiniportPins[] =
 {
-    // PIN_WAVEOUT
+    // Wave In Streaming Pin (Capture)
     {
-        1,1,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersPCMStreamRender),  // DataRangesCount
-            PinDataRangePointersPCMStreamRender,                // DataRanges
-            KSPIN_DATAFLOW_IN,                          // DataFlow
-            KSPIN_COMMUNICATION_SINK,                   // Communication
-            (GUID *) &KSCATEGORY_AUDIO,                 // Category
-            NULL,                                       // Name
-            0                                           // Reserved            
+        1,1,0,
+        NULL,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(PinDataRangePointersStream),
+            PinDataRangePointersStream,
+            KSPIN_DATAFLOW_OUT,
+            KSPIN_COMMUNICATION_SINK,
+            (GUID *) &PINNAME_CAPTURE,
+            &KSAUDFNAME_RECORDING_CONTROL,  // this name shows up as the recording panel name in SoundVol.
+            0
         }
     },
-
-    // PIN_WAVEOUT_BRIDGE
+    // Wave In Bridge Pin (Capture - From Topology)
     {
-        0,0,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersAnalogBridge),    // DataRangesCount
-            PinDataRangePointersAnalogBridge,                  // DataRanges
-            KSPIN_DATAFLOW_OUT,                         // DataFlow
-            KSPIN_COMMUNICATION_NONE,                   // Communication
-            (GUID *) &KSCATEGORY_AUDIO,                 // Category
-            NULL,                                       // Name
-            0                                           // Reserved            
+        0,0,0,
+        NULL,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(PinDataRangePointersBridge),
+            PinDataRangePointersBridge,
+            KSPIN_DATAFLOW_IN,
+            KSPIN_COMMUNICATION_NONE,
+            (GUID *) &KSCATEGORY_AUDIO,
+            NULL,
+            0
         }
     },
-
-    // PIN_WAVEIN
+    // Wave Out Streaming Pin (Renderer)
     {
-        1,1,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersPCMStreamCapture), // DataRangesCount
-            PinDataRangePointersPCMStreamCapture,               // DataRanges
-            KSPIN_DATAFLOW_OUT,                         // DataFlow
-            KSPIN_COMMUNICATION_SINK,                   // Communication
-            (GUID *) &PINNAME_CAPTURE,                  // Category
-            &KSAUDFNAME_RECORDING_CONTROL,              // Name
-            0                                           // Reserved
+        1,1,0,
+        NULL,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(PinDataRangePointersStream),
+            PinDataRangePointersStream,
+            KSPIN_DATAFLOW_IN,
+            KSPIN_COMMUNICATION_SINK,
+            (GUID *) &KSCATEGORY_AUDIO,
+            NULL,
+            0
         }
     },
-
-    // PIN_WAVEIN_BRIDGE
+    // Wave Out Bridge Pin (Renderer)
     {
-        0,0,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersAnalogBridge),    // DataRangesCount
-            PinDataRangePointersAnalogBridge,                  // DataRanges
-            KSPIN_DATAFLOW_IN,                          // DataFlow
-            KSPIN_COMMUNICATION_NONE,                   // Communication
-            (GUID *) &KSCATEGORY_AUDIO,                 // Category
-            NULL,                                       // Name
-            0                                           // Reserved
-        }
-    },
-
-    // PIN_MICIN
-    {
-        1,1,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersMicStream),// DataRangesCount
-            PinDataRangePointersMicStream,              // DataRanges
-            KSPIN_DATAFLOW_OUT,                         // DataFlow
-            KSPIN_COMMUNICATION_SINK,                   // Communication
-            (GUID *) &KSCATEGORY_AUDIO,                 // Category
-            NULL,                                       // Name
-            0                                           // Reserved
-        }
-    },
-
-    // PIN_MICIN_BRIDGE
-    {
-        0,0,0,  // InstanceCount
-        NULL,   // AutomationTable
-        {       // KsPinDescriptor
-            0,                                          // InterfacesCount
-            NULL,                                       // Interfaces
-            0,                                          // MediumsCount
-            NULL,                                       // Mediums
-            SIZEOF_ARRAY(PinDataRangePointersAnalogBridge),    // DataRangesCount
-            PinDataRangePointersAnalogBridge,                  // DataRanges
-            KSPIN_DATAFLOW_IN,                          // DataFlow
-            KSPIN_COMMUNICATION_NONE,                   // Communication
-            (GUID *) &KSCATEGORY_AUDIO,                 // Category
-            NULL,                                       // Name
-            0                                           // Reserved
+        0,0,0,
+        NULL,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(PinDataRangePointersBridge),
+            PinDataRangePointersBridge,
+            KSPIN_DATAFLOW_OUT,
+            KSPIN_COMMUNICATION_NONE,
+            (GUID *) &KSCATEGORY_AUDIO,
+            NULL,
+            0
         }
     }
 };
@@ -203,27 +720,19 @@ static PCPIN_DESCRIPTOR MiniportPins[] =
  *****************************************************************************
  * List of nodes.
  */
-static PCNODE_DESCRIPTOR MiniportNodes[] =
+static
+PCNODE_DESCRIPTOR MiniportNodes[] =
 {
-    // NODE_WAVEOUT_DAC
+    {
+        0,                      // Flags
+        NULL,                   // AutomationTable
+        &KSNODETYPE_ADC,        // Type
+        NULL                    // Name
+    },
     {
         0,                      // Flags
         NULL,                   // AutomationTable
         &KSNODETYPE_DAC,        // Type
-        NULL                    // Name
-    },
-    // NODE_WAVEIN_ADC
-    {
-        0,                      // Flags
-        NULL,                   // AutomationTable
-        &KSNODETYPE_ADC,        // Type
-        NULL                    // Name
-    },
-    //  NODE_MICIN_ADC
-    {
-        0,                      // Flags
-        NULL,                   // AutomationTable
-        &KSNODETYPE_ADC,        // Type
         NULL                    // Name
     }
 };
@@ -231,18 +740,15 @@ static PCNODE_DESCRIPTOR MiniportNodes[] =
 /*****************************************************************************
  * MiniportConnections
  *****************************************************************************
- * This structure identifies the connections between filter pins and
- * node pins.
+ * List of connections.
  */
-static PCCONNECTION_DESCRIPTOR MiniportConnections[] =
+static
+PCCONNECTION_DESCRIPTOR MiniportConnections[] =
 {
-    //from_node             from_pin            to_node             to_pin
-    { PCFILTER_NODE,        PIN_WAVEOUT,        NODE_WAVEOUT_DAC,   1},
-    { NODE_WAVEOUT_DAC,     0,                  PCFILTER_NODE,      PIN_WAVEOUT_BRIDGE},
-    { PCFILTER_NODE,        PIN_WAVEIN_BRIDGE,  NODE_WAVEIN_ADC,    1},
-    { NODE_WAVEIN_ADC,      0,                  PCFILTER_NODE,      PIN_WAVEIN},
-    { PCFILTER_NODE,        PIN_MICIN_BRIDGE,   NODE_MICIN_ADC,     1},
-    { NODE_MICIN_ADC,       0,                  PCFILTER_NODE,      PIN_MICIN}
+    { PCFILTER_NODE,  1,  0,                1 },    // Bridge in to ADC.
+    { 0,              0,  PCFILTER_NODE,    0 },    // ADC to stream pin (capture).
+    { PCFILTER_NODE,  2,  1,                1 },    // Stream in to DAC.
+    { 1,              0,  PCFILTER_NODE,    3 }     // DAC to Bridge.
 };
 
 /*****************************************************************************
@@ -250,7 +756,9 @@ static PCCONNECTION_DESCRIPTOR MiniportConnections[] =
  *****************************************************************************
  * Complete miniport description.
  */
-static PCFILTER_DESCRIPTOR MiniportFilterDescriptor =
+static
+PCFILTER_DESCRIPTOR 
+MiniportFilterDescriptor =
 {
     0,                                  // Version
     NULL,                               // AutomationTable
@@ -266,1026 +774,953 @@ static PCFILTER_DESCRIPTOR MiniportFilterDescriptor =
     NULL                                // Categories
 };
 
-#pragma code_seg("PAGE")
 /*****************************************************************************
- * CreateMiniportWaveICH
- *****************************************************************************
- * Creates a ICH wave miniport object for the ICH adapter.
- * This uses a macro from STDUNK.H to do all the work.
- */
-NTSTATUS CreateMiniportWaveICH
-(
-    OUT PUNKNOWN   *Unknown,
-    IN  REFCLSID,
-    IN  PUNKNOWN    UnknownOuter    OPTIONAL,
-    IN  POOL_TYPE   PoolType
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (Unknown);
-
-    DOUT (DBG_PRINT, ("[CreateMiniportWaveICH]"));
-
-	STD_CREATE_BODY_(CMiniportWaveICH,Unknown,UnknownOuter,PoolType,
-                     PMINIPORTWAVEPCI);
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::NonDelegatingQueryInterface
- *****************************************************************************
- * Obtains an interface.  This function works just like a COM QueryInterface
- * call and is used if the object is not being aggregated.
- */
-STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::NonDelegatingQueryInterface
-(
-    IN  REFIID  Interface,
-    OUT PVOID  *Object
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (Object);
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::NonDelegatingQueryInterface]"));
-
-    // Is it IID_IUnknown?
-    if (IsEqualGUIDAligned (Interface, IID_IUnknown))
-    {
-        *Object = (PVOID)(PUNKNOWN)(PMINIPORTWAVEPCI)this;
-    } 
-    // or IID_IMiniport ...
-    else if (IsEqualGUIDAligned (Interface, IID_IMiniport))
-    {
-        *Object = (PVOID)(PMINIPORT)this;
-    } 
-    // or IID_IMiniportWavePci ...
-    else if (IsEqualGUIDAligned (Interface, IID_IMiniportWavePci))
-    {
-        *Object = (PVOID)(PMINIPORTWAVEPCI)this;
-    } 
-    // or IID_IPowerNotify ...
-    else if (IsEqualGUIDAligned (Interface, IID_IPowerNotify))
-    {
-        *Object = (PVOID)(PPOWERNOTIFY)this;
-	} 
-    else
-    {
-        // nothing found, must be an unknown interface.
-        *Object = NULL;
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    //
-    // We reference the interface for the caller.
-    //
-    ((PUNKNOWN)(*Object))->AddRef();
-    return STATUS_SUCCESS;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::~CMiniportWaveICH
- *****************************************************************************
- * Destructor.
- */
-CMiniportWaveICH::~CMiniportWaveICH ()
-{
-    PAGED_CODE ();
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::~CMiniportWaveICH]"));
-
-    //
-    // Release the DMA channel.
-    //
-    if (DmaChannel)
-    {
-        DmaChannel->Release ();
-        DmaChannel = NULL;
-    }
-
-    //
-    // Release the interrupt sync.
-    //
-    if (InterruptSync)
-    {
-        InterruptSync->Release ();
-        InterruptSync = NULL;
-    }
-
-    //
-    // Release adapter common object.
-    //
-    if (AdapterCommon)
-    {
-        AdapterCommon->Release ();
-        AdapterCommon = NULL;
-    }
-
-    //
-    // Release the port.
-    //
-    if (Port)
-    {
-        Port->Release ();
-        Port = NULL;
-    }
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::Init
- *****************************************************************************
- * Initializes the miniport.
- * Initializes variables and modifies the wave topology if needed.
- */
-STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::Init
-(
-    IN  PUNKNOWN       UnknownAdapter,
-    IN  PRESOURCELIST  ResourceList,
-    IN  PPORTWAVEPCI   Port_,
-    OUT PSERVICEGROUP *ServiceGroup_
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (UnknownAdapter);
-    ASSERT (ResourceList);
-    ASSERT (Port_);
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::Init]"));
-
-    //
-    // AddRef() is required because we are keeping this pointer.
-    //
-    Port = Port_;
-    Port->AddRef ();
-
-    //
-    // No miniport service group
-	//
-    *ServiceGroup_ = NULL;
-
-    //
-    // Set initial device power state
-    //
-    m_PowerState = PowerDeviceD0;
-
-    NTSTATUS ntStatus = UnknownAdapter->
-        QueryInterface (IID_IAdapterCommon, (PVOID *)&AdapterCommon);
-    if (NT_SUCCESS (ntStatus))
-    {
-        //
-        // Alter the topology for the wave miniport.
-        //
-        if (!(AdapterCommon->GetPinConfig (PINC_MICIN_PRESENT) &&
-              AdapterCommon->GetPinConfig (PINC_MIC_PRESENT)))
-        {
-            //
-		    // Remove the pins, nodes and connections for the MICIN.
-            //
-            MiniportFilterDescriptor.PinCount -= 2;
-            MiniportFilterDescriptor.NodeCount -= 1;
-            MiniportFilterDescriptor.ConnectionCount -= 2;
-        }
-
-        //
-        // Process the resources.
-        //
-        ntStatus = ProcessResources (ResourceList);
-
-        //
-        // If we came till that point, check the CoDec for supported standard
-        // sample rates. This function will then fill the data range information
-        //
-        if (NT_SUCCESS (ntStatus))
-            ntStatus = BuildDataRangeInformation ();
-    }
-
-    //
-    // If we fail we get destroyed anyway (that's where we clean up).
-    //
-    return ntStatus;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::ProcessResources
- *****************************************************************************
- * Processes the resource list, setting up helper objects accordingly.
- * Sets up the Interrupt + Service routine and DMA.
- */
-NTSTATUS CMiniportWaveICH::ProcessResources
-(
-    IN  PRESOURCELIST ResourceList
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (ResourceList);
-
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::ProcessResources]"));
-
-
-    ULONG countIRQ = ResourceList->NumberOfInterrupts ();
-    if (countIRQ < 1)
-    {
-        DOUT (DBG_ERROR, ("Unknown configuration for wave miniport!"));
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    }
-    
-    //
-    // Create an interrupt sync object
-    //
-    NTSTATUS ntStatus = STATUS_SUCCESS;
-    ntStatus = PcNewInterruptSync (&InterruptSync,
-                                   NULL,
-                                   ResourceList,
-                                   0,
-                                   InterruptSyncModeNormal);
-
-    if (!NT_SUCCESS (ntStatus) || !InterruptSync)
-    {
-        DOUT (DBG_ERROR, ("Failed to create an interrupt sync!"));
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    //
-    // Register our ISR.
-    //
-    ntStatus = InterruptSync->RegisterServiceRoutine (InterruptServiceRoutine,
-                                                      (PVOID)this, FALSE);
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Failed to register ISR!"));
-        return ntStatus;
-    }
-
-    //
-    // Connect the interrupt.
-    //
-    ntStatus = InterruptSync->Connect ();
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Failed to connect the ISR with InterruptSync!"));
-        return ntStatus;
-    }
-
-    //
-    // Create the DMA Channel object.
-    //
-    ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
-                                          NULL,             // OuterUnknown (opt)
-                                          NonPagedPool,     // Pool Type
-                                          NULL,             // ResourceList (opt)
-                                          TRUE,             // ScatterGather
-                                          TRUE,             // Dma32BitAddresses
-                                          FALSE,            // Dma64BitAddresses
-                                          FALSE,            // IgnoreCount
-                                          Width32Bits,      // DmaWidth
-                                          MaximumDmaSpeed,  // DmaSpeed
-                                          0x1000000,          // MaximumLength 16mb
-                                          0);               // DmaPort
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Failed on NewMasterDmaChannel!"));
-        return ntStatus;
-    }
-
-    //
-    // Get the DMA adapter.
-    //
-    AdapterObject = DmaChannel->GetAdapterObject ();
-
-    //
-    // On failure object is destroyed which cleans up.
-    //
-    return STATUS_SUCCESS;
-}
-
-
-/*****************************************************************************
- * CAdapterCommon::BuildDataRangeInformation
- *****************************************************************************
- * This function dynamically build the data range information for the pins.
- * It also connects the static arrays with the data range information
- * structure.
- * If this function returns with an error the miniport should be destroyed.
- *
- * To build the data range information, we test the most popular sample rates,
- * the functions calls ProgramSampleRate in AdapterCommon object to actually
- * program the sample rate. After probing that way for multiple sample rates,
- * the original value, which is 48KHz is, gets restored.
- * We have to test the sample rates for playback, capture and microphone
- * separately. Every time we succeed, we update the data range information and
- * the pointers that point to it.
- */
-NTSTATUS CMiniportWaveICH::BuildDataRangeInformation (void)
-{
-    PAGED_CODE ();
-
-    NTSTATUS    ntStatus;
-    int nWavePlaybackEntries = 0;
-    int nWaveRecordingEntries = 0;
-    int nMicEntries = 0;
-    int nLoop;
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::BuildDataRangeInformation]"));
-
-    // Check for the render sample rates.
-    for (nLoop = 0; nLoop < WAVE_SAMPLERATES_TESTED; nLoop++)
-    {
-        ntStatus = AdapterCommon->ProgramSampleRate (AC97REG_PCM_FRONT_RATE,
-                                                     dwWaveSampleRates[nLoop]);
-
-        // We support the sample rate?
-        if (NT_SUCCESS (ntStatus))
-        {
-            // Add it to the PinDataRange
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.FormatSize = sizeof(KSDATARANGE_AUDIO);
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.Flags      = 0;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.SampleSize = 0;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.Reserved   = 0;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.MajorFormat = KSDATAFORMAT_TYPE_AUDIO;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.SubFormat   = KSDATAFORMAT_SUBTYPE_PCM;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].DataRange.Specifier   = KSDATAFORMAT_SPECIFIER_WAVEFORMATEX;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].MaximumChannels = 2;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].MinimumBitsPerSample = 16;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].MaximumBitsPerSample = 16;
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].MinimumSampleFrequency = dwWaveSampleRates[nLoop];
-            PinDataRangesPCMStreamRender[nWavePlaybackEntries].MaximumSampleFrequency = dwWaveSampleRates[nLoop];
-
-            // Add it to the PinDataRangePointer
-            PinDataRangePointersPCMStreamRender[nWavePlaybackEntries] = (PKSDATARANGE)&PinDataRangesPCMStreamRender[nWavePlaybackEntries];
-
-            // Increase count
-            nWavePlaybackEntries++;
-        }
-    }
-
-    // Check for the capture sample rates.
-    for (nLoop = 0; nLoop < WAVE_SAMPLERATES_TESTED; nLoop++)
-    {
-        ntStatus = AdapterCommon->ProgramSampleRate (AC97REG_PCM_LR_RATE, dwWaveSampleRates[nLoop]);
-
-        // We support the sample rate?
-        if (NT_SUCCESS (ntStatus))
-        {
-            // Add it to the PinDataRange
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.FormatSize = sizeof(KSDATARANGE_AUDIO);
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.Flags      = 0;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.SampleSize = 0;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.Reserved   = 0;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.MajorFormat = KSDATAFORMAT_TYPE_AUDIO;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.SubFormat   = KSDATAFORMAT_SUBTYPE_PCM;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].DataRange.Specifier   = KSDATAFORMAT_SPECIFIER_WAVEFORMATEX;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].MaximumChannels = 2;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].MinimumBitsPerSample = 16;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].MaximumBitsPerSample = 16;
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].MinimumSampleFrequency = dwWaveSampleRates[nLoop];
-            PinDataRangesPCMStreamCapture[nWaveRecordingEntries].MaximumSampleFrequency = dwWaveSampleRates[nLoop];
-
-            // Add it to the PinDataRangePointer
-            PinDataRangePointersPCMStreamCapture[nWaveRecordingEntries] = (PKSDATARANGE)&PinDataRangesPCMStreamCapture[nWaveRecordingEntries];
-
-            // Increase count
-            nWaveRecordingEntries++;
-        }
-    }
-
-    // Check for the MIC sample rates.
-    for (nLoop = 0; nLoop < MIC_SAMPLERATES_TESTED; nLoop++)
-    {
-        ntStatus = AdapterCommon->ProgramSampleRate (AC97REG_MIC_RATE, dwMicSampleRates[nLoop]);
-
-        // We support the sample rate?
-        if (NT_SUCCESS (ntStatus))
-        {
-            // Add it to the PinDataRange
-            PinDataRangesMicStream[nMicEntries].DataRange.FormatSize = sizeof(KSDATARANGE_AUDIO);
-            PinDataRangesMicStream[nMicEntries].DataRange.Flags      = 0;
-            PinDataRangesMicStream[nMicEntries].DataRange.SampleSize = 0;
-            PinDataRangesMicStream[nMicEntries].DataRange.Reserved   = 0;
-            PinDataRangesMicStream[nMicEntries].DataRange.MajorFormat = KSDATAFORMAT_TYPE_AUDIO;
-            PinDataRangesMicStream[nMicEntries].DataRange.SubFormat   = KSDATAFORMAT_SUBTYPE_PCM;
-            PinDataRangesMicStream[nMicEntries].DataRange.Specifier   = KSDATAFORMAT_SPECIFIER_WAVEFORMATEX;
-            PinDataRangesMicStream[nMicEntries].MaximumChannels = 1;
-            PinDataRangesMicStream[nMicEntries].MinimumBitsPerSample = 16;
-            PinDataRangesMicStream[nMicEntries].MaximumBitsPerSample = 16;
-            PinDataRangesMicStream[nMicEntries].MinimumSampleFrequency = dwMicSampleRates[nLoop];
-            PinDataRangesMicStream[nMicEntries].MaximumSampleFrequency = dwMicSampleRates[nLoop];
-
-            // Add it to the PinDataRangePointer
-            PinDataRangePointersMicStream[nMicEntries] = (PKSDATARANGE)&PinDataRangesMicStream[nMicEntries];
-
-            // Increase count
-            nMicEntries++;
-        }
-    }
-
-    // Now go through the pin descriptor list and change the data range entries to the actual number.
-    for (nLoop = 0; nLoop < SIZEOF_ARRAY(MiniportPins); nLoop++)
-    {
-        if (MiniportPins[nLoop].KsPinDescriptor.DataRanges == PinDataRangePointersPCMStreamRender)
-            MiniportPins[nLoop].KsPinDescriptor.DataRangesCount = nWavePlaybackEntries;
-        if (MiniportPins[nLoop].KsPinDescriptor.DataRanges == PinDataRangePointersPCMStreamCapture)
-            MiniportPins[nLoop].KsPinDescriptor.DataRangesCount = nWaveRecordingEntries;
-        if (MiniportPins[nLoop].KsPinDescriptor.DataRanges == PinDataRangePointersMicStream)
-            MiniportPins[nLoop].KsPinDescriptor.DataRangesCount = nMicEntries;
-    }
-
-    return STATUS_SUCCESS;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::NewStream
- *****************************************************************************
- * Creates a new stream.
- * This function is called when a streaming pin is created.
- * It checks if the channel is already in use, tests the data format, creates
- * and initializes the stream object.
- */
-STDMETHODIMP CMiniportWaveICH::NewStream
-(
-    OUT PMINIPORTWAVEPCISTREAM *Stream,
-    IN  PUNKNOWN                OuterUnknown,
-    IN  POOL_TYPE               PoolType,
-    IN  PPORTWAVEPCISTREAM      PortStream,
-    IN  ULONG                   Channel_,
-    IN  BOOLEAN                 Capture,
-    IN  PKSDATAFORMAT           DataFormat,
-    OUT PDMACHANNEL            *DmaChannel_,
-    OUT PSERVICEGROUP          *ServiceGroup
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (Stream);
-    ASSERT (PortStream);
-    ASSERT (DataFormat);
-    ASSERT (DmaChannel_);
-    ASSERT (ServiceGroup);
-
-    CMiniportWaveICHStream *pWaveICHStream = 0;
-	NTSTATUS ntStatus = STATUS_SUCCESS;
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::NewStream]"));
-
-    //
-    // Validate the channel (pin id).
-    //
-    if ((Channel_ != PIN_WAVEOUT) && (Channel_ != PIN_WAVEIN) &&
-       (Channel_ != PIN_MICIN))
-    {
-        DOUT (DBG_ERROR, ("NewStream was passed an invalid channel!"));
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    //
-    // Check if the pin is already in use
-    //
-	ULONG Channel = Channel_ >> 1;
-    if (Streams[Channel])
-    {
-        DOUT (DBG_ERROR, ("Pin is already in use!"));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    //
-    // Check parameters.
-    //
-    ntStatus = TestDataFormat (DataFormat, (WavePins)Channel_);
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_VSR, ("TestDataFormat failed!"));
-        return ntStatus;
-    }
-        
-    //
-    // Create a new stream.
-    //
-    ntStatus = CreateMiniportWaveICHStream (&pWaveICHStream, OuterUnknown,
-                                            PoolType);
-
-    //
-    // Return in case of an error.
-    //
-    if (!NT_SUCCESS (ntStatus))
-    {
-        DOUT (DBG_ERROR, ("Failed to create stream!"));
-        return ntStatus;
-    }
-
-    //
-    // Initialize the stream.
-    //
-    ntStatus = pWaveICHStream->Init (this,
-                                    PortStream,
-                                    Channel,
-                                    Capture,
-                                    DataFormat,
-                                    ServiceGroup);
-    if (!NT_SUCCESS (ntStatus))
-    {
-        //
-        // Release the stream and clean up.
-        //
-        DOUT (DBG_ERROR, ("Failed to init stream!"));
-        pWaveICHStream->Release ();
-        *Stream = NULL;
-        return ntStatus;
-    }
-
-    // 
-    // Save the pointers.
-    //
-    *Stream = (PMINIPORTWAVEPCISTREAM)pWaveICHStream;
-    *DmaChannel_ = DmaChannel;
-    
-    
-    return STATUS_SUCCESS;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::GetDescription
+ * CMiniportWaveCyclicHDA::GetDescription()
  *****************************************************************************
  * Gets the topology.
  */
-STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::GetDescription
+STDMETHODIMP
+CMiniportWaveCyclicHDA::
+GetDescription
 (
-    OUT PPCFILTER_DESCRIPTOR *OutFilterDescriptor
+    OUT     PPCFILTER_DESCRIPTOR *  OutFilterDescriptor
 )
 {
-    PAGED_CODE ();
+    PAGED_CODE();
 
-    ASSERT (OutFilterDescriptor);
+    ASSERT(OutFilterDescriptor);
 
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::GetDescription]"));
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::GetDescription]"));
 
     *OutFilterDescriptor = &MiniportFilterDescriptor;
-
 
     return STATUS_SUCCESS;
 }
 
-
 /*****************************************************************************
- * CMiniportWaveICH::DataRangeIntersection
+ * CMiniportWaveCyclicHDA::DataRangeIntersection()
  *****************************************************************************
  * Tests a data range intersection.
- * Cause the AC97 controller does not support mono render or capture, we have
- * to check the max. channel field (unfortunately, there is no MinimumChannel
- * and MaximumChannel field, just a MaximumChannel field).
- * If the MaximumChannel is 2, then we can pass this to the default handler of
- * portcls which always chooses the most (SampleFrequency, Channel, Bits etc.)
  */
-STDMETHODIMP_(NTSTATUS) CMiniportWaveICH::DataRangeIntersection
-(
+STDMETHODIMP 
+CMiniportWaveCyclicHDA::
+DataRangeIntersection
+(   
     IN      ULONG           PinId,
-    IN      PKSDATARANGE    ClientsDataRange,
-    IN      PKSDATARANGE    MyDataRange,
+    IN      PKSDATARANGE    MatchingDataRange,
+    IN      PKSDATARANGE    DataRange,
     IN      ULONG           OutputBufferLength,
     OUT     PVOID           ResultantFormat,
     OUT     PULONG          ResultantFormatLength
 )
 {
-    PAGED_CODE ();
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::DataRangeIntersection]"));
-
+    BOOLEAN                         DigitalAudio;
+    NTSTATUS                        Status;
+    ULONG                           RequiredSize;
+    ULONG                           SampleFrequency;
+    USHORT                          BitsPerSample;
+    
     //
-    // If the dataformat is not PCM audio bail out.
+    // Let's do the complete work here.
     //
-    if (!IsEqualGUIDAligned (ClientsDataRange->MajorFormat,
-                             KSDATAFORMAT_TYPE_AUDIO) ||
-        !IsEqualGUIDAligned (ClientsDataRange->SubFormat,
-                             KSDATAFORMAT_SUBTYPE_PCM))
-    {
-        return STATUS_INVALID_PARAMETER;
+    if (!IsEqualGUIDAligned( 
+            MatchingDataRange->Specifier, 
+            KSDATAFORMAT_SPECIFIER_NONE )) {
+            
+        //
+        // The miniport did not resolve this format.  If the dataformat
+        // is not PCM audio and requires a specifier, bail out.
+        //
+        if (!IsEqualGUIDAligned( 
+                MatchingDataRange->MajorFormat, KSDATAFORMAT_TYPE_AUDIO ) ||
+            !IsEqualGUIDAligned(     
+               MatchingDataRange->SubFormat, KSDATAFORMAT_SUBTYPE_PCM )) {
+            return STATUS_INVALID_PARAMETER;
+        }
+        DigitalAudio = TRUE;
+        
+        //
+        // wired enough, the specifier here does not define the format of MatchingDataRange
+        // but the format that is expected to be returned in ResultantFormat.
+        //
+        if (IsEqualGUIDAligned( 
+                MatchingDataRange->Specifier, 
+                KSDATAFORMAT_SPECIFIER_DSOUND )) {
+            RequiredSize = sizeof(KSDATAFORMAT_DSOUND);
+        } else {
+            RequiredSize = sizeof( KSDATAFORMAT_WAVEFORMATEX );
+        }            
+    } else {
+        DigitalAudio = FALSE;
+        RequiredSize = sizeof( KSDATAFORMAT );
     }
+            
+    //
+    // Validate return buffer size, if the request is only for the
+    // size of the resultant structure, return it now.
+    //
+    if (!OutputBufferLength) {
+        *ResultantFormatLength = RequiredSize;
+        return STATUS_BUFFER_OVERFLOW;
+    } else if (OutputBufferLength < RequiredSize) {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    
+    // There was a specifier ...
+    if (DigitalAudio) {     
+        PKSDATARANGE_AUDIO  AudioRange;
+        PWAVEFORMATEX       WaveFormatEx;
+        
+        AudioRange = (PKSDATARANGE_AUDIO) DataRange;
+        
+        // Fill the structure
+        if (IsEqualGUIDAligned( 
+                MatchingDataRange->Specifier, 
+                KSDATAFORMAT_SPECIFIER_DSOUND )) {
+            PKSDATAFORMAT_DSOUND    DSoundFormat;
+            
+            DSoundFormat = (PKSDATAFORMAT_DSOUND) ResultantFormat;
+            
+            _DbgPrintF( 
+                DEBUGLVL_VERBOSE, 
+                ("returning KSDATAFORMAT_DSOUND format intersection") );
+            
+            DSoundFormat->BufferDesc.Flags = 0 ;
+            DSoundFormat->BufferDesc.Control = 0 ;
+            DSoundFormat->DataFormat = *MatchingDataRange;
+            DSoundFormat->DataFormat.Specifier = KSDATAFORMAT_SPECIFIER_DSOUND;
+            DSoundFormat->DataFormat.FormatSize = RequiredSize;
+            WaveFormatEx = &DSoundFormat->BufferDesc.WaveFormatEx;
+            *ResultantFormatLength = RequiredSize;
+        } else {
+            PKSDATAFORMAT_WAVEFORMATEX  WaveFormat;
+        
+            WaveFormat = (PKSDATAFORMAT_WAVEFORMATEX) ResultantFormat;
+            
+            _DbgPrintF( 
+                DEBUGLVL_VERBOSE, 
+                ("returning KSDATAFORMAT_WAVEFORMATEX format intersection") );
+        
+            WaveFormat->DataFormat = *MatchingDataRange;
+            WaveFormat->DataFormat.Specifier = KSDATAFORMAT_SPECIFIER_WAVEFORMATEX;
+            WaveFormat->DataFormat.FormatSize = RequiredSize;
+            WaveFormatEx = &WaveFormat->WaveFormatEx;
+            *ResultantFormatLength = RequiredSize;
+        }
+        
+        //
+        // Return a format that intersects the given audio range, 
+        // using our maximum support as the "best" format.
+        // 
+        
+        WaveFormatEx->wFormatTag = WAVE_FORMAT_PCM;
+        WaveFormatEx->nChannels = 
+            (USHORT) min( AudioRange->MaximumChannels, 
+                          ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumChannels );
+        
+        //
+        // Check if the pin is still free
+        //
+        if (!PinId)
+        {
+            if (AllocatedCapture)
+            {
+                return STATUS_NO_MATCH;
+            }
+        }
+        else
+        {
+            if (AllocatedRender)
+            {
+                return STATUS_NO_MATCH;
+            }
+        }
+
+        //
+        // Check if one pin is in use -> use same sample frequency.
+        //
+        if (AllocatedCapture || AllocatedRender)
+        {
+            SampleFrequency = SamplingFrequency;
+            if ((SampleFrequency > ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency) ||
+                (SampleFrequency < ((PKSDATARANGE_AUDIO) MatchingDataRange)->MinimumSampleFrequency))
+            {
+                return STATUS_NO_MATCH;
+            }
+        }
+        else
+        {
+            SampleFrequency = min( AudioRange->MaximumSampleFrequency,
+                 ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency );
+
+        }
+
+        WaveFormatEx->nSamplesPerSec = SampleFrequency;
+
+        //
+        // Check if one pin is in use -> use other bits per sample.
+        //
+        if (AllocatedCapture || AllocatedRender)
+        {
+            if (Allocated8Bit)
+            {
+                BitsPerSample = 16;
+            }
+            else
+            {
+                BitsPerSample = 8;
+            }
+
+            if ((BitsPerSample > ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample) ||
+                (BitsPerSample < ((PKSDATARANGE_AUDIO) MatchingDataRange)->MinimumBitsPerSample))
+            {
+                return STATUS_NO_MATCH;
+            }
+        }
+        else
+        {
+            BitsPerSample = (USHORT) min( AudioRange->MaximumBitsPerSample,
+                          ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample );
+        }
+
+
+        WaveFormatEx->wBitsPerSample = BitsPerSample;
+        
+        WaveFormatEx->nBlockAlign = 
+            (WaveFormatEx->wBitsPerSample * WaveFormatEx->nChannels) / 8;
+        WaveFormatEx->nAvgBytesPerSec = 
+            (WaveFormatEx->nSamplesPerSec * WaveFormatEx->nBlockAlign);
+        WaveFormatEx->cbSize = 0;
+        ((PKSDATAFORMAT) ResultantFormat)->SampleSize = 
+            WaveFormatEx->nBlockAlign;
+        
+        _DbgPrintF( 
+            DEBUGLVL_VERBOSE, 
+            ("Channels = %d", WaveFormatEx->nChannels) );
+        _DbgPrintF( 
+            DEBUGLVL_VERBOSE, 
+            ("Samples/sec = %d", WaveFormatEx->nSamplesPerSec) );
+        _DbgPrintF( 
+            DEBUGLVL_VERBOSE, 
+            ("Bits/sample = %d", WaveFormatEx->wBitsPerSample) );
+        
+    } else {    // There was no specifier. Return only the KSDATAFORMAT structure.
+        //
+        // Copy the data format structure.
+        //
+        _DbgPrintF( 
+            DEBUGLVL_VERBOSE, 
+            ("returning default format intersection") );
+            
+        RtlCopyMemory( 
+            ResultantFormat, MatchingDataRange, sizeof( KSDATAFORMAT ) );
+        *ResultantFormatLength = sizeof( KSDATAFORMAT );
+    }
+    
+    return STATUS_SUCCESS;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicHDA::NewStream()
+ *****************************************************************************
+ * Creates a new stream.  This function is called when a streaming pin is
+ * created.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicHDA::
+NewStream
+(
+    OUT     PMINIPORTWAVECYCLICSTREAM * OutStream,
+    IN      PUNKNOWN                    OuterUnknown,
+    IN      POOL_TYPE                   PoolType,
+    IN      ULONG                       Channel,
+    IN      BOOLEAN                     Capture,
+    IN      PKSDATAFORMAT               DataFormat,
+    OUT     PDMACHANNEL *               OutDmaChannel,
+    OUT     PSERVICEGROUP *             OutServiceGroup
+)
+{
+    PAGED_CODE();
+
+    ASSERT(OutStream);
+    ASSERT(DataFormat);
+    ASSERT(OutDmaChannel);
+    ASSERT(OutServiceGroup);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::NewStream]"));
+
+    NTSTATUS ntStatus = STATUS_SUCCESS;
 
     //
-    // From this point, we assume that the structure passed is really a Data
-    // range specifier (the ClientsDataRange->Specifier does not contain the
-    // specifier for Data range (there is none))
+    // Make sure the hardware is not already in use.
     //
-    if (PinId == PIN_MICIN)
+    if (Capture)
     {
-        // reject stereo format for microphone capture (is mono only).
-        if (((PKSDATARANGE_AUDIO)ClientsDataRange)->MaximumChannels > 1)
+        if (AllocatedCapture)
         {
-            return STATUS_NO_MATCH;
+            ntStatus = STATUS_INVALID_DEVICE_REQUEST;
         }
     }
     else
     {
-        // reject mono format for normal wave playback or capture.
-        if (((PKSDATARANGE_AUDIO)ClientsDataRange)->MaximumChannels < 2)
+        if (AllocatedRender)
         {
-            return STATUS_NO_MATCH;
-        }
-    }
-
-    // Let portcls do some work ...
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::TestDataFormat
- *****************************************************************************
- * Checks if the passed data format is known to the driver and verifies that
- * the number of channels, the width of one sample match to the AC97
- * specification.
- */
-NTSTATUS CMiniportWaveICH::TestDataFormat
-(
-    IN  PKSDATAFORMAT Format,
-    IN  WavePins      Pin
-)
-{
-    PAGED_CODE ();
-
-    ASSERT (Format);
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::TestDataFormat]"));
-
-    //
-    // KSDATAFORMAT contains three GUIDs to support extensible format.  The
-    // first two GUIDs identify the type of data.  The third indicates the
-    // type of specifier used to indicate format specifics.  We are only
-    // supporting PCM audio formats that use WAVEFORMATEX.
-    //
-    if (!IsEqualGUIDAligned (Format->MajorFormat, KSDATAFORMAT_TYPE_AUDIO) ||
-        !IsEqualGUIDAligned (Format->SubFormat, KSDATAFORMAT_SUBTYPE_PCM))
-    {
-        DOUT (DBG_ERROR, ("Invalid format type!"));
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    //
-    // A WAVEFORMATEX structure should appear after the generic KSDATAFORMAT
-    // if the GUIDs turn out as we expect.
-    //
-    if (!IsEqualGUIDAligned (Format->Specifier, KSDATAFORMAT_SPECIFIER_WAVEFORMATEX))
-    {
-        DOUT (DBG_ERROR, ("Invalid/Unsupported specifier!"));
-        return STATUS_INVALID_PARAMETER; 
-    }
-
-    //
-    // If the size doesn't match, then something is screwed up.
-    //
-    if (Format->FormatSize < sizeof(KSDATAFORMAT_WAVEFORMATEX))
-    {
-        DOUT (DBG_ERROR, ("Invalid FormatSize!"));
-        return STATUS_INVALID_PARAMETER;
-    }
-            
-    //
-    // Print the information.
-    //
-    PWAVEFORMATEX waveFormat = (PWAVEFORMATEX)(Format + 1);
-    DOUT (DBG_STREAM,
-         ("TestDataFormat: Frequency: %d, Channels: %d, bps: %d",
-          waveFormat->nSamplesPerSec,
-          waveFormat->nChannels,
-          waveFormat->wBitsPerSample));
-    
-    //
-    // We only support PCM, 16-bit, stero (mono for mic).
-    //
-    if (waveFormat->wFormatTag != WAVE_FORMAT_PCM ||
-        waveFormat->wBitsPerSample != 16 ||
-        waveFormat->nChannels != (Pin == PIN_MICIN ? 1 : 2))
-    {
-        DOUT (DBG_WARNING, ("HW doesn't support this format!"));
-        DOUT (DBG_WARNING,
-             ("TestDataFormat: Frequency: %d, Channels: %d, bps: %d",
-              waveFormat->nSamplesPerSec, waveFormat->nChannels,
-              waveFormat->wBitsPerSample));
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    return STATUS_SUCCESS;
-}
-
-
-/*****************************************************************************
- * CMiniportWaveICH::PowerChangeNotify
- *****************************************************************************
- * This routine gets called as a result of hooking up the IPowerNotify 
- * interface. This interface indicates the driver's desire to receive explicit
- * notification of power state changes. The interface provides a single method
- * (or callback) that is called by the miniport's corresponding port driver in
- * response to a power state change. Using wave audio as an example, when the
- * device is requested to go to a sleep state the port driver pauses any 
- * active streams and then calls the power notify callback to inform the
- * miniport of the impending power down. The miniport then has an opportunity
- * to save any necessary context before the adapter's PowerChangeState method
- * is called. The process is reversed when the device is powering up. PortCls
- * first calls the adapter's PowerChangeState method to power up the adapter.
- * The port driver then calls the miniport's callback to allow the miniport to
- * restore its context. Finally, the port driver unpauses any previously paused
- * active audio streams.
- */
-STDMETHODIMP_(void) CMiniportWaveICH::PowerChangeNotify
-(
-    IN  POWER_STATE NewState
-) 
-{
-    PAGED_CODE ();
-    NTSTATUS ntStatus = STATUS_SUCCESS;
-
-    DOUT (DBG_PRINT, ("[CMiniportWaveICH::PowerChangeNotify]"));
-    
-    //
-    // Check to see if this is the current power state.
-    //
-    if (NewState.DeviceState == m_PowerState)
-    {
-        DOUT (DBG_POWER, ("New device state equals old state."));
-        return;
-    }
-    
-    //
-    // Check the new device state.
-    //
-    if ((NewState.DeviceState < PowerDeviceD0) ||
-        (NewState.DeviceState > PowerDeviceD3))
-    {
-        DOUT (DBG_ERROR, ("Unknown device state: D%d.", 
-             (ULONG)NewState.DeviceState - (ULONG)PowerDeviceD0));
-        return;
-    }
-
-    DOUT (DBG_POWER, ("Changing state to D%d.", (ULONG)NewState.DeviceState -
-                    (ULONG)PowerDeviceD0));
-
-    //
-    // In case we return to D0 power state from a D3 state, restore the
-    // interrupt connection.
-    //
-    if (NewState.DeviceState == PowerDeviceD0)
-    {
-        if (m_PowerState == PowerDeviceD3)
-        {
-            ntStatus = InterruptSync->Connect ();
-            if (!NT_SUCCESS (ntStatus))
-            {
-                DOUT (DBG_ERROR, ("Failed to connect the ISR with InterruptSync!"));
-                // We can do nothing else than just continue ...
-            }
-        }
-    }
-    
-    //
-    // Call the stream routine which takes care of the DMA engine.
-    // That's all we have to do.
-    //
-    for (int loop = PIN_WAVEOUT_OFFSET; loop < PIN_MICIN_OFFSET; loop++)
-    {
-        if (Streams[loop])
-        {
-            ntStatus = Streams[loop]->PowerChangeNotify (NewState);
-            if (!NT_SUCCESS (ntStatus))
-            {
-                DOUT (DBG_ERROR, ("PowerChangeNotify D%d for the stream failed",
-                              (ULONG)NewState.DeviceState - (ULONG)PowerDeviceD0));
-            }
+            ntStatus = STATUS_INVALID_DEVICE_REQUEST;
         }
     }
 
     //
-    // In case we go to D3 we disconnect the interrupt service reoutine
-    // from the interrupt.
+    // Determine if the format is valid.
     //
-    if (NewState.DeviceState == PowerDeviceD3)
+    if (NT_SUCCESS(ntStatus))
     {
-        InterruptSync->Disconnect ();
+        ntStatus = ValidateFormat(DataFormat);
     }
 
-    //
-    // Save the new state.  This local value is used to determine when to 
-    // cache property accesses and when to permit the driver from accessing 
-    // the hardware.
-    //
-    m_PowerState = NewState.DeviceState;
-    DOUT (DBG_POWER, ("Entering D%d",
-            (ULONG)m_PowerState - (ULONG)PowerDeviceD0));
-}
-
-
-/*****************************************************************************
- * Non paged code begins here
- *****************************************************************************
- */
-
-#pragma code_seg()
-/*****************************************************************************
- * CMiniportWaveICH::Service
- *****************************************************************************
- * Processing routine for dealing with miniport interrupts.  This routine is
- * called at DISPATCH_LEVEL.
- */
-STDMETHODIMP_(void) CMiniportWaveICH::Service (void)
-{
-    // not needed
-}
-
-
-/*****************************************************************************
- * InterruptServiceRoutine
- *****************************************************************************
- * The task of the ISR is to clear an interrupt from this device so we don't
- * get an interrupt storm and schedule a DPC which actually does the 
- * real work.
- */
-NTSTATUS CMiniportWaveICH::InterruptServiceRoutine
-(
-    IN  PINTERRUPTSYNC  InterruptSync,
-    IN  PVOID           DynamicContext
-)
-{
-    ASSERT (InterruptSync);
-    ASSERT (DynamicContext);
-
-    ULONG   GlobalStatus;
-    USHORT  DMAStatusRegister;
-
-    //
-    // Get our context which is a pointer to class CMiniportWaveICH.
-    //
-    CMiniportWaveICH *that = (CMiniportWaveICH *)DynamicContext;
-
-    //
-    // Check for a valid AdapterCommon pointer.
-    //
-    if (!that->AdapterCommon)
+    if(NT_SUCCESS(ntStatus))
     {
-        //
-        // In case we didn't handle the interrupt, unsuccessful tells the system
-        // to call the next interrupt handler in the chain.
-        //
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    //
-    // From this point down, basically in the complete ISR, we cannot use
-    // relative addresses (stream class base address + X_CR for example)
-    // cause we might get called when the stream class is destroyed or
-    // not existent. This doesn't make too much sense (that there is an
-    // interrupt for a non-existing stream) but could happen and we have
-    // to deal with the interrupt.
-    //
-    
-    //
-    // Read the global register to check the interrupt bits
-    //
-    GlobalStatus = that->AdapterCommon->ReadBMControlRegister32 (GLOB_STA);
-    
-    //
-    // Check for weird return values. Could happen if the PCI device is already
-    // disabled and another device that shares this interrupt generated an
-    // interrupt.
-    // The register should never have all bits cleared or set.
-    //
-    if (!GlobalStatus || (GlobalStatus == 0xFFFFFFFF))
-    {
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    //
-    // Check for PCM out interrupt.
-    //
-    NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
-    if (GlobalStatus & GLOB_STA_POINT)
-    {
-        //
-        // Read PCM out DMA status registers.
-        //
-        DMAStatusRegister = (USHORT)that->AdapterCommon->
-            ReadBMControlRegister16 (PO_SR);
-
-        //
-        // We could now check for every possible error condition
-        // (like FIFO error) and monitor the different errors, but currently
-        // we have the same action for every INT and therefore we simplify
-        // this routine enormous with just clearing the bits.
-        //
-        if (that->Streams[PIN_WAVEOUT_OFFSET])
+        // if we're trying to start a full-duplex stream.
+        if(AllocatedCapture || AllocatedRender)
         {
-            //
-            // ACK the interrupt.
-            //
-            that->AdapterCommon->WriteBMControlRegister (PO_SR, DMAStatusRegister);
-            ntStatus = STATUS_SUCCESS;
-
-            //
-            // Request DPC service for PCM out.
-            //
-            if ((that->Port) && (that->Streams[PIN_WAVEOUT_OFFSET]->ServiceGroup))
+            // make sure the requested sampling rate is the
+            // same as the currently running one...
+            PWAVEFORMATEX waveFormat = PWAVEFORMATEX(DataFormat + 1);
+            if( SamplingFrequency != waveFormat->nSamplesPerSec )
             {
-                that->Port->Notify (that->Streams[PIN_WAVEOUT_OFFSET]->ServiceGroup);
-            }
-            else
-            {
-                //
-                // Bad, bad.  Shouldn't print in an ISR!
-                //
-                DOUT (DBG_ERROR, ("WaveOut INT fired but no stream object there."));
-            }
-        }
-    }
-    
-    //
-    // Check for PCM in interrupt.
-    //
-    if (GlobalStatus & GLOB_STA_PIINT)
-    {
-        //
-        // Read PCM in DMA status registers.
-        //
-        DMAStatusRegister = (USHORT)that->AdapterCommon->
-            ReadBMControlRegister16 (PI_SR);
-
-        //
-        // We could now check for every possible error condition
-        // (like FIFO error) and monitor the different errors, but currently
-        // we have the same action for every INT and therefore we simplify
-        // this routine enormous with just clearing the bits.
-        //
-        if (that->Streams[PIN_WAVEIN_OFFSET])
-        {
-            //
-            // ACK the interrupt.
-            //
-            that->AdapterCommon->WriteBMControlRegister (PI_SR, DMAStatusRegister);
-            ntStatus = STATUS_SUCCESS;
-
-            //
-            // Request DPC service for PCM in.
-            //
-            if ((that->Port) && (that->Streams[PIN_WAVEIN_OFFSET]->ServiceGroup))
-            {
-                that->Port->Notify (that->Streams[PIN_WAVEIN_OFFSET]->ServiceGroup);
-            }
-            else
-            {
-                //
-                // Bad, bad.  Shouldn't print in an ISR!
-                //
-                DOUT (DBG_ERROR, ("WaveIn INT fired but no stream object there."));
+                // Bad format....
+                ntStatus = STATUS_INVALID_PARAMETER;
             }
         }
     }
 
+    PDMACHANNELSLAVE    dmaChannel = NULL;
+    PWAVEFORMATEX       waveFormat = PWAVEFORMATEX(DataFormat + 1);
+
     //
-    // Check for MIC in interrupt.
+    // Get the required DMA channel if it's not already in use.
     //
-    if (GlobalStatus & GLOB_STA_MINT)
+    if (NT_SUCCESS(ntStatus))
+    {
+        if (waveFormat->wBitsPerSample == 8)
+        {
+            if (! Allocated8Bit)
+            {
+                dmaChannel = DmaChannel8;
+            }
+        }
+        else
+        {
+            if (! Allocated16Bit)
+            {
+                dmaChannel = DmaChannel16;
+            }
+        }
+    }
+
+    if (! dmaChannel)
+    {
+        ntStatus = STATUS_INVALID_DEVICE_REQUEST;
+    }
+    else
     {
         //
-        // Read MIC in DMA status registers.
+        // Instantiate a stream.
         //
-        DMAStatusRegister = (USHORT)that->AdapterCommon->
-            ReadBMControlRegister16 (MC_SR);
+        CMiniportWaveCyclicStreamHDA *stream =
+            new(PoolType) CMiniportWaveCyclicStreamHDA(OuterUnknown);
 
-        //
-        // We could now check for every possible error condition
-        // (like FIFO error) and monitor the different errors, but currently
-        // we have the same action for every INT and therefore we simplify
-        // this routine enormous with just clearing the bits.
-        //
-        if (that->Streams[PIN_MICIN_OFFSET])
+        if (stream)
         {
-            //
-            // ACK the interrupt.
-            //
-            that->AdapterCommon->WriteBMControlRegister (MC_SR, DMAStatusRegister);
-            ntStatus = STATUS_SUCCESS;
+            stream->AddRef();
+
+            ntStatus =
+                stream->Init
+                (
+                    this,
+                    Channel,
+                    Capture,
+                    DataFormat,
+                    dmaChannel
+                );
+
+            if (NT_SUCCESS(ntStatus))
+            {
+                if (Capture)
+                {
+                    AllocatedCapture = TRUE;
+                }
+                else
+                {
+                    AllocatedRender = TRUE;
+                }
+
+                if (waveFormat->wBitsPerSample == 8)
+                {
+                    Allocated8Bit = TRUE;
+                }
+                else
+                {
+                    Allocated16Bit = TRUE;
+                }
+
+                *OutStream = PMINIPORTWAVECYCLICSTREAM(stream);
+                stream->AddRef();
+
+                *OutDmaChannel = dmaChannel;
+                dmaChannel->AddRef();
+
+                *OutServiceGroup = ServiceGroup;
+                ServiceGroup->AddRef();
+
+                //
+                // The stream, the DMA channel, and the service group have
+                // references now for the caller.  The caller expects these
+                // references to be there.
+                //
+            }
 
             //
-            // Request DPC service for PCM out.
+            // This is our private reference to the stream.  The caller has
+            // its own, so we can release in any case.
             //
-            if ((that->Port) && (that->Streams[PIN_MICIN_OFFSET]->ServiceGroup))
-            {
-                that->Port->Notify (that->Streams[PIN_MICIN_OFFSET]->ServiceGroup);
-            }
-            else
-            {
-                //
-                // Bad, bad.  Shouldn't print in an ISR!
-                //
-                DOUT (DBG_ERROR, ("MicIn INT fired but no stream object there."));
-            }
+            stream->Release();
+        }
+        else
+        {
+            ntStatus = STATUS_INSUFFICIENT_RESOURCES;
         }
     }
 
     return ntStatus;
 }
 
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::NonDelegatingQueryInterface()
+ *****************************************************************************
+ * Obtains an interface.  This function works just like a COM QueryInterface
+ * call and is used if the object is not being aggregated.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicStreamHDA::
+NonDelegatingQueryInterface
+(
+    IN      REFIID  Interface,
+    OUT     PVOID * Object
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Object);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::NonDelegatingQueryInterface]"));
+
+    if (IsEqualGUIDAligned(Interface,IID_IUnknown))
+    {
+        *Object = PVOID(PUNKNOWN(this));
+    }
+    else
+    if (IsEqualGUIDAligned(Interface,IID_IMiniportWaveCyclicStream))
+    {
+        *Object = PVOID(PMINIPORTWAVECYCLICSTREAM(this));
+    }
+    else
+    {
+        *Object = NULL;
+    }
+
+    if (*Object)
+    {
+        PUNKNOWN(*Object)->AddRef();
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_INVALID_PARAMETER;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::~CMiniportWaveCyclicStreamHDA()
+ *****************************************************************************
+ * Destructor.
+ */
+CMiniportWaveCyclicStreamHDA::
+~CMiniportWaveCyclicStreamHDA
+(   void
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::~CMiniportWaveCyclicStreamHDA]"));
+
+    if (DmaChannel)
+    {
+        DmaChannel->Release();
+    }
+
+    if (Miniport)
+    {
+        //
+        // Clear allocation flags in the miniport.
+        //
+        if (Capture)
+        {
+            Miniport->AllocatedCapture = FALSE;
+        }
+        else
+        {
+            Miniport->AllocatedRender = FALSE;
+        }
+
+        if (Format16Bit)
+        {
+            Miniport->Allocated16Bit = FALSE;
+        }
+        else
+        {
+            Miniport->Allocated8Bit = FALSE;
+        }
+
+        Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
+        Miniport->Release();
+    }
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::Init()
+ *****************************************************************************
+ * Initializes a stream.
+ */
+NTSTATUS
+CMiniportWaveCyclicStreamHDA::
+Init
+(
+    IN      CMiniportWaveCyclicHDA *   Miniport_,
+    IN      ULONG                       Channel_,
+    IN      BOOLEAN                     Capture_,
+    IN      PKSDATAFORMAT               DataFormat,
+    IN      PDMACHANNELSLAVE            DmaChannel_
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
+
+    ASSERT(Miniport_);
+    ASSERT(DataFormat);
+    ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
+    ASSERT(DmaChannel_);
+
+    PWAVEFORMATEX waveFormat = PWAVEFORMATEX(DataFormat + 1);
+
+    //
+    // We must add references because the caller will not do it for us.
+    //
+    Miniport = Miniport_;
+    Miniport->AddRef();
+
+    DmaChannel = DmaChannel_;
+    DmaChannel->AddRef();
+
+    Channel         = Channel_;
+    Capture         = Capture_;
+    FormatStereo    = (waveFormat->nChannels == 2);
+    Format16Bit     = (waveFormat->wBitsPerSample == 16);
+    State           = KSSTATE_STOP;
+
+    RestoreInputMixer = FALSE;
+
+    KeWaitForSingleObject
+    (
+        &Miniport->SampleRateSync,
+        Executive,
+        KernelMode,
+        FALSE,
+        NULL
+    );
+    Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
+    KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
+    
+    SetFormat( DataFormat );
+
+    return STATUS_SUCCESS;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::SetNotificationFreq()
+ *****************************************************************************
+ * Sets the notification frequency.
+ */
+STDMETHODIMP_(ULONG)
+CMiniportWaveCyclicStreamHDA::
+SetNotificationFreq
+(
+    IN      ULONG   Interval,
+    OUT     PULONG  FramingSize    
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::SetNotificationFreq]"));
+
+    Miniport->NotificationInterval = Interval;
+    *FramingSize = 
+        (1 << (FormatStereo + Format16Bit)) * 
+            Miniport->SamplingFrequency * Interval / 1000;
+
+    return Miniport->NotificationInterval;
+}
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::SetFormat()
+ *****************************************************************************
+ * Sets the wave format.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicStreamHDA::
+SetFormat
+(
+    IN      PKSDATAFORMAT   Format
+)
+{
+    PAGED_CODE();
+
+    ASSERT(Format);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::SetFormat]"));
+
+    NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
+
+    if(State != KSSTATE_RUN)
+    {
+        ntStatus = Miniport->ValidateFormat(Format);
+    
+        PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
+
+        KeWaitForSingleObject
+        (
+            &Miniport->SampleRateSync,
+            Executive,
+            KernelMode,
+            FALSE,
+            NULL
+        );
+    
+        // check for full-duplex stuff
+        if( NT_SUCCESS(ntStatus)
+            && Miniport->AllocatedCapture
+            && Miniport->AllocatedRender
+        )
+        {
+            // no new formats.... bad...
+            if( Miniport->SamplingFrequency != waveFormat->nSamplesPerSec )
+            {
+                // Bad format....
+                ntStatus = STATUS_INVALID_PARAMETER;
+            }
+        }
+    
+        // TODO:  Validate sample size.
+    
+        if (NT_SUCCESS(ntStatus))
+        {
+            PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
+
+            Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
+    
+            BYTE command =
+                (   Capture
+                ?   DSP_CMD_SETADCRATE
+                :   DSP_CMD_SETDACRATE
+                );
+    
+            Miniport->AdapterCommon->WriteController
+            (
+                command
+            );
+    
+            Miniport->AdapterCommon->WriteController
+            (
+                (BYTE)(waveFormat->nSamplesPerSec >> 8)
+            );
+    
+            Miniport->AdapterCommon->WriteController
+            (
+                (BYTE) waveFormat->nSamplesPerSec
+            );
+
+            _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
+        }
+
+        KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
+    }
+
+    return ntStatus;
+}
+
+#pragma code_seg()
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::GetPosition()
+ *****************************************************************************
+ * Gets the current position.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicStreamHDA::
+GetPosition
+(
+    OUT     PULONG  Position
+)
+{
+    // Not PAGED_CODE().  May be called at dispatch level.
+
+    ASSERT(Position);
+
+    ULONG transferCount = DmaChannel->TransferCount();
+
+    if (DmaChannel && transferCount)
+    {
+        *Position = DmaChannel->ReadCounter();
+
+        ASSERT(*Position <= transferCount);
+
+        if (*Position != 0)
+        {
+            *Position = transferCount - *Position;
+        }
+    }
+    else
+    {
+        *Position = 0;
+    }
+
+   return STATUS_SUCCESS;
+}
+
+STDMETHODIMP
+CMiniportWaveCyclicStreamHDA::NormalizePhysicalPosition(
+    IN OUT PLONGLONG PhysicalPosition
+)
+
+/*++
+
+Routine Description:
+    Given a physical position based on the actual number of bytes transferred,
+    this function converts the position to a time-based value of 100ns units.
+
+Arguments:
+    IN OUT PLONGLONG PhysicalPosition -
+        value to convert.
+
+Return:
+    STATUS_SUCCESS or an appropriate error code.
+
+--*/
+
+{                           
+    *PhysicalPosition =
+            (_100NS_UNITS_PER_SECOND / 
+                (1 << (FormatStereo + Format16Bit)) * *PhysicalPosition) / 
+                    Miniport->SamplingFrequency;
+    return STATUS_SUCCESS;
+}
+    
+#pragma code_seg("PAGE")
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::SetState()
+ *****************************************************************************
+ * Sets the state of the channel.
+ */
+STDMETHODIMP
+CMiniportWaveCyclicStreamHDA::
+SetState
+(
+    IN      KSSTATE     NewState
+)
+{
+    PAGED_CODE();
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::SetState]"));
+
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+
+    //
+    // The acquire state is not distinguishable from the stop state for our
+    // purposes.
+    //
+    if (NewState == KSSTATE_ACQUIRE)
+    {
+        NewState = KSSTATE_PAUSE;
+    }
+
+    if (State != NewState)
+    {
+        switch (NewState)
+        {
+        case KSSTATE_PAUSE:
+            if (State == KSSTATE_RUN)
+            {
+                if (Capture)
+                {
+                    // restore if previously setup for mono recording
+                    // (this should really be done via the topology miniport)
+                    if(RestoreInputMixer)
+                    {
+                        Miniport->AdapterCommon->MixerRegWrite( DSP_MIX_ADCMIXIDX_L,
+                                                                InputMixerLeft );
+                        RestoreInputMixer = FALSE;
+                    }
+                }
+                // TODO:  Wait for DMA to complete
+
+                if (Format16Bit)
+                {
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_HALTAUTODMA16);
+                    // TODO:  wait...
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_PAUSEDMA16);
+                }
+                else
+                {
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_HALTAUTODMA);
+                    // TODO:  wait...
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_PAUSEDMA);
+                }
+
+                if ( !(Miniport->AllocatedRender &&
+                       Miniport->AllocatedCapture))
+                {
+                    Miniport->AdapterCommon->ResetController();
+                }
+
+                Miniport->AdapterCommon->WriteController(DSP_CMD_SPKROFF);
+
+
+                DmaChannel->Stop();
+
+            }
+            break;
+
+        case KSSTATE_RUN:
+            {
+                BYTE mode;
+
+                if (Capture)
+                {
+                    // setup for mono recording
+                    // (this should really be done via the topology miniport)
+                    if(! FormatStereo)
+                    {
+                        InputMixerLeft  = Miniport->AdapterCommon->MixerRegRead( DSP_MIX_ADCMIXIDX_L );
+                        UCHAR InputMixerRight = Miniport->AdapterCommon->MixerRegRead( DSP_MIX_ADCMIXIDX_R );
+                        
+                        UCHAR TempMixerValue = InputMixerLeft | (InputMixerRight & 0x2A);
+
+                        Miniport->AdapterCommon->MixerRegWrite( DSP_MIX_ADCMIXIDX_L,
+                                                                TempMixerValue );
+                        
+                        RestoreInputMixer = TRUE;
+                    }
+
+                    //
+                    // Turn on capture.
+                    //
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_SPKROFF);
+
+                    if (Format16Bit)
+                    {
+                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTADC16);
+                        mode = 0x10;
+                    }
+                    else
+                    {
+                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTADC8);
+                        mode = 0x00;
+                    }
+                }
+                else
+                {
+                    Miniport->AdapterCommon->WriteController(DSP_CMD_SPKRON);
+
+                    if (Format16Bit)
+                    {
+                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTDAC16);
+                        mode = 0x10;
+                    }
+                    else
+                    {
+                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTDAC8);
+                        mode = 0x00;
+                    }
+                }
+
+                if (FormatStereo)
+                {
+                    mode |= 0x20;
+                }
+
+                //
+                // Start DMA.
+                //
+                DmaChannel->Start(DmaChannel->BufferSize(),!Capture);
+
+                Miniport->AdapterCommon->WriteController(mode) ;
+
+                //
+                // Calculate sample count for interrupts.
+                //
+                ULONG bufferSizeInFrames = DmaChannel->BufferSize();
+                if( Format16Bit )
+                {
+                    bufferSizeInFrames /= 2;
+                }
+                if( FormatStereo )
+                {
+                    bufferSizeInFrames /= 2;
+                }
+
+                ULONG frameCount =
+                    (   (   Miniport->SamplingFrequency
+                        *   Miniport->NotificationInterval
+                        )
+                    /   1000
+                    );
+
+                if (frameCount > bufferSizeInFrames)
+                {
+                    frameCount = bufferSizeInFrames;
+                }
+
+                frameCount--;
+
+                _DbgPrintF( DEBUGLVL_VERBOSE, ("Run. Setting frame count to %X",frameCount));
+                Miniport->AdapterCommon->WriteController((BYTE) frameCount) ;
+                Miniport->AdapterCommon->WriteController((BYTE) (frameCount >> 8));
+            }
+            break;
+
+        case KSSTATE_STOP:
+            break;
+        }
+
+        State = NewState;
+    }
+
+    return ntStatus;
+}
+
+#pragma code_seg()
+
+/*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::Silence()
+ *****************************************************************************
+ * Fills a buffer with silence.
+ */
+STDMETHODIMP_(void)
+CMiniportWaveCyclicStreamHDA::
+Silence
+(
+    IN      PVOID   Buffer,
+    IN      ULONG   ByteCount
+)
+{
+    RtlFillMemory(Buffer,ByteCount,Format16Bit ? 0 : 0x7f);
+}

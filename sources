@@ -1,4 +1,6 @@
-TARGETNAME=WDMHDA
+# Copyright (c) 1995-1999 Microsoft Corporation.  All rights reserved.
+
+TARGETNAME=HDA
 TARGETTYPE=DRIVER
 TARGETPATH=obj
 
@@ -11,14 +13,12 @@ INCLUDES=..\inc
 
 MSC_WARNING_LEVEL=-W3 -WX
 
-C_DEFINES=$(CFASTFLAGS) -DUNICODE -D_UNICODE -DUNDER_NT
+C_DEFINES=-D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT
 LINKER_FLAGS=-map
 
 SOURCES=\
         adapter.cpp     \
         common.cpp      \
         mintopo.cpp     \
-	minwave.cpp	\
-        prophnd.cpp     \
-        ichwave.cpp     \
-        hdadrv.rc
+        minwave.cpp     \
+        HDA.rc

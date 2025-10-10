@@ -1,23 +1,19 @@
-Compiling c:\ntddk\src\wdm\audio\hda directory ********************
+Compiling c:\ntddk\src\wdm\audio\hdac directory ********************
 'nmake.exe /c BUILDMSG=Stop. -i NTTEST= UMTEST= NOLINK=1 386=1'
-    rc -l 409 -z "MS Sans Serif,Helv/MS Shell Dlg"  -r -fo objfre\i386\hdadrv.tmp -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT   -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc .\hdadrv.rc
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\adapter.cpp
+    rc -l 409 -z "MS Sans Serif,Helv/MS Shell Dlg"  -r -fo objfre\i386\hda.tmp -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1 -D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT   -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc .\hda.rc
+cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1 -D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\adapter.cpp
 adapter.cpp
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\common.cpp
+cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1 -D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\common.cpp
 common.cpp
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\mintopo.cpp
+cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1 -D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\mintopo.cpp
 mintopo.cpp
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\minwave.cpp
+cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1 -D_WIN32 -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\minwave.cpp
 minwave.cpp
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\prophnd.cpp
-prophnd.cpp
-cl -nologo -Ii386\ -I. -I..\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc -Ic:\NTDDK\inc\ddk -Ic:\NTDDK\inc\ddk\wdm -Ic:\NTDDK\private\inc -Ic:\NTDDK\inc -D_X86_=1 -Di386=1  -DSTD_CALL -DCONDITION_HANDLING=1 -DNT_UP=1  -DNT_INST=0 -DWIN32=100 -D_NT1X_=100 -DWINNT=1 -D_WIN32_WINNT=0x0500 -DWINVER=0x0500 -D_WIN32_IE=0x0501    -DWIN32_LEAN_AND_MEAN=1 -DDEVL=1 -DFPO=1    -DNDEBUG -D_DLL=1  -DUNICODE -D_UNICODE -DUNDER_NT     /c /Zel /Zp8 /Gy -cbstring -W3 -WX /Gz  /QIfdiv- /QIf /QI0f /GB /Gi- /Gm- /GX-  /GR- /GF  /Oxs /Oy   -FIc:\NTDDK\inc\warning.h  .\ichwave.cpp
-ichwave.cpp
 
 Stop.
-Linking c:\ntddk\src\wdm\audio\hda directory ********************
+Linking c:\ntddk\src\wdm\audio\hdac directory ********************
 'nmake.exe /c BUILDMSG=Stop. -i LINKONLY=1 NOPASS0=1 NTTEST= UMTEST= 386=1'
-	link -out:objfre\i386\WDMHDA.sys -machine:ix86 @C:\WINDOWS\TEMP\nma24889.
+	link -out:objfre\i386\HDA.sys -machine:ix86 @C:\WINDOWS\TEMP\nma98675.
 Microsoft (R) Incremental Linker Version 5.12.8181
 Copyright (C) Microsoft Corp 1992-1998. All rights reserved.
 
@@ -45,14 +41,12 @@ Copyright (C) Microsoft Corp 1992-1998. All rights reserved.
 -subsystem:native,5.00 
 -base:0x10000 
 -entry:DriverEntry@8 
--out:objfre\i386\WDMHDA.sys 
-objfre\i386\hdadrv.res 
+-out:objfre\i386\HDA.sys 
+objfre\i386\hda.res 
 objfre\i386\adapter.obj 
 objfre\i386\common.obj 
 objfre\i386\mintopo.obj 
 objfre\i386\minwave.obj 
-objfre\i386\prophnd.obj 
-objfre\i386\ichwave.obj 
 c:\NTDDK\libfre\i386\ntoskrnl.lib 
 c:\NTDDK\libfre\i386\hal.lib 
 c:\NTDDK\libfre\i386\wmilib.lib 

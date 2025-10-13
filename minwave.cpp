@@ -187,6 +187,9 @@ ProcessResources
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
+	//let me COOK here dangit!
+	/*
+
     //
     // Make sure we have the expected number of resources.
     //
@@ -318,6 +321,7 @@ ProcessResources
             DmaChannel16 = NULL;
         }
     }
+	*/
 
     return ntStatus;
 }

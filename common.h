@@ -159,6 +159,48 @@
 #define MPU401_CMD_RESET    0xFF    // Reset command
 #define MPU401_CMD_UART     0x3F    // Switch to UART mod
 
+/*****************************************************************************
+ * Defines for HD Audio
+ *****************************************************************************/
+
+// Communication types
+#define HDA_UNINITIALIZED 0
+#define HDA_CORB_RIRB 1
+#define HDA_PIO 2
+
+// Widget types
+#define HDA_WIDGET_AUDIO_OUTPUT 0x0
+#define HDA_WIDGET_AUDIO_INPUT 0x1
+#define HDA_WIDGET_AUDIO_MIXER 0x2
+#define HDA_WIDGET_AUDIO_SELECTOR 0x3
+#define HDA_WIDGET_PIN_COMPLEX 0x4
+#define HDA_WIDGET_POWER_WIDGET 0x5
+#define HDA_WIDGET_VOLUME_KNOB 0x6
+#define HDA_WIDGET_BEEP_GENERATOR 0x7
+#define HDA_WIDGET_VENDOR_DEFINED 0xF
+
+// Pin definitions
+#define HDA_PIN_LINE_OUT 0x0
+#define HDA_PIN_SPEAKER 0x1
+#define HDA_PIN_HEADPHONE_OUT 0x2
+#define HDA_PIN_CD 0x3
+#define HDA_PIN_SPDIF_OUT 0x4
+#define HDA_PIN_DIGITAL_OTHER_OUT 0x5
+#define HDA_PIN_MODEM_LINE_SIDE 0x6
+#define HDA_PIN_MODEM_HANDSET_SIDE 0x7
+#define HDA_PIN_LINE_IN 0x8
+#define HDA_PIN_AUX 0x9
+#define HDA_PIN_MIC_IN 0xA
+#define HDA_PIN_TELEPHONY 0xB
+#define HDA_PIN_SPDIF_IN 0xC
+#define HDA_PIN_DIGITAL_OTHER_IN 0xD
+#define HDA_PIN_RESERVED 0xE
+#define HDA_PIN_OTHER 0xF
+
+// Node types
+#define HDA_OUTPUT_NODE 0x1
+#define HDA_INPUT_NODE 0x2
+
 typedef struct
 {
     PWCHAR   KeyName;

@@ -66,6 +66,8 @@ ProcessResources
 
     NTSTATUS    ntStatus    = STATUS_SUCCESS;
 
+
+	/* HACK - let me stay running long enough to make a noise please!!
     //
     // Make sure we have the expected number of resources.
     //
@@ -86,7 +88,7 @@ ProcessResources
         PortBase =
             PUCHAR(ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart);
     }
-
+	*/
     return ntStatus;
 }
 
@@ -207,7 +209,7 @@ Init
 
         if (NT_SUCCESS(ntStatus))
         {
-            AdapterCommon->MixerReset();
+         //   AdapterCommon->MixerReset();
         }
     }
 

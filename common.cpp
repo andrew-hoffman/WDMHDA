@@ -1981,6 +1981,11 @@ MixerRegWrite
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));\
 	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
 
+	if (Index == 1){
+		DOUT (DBG_PRINT, ("set volume %d", Value / 2));
+		hda_set_volume(Value / 2); //supposed to be 0-100 this is as close as i can get
+	}
+
     /*
 	ASSERT( m_pWaveBase );
     BYTE actualIndex;

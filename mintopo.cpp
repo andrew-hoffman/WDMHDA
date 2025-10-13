@@ -532,295 +532,6 @@ BasicSupportHandler
     return ntStatus;
 }
 
-/*****************************************************************************
- * PropertyHandler_Level()
- *****************************************************************************
- * Accesses a KSAUDIO_LEVEL property.
- */
-static
-NTSTATUS
-PropertyHandler_Level
-(
-    IN      PPCPROPERTY_REQUEST   PropertyRequest
-)
-{
-    PAGED_CODE();
-
-    ASSERT(PropertyRequest);
-
-    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportTopologyHDA::PropertyHandler_Level]"));
-
-    CMiniportTopologyHDA *that =
-        (CMiniportTopologyHDA *) PropertyRequest->MajorTarget;
-
-    NTSTATUS        ntStatus = STATUS_INVALID_PARAMETER;
-    ULONG           count;
-    LONG            channel;
-
-    // validate node
-    if(PropertyRequest->Node != ULONG(-1))
-    {
-        if(PropertyRequest->Verb & KSPROPERTY_TYPE_GET)
-        {
-            // get the instance channel parameter
-            if(PropertyRequest->InstanceSize >= sizeof(LONG))
-            {
-                channel = *(PLONG(PropertyRequest->Instance));
-
-                // only support get requests on either mono/left (0) or right (1) channels
-                if ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) )
-                {
-                    // validate and get the output parameter
-                    if (PropertyRequest->ValueSize >= sizeof(LONG))
-                    {
-                        PLONG Level = (PLONG)PropertyRequest->Value;
-
-                        // switch on node if
-                        switch(PropertyRequest->Node)
-                        {
-                            case WAVEOUT_VOLUME:
-                            case SYNTH_VOLUME:
-                            case CD_VOLUME:
-                            case LINEIN_VOLUME:
-                            case MIC_VOLUME:
-                            case LINEOUT_VOL:
-                                // check if volume property request
-                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
-                                {
-                                    // bail out if a right channel request on the mono mic volume
-                                    if( (PropertyRequest->Node == MIC_VOLUME) && (channel != CHAN_LEFT) )
-                                    {
-                                        break;
-                                    }
-                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
-                                    PropertyRequest->ValueSize = sizeof(LONG);
-                                    ntStatus = STATUS_SUCCESS;
-                                }
-                                break;
-        
-                            case LINEOUT_GAIN:
-                            case WAVEIN_GAIN:
-                                // check if volume property request
-                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
-                                {
-                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
-                                    PropertyRequest->ValueSize = sizeof(LONG);
-                                    ntStatus = STATUS_SUCCESS;
-                                }
-                                break;
-
-                            case LINEOUT_BASS:
-                            case LINEOUT_TREBLE:
-                                if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
-                                      (PropertyRequest->Node == LINEOUT_BASS) ) ||
-                                    ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
-                                      (PropertyRequest->Node == LINEOUT_TREBLE) ) )
-                                {
-                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
-                                    PropertyRequest->ValueSize = sizeof(LONG);
-                                    ntStatus = STATUS_SUCCESS;
-                                }
-                                break;
-                        }
-                    }
-                }
-            }
-
-        } else if(PropertyRequest->Verb & KSPROPERTY_TYPE_SET)
-        {
-            // get the instance channel parameter
-            if(PropertyRequest->InstanceSize >= sizeof(LONG))
-            {
-                channel = *(PLONG(PropertyRequest->Instance));
-
-                // only support set requests on either mono/left (0), right (1), or master (-1) channels
-                if ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER))
-                {
-                    // validate and get the input parameter
-                    if (PropertyRequest->ValueSize == sizeof(LONG))
-                    {
-                        PLONG Level = (PLONG)PropertyRequest->Value;
-
-                        // switch on the node id
-                        switch(PropertyRequest->Node)
-                        {
-                            case WAVEOUT_VOLUME:
-                            case SYNTH_VOLUME:
-                            case CD_VOLUME:
-                            case LINEIN_VOLUME:
-                            case MIC_VOLUME:
-                            case LINEOUT_VOL:
-                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
-                                {
-                                    // convert the level to register bits
-                                    if(*Level <= (-62 << 16))
-                                    {
-                                        count = 0;
-                                    } else if(*Level >= 0)
-                                    {
-                                        count = 0x1F;
-                                    } else
-                                    {
-                                        count = (((*Level >> 16) + 62) >> 1) & 0x1F;
-                                    }
-
-                                    // set right channel if channel requested is right or master
-                                    // and node is not mic volume (mono)
-                                    if ( ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) &&
-                                         ( PropertyRequest->Node != MIC_VOLUME ) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
-
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
-                                                          5,
-                                                          3,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                    // set the left channel if channel requested is left or master
-                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
-                                        
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
-                                                          5,
-                                                          3,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                }
-                                break;
-        
-                            case LINEOUT_GAIN:
-                            case WAVEIN_GAIN:
-                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
-                                {                                                                        
-                                    // determine register bits
-                                    if(*Level >= (18 << 16))
-                                    {
-                                        count = 0x3;
-                                    } else if(*Level <= 0)
-                                    {
-                                        count = 0;
-                                    } else
-                                    {
-                                        count = (*Level >> 17) / 3;
-                                    }
-    
-                                    // set right channel if channel requested is right or master
-                                    if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
-
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
-                                                          2,
-                                                          6,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                    // set the left channel if channel requested is left or master
-                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
-
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
-                                                          2,
-                                                          6,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                }
-                                break;
-        
-                            case LINEOUT_BASS:
-                            case LINEOUT_TREBLE:
-                                if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
-                                      (PropertyRequest->Node == LINEOUT_BASS) ) ||
-                                    ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
-                                      (PropertyRequest->Node == LINEOUT_TREBLE) ) )
-                                {
-                                    // determine register bits
-                                    if(*Level <= (-14 << 16))
-                                    {
-                                        count = 0;
-                                    } else if(*Level >= (14 << 16))
-                                    {
-                                        count = 0xF;
-                                    } else
-                                    {
-                                        count = ((*Level >> 16) + 14) >> 1;
-                                    }
-
-                                    // set right channel if channel requested is right or master
-                                    if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
-        
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister + 1,
-                                                          4,
-                                                          4,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                    // set the left channel if channel requested is left or master
-                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
-                                    {
-                                        // cache the commanded control value
-                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
-                                        
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
-                                                          4,
-                                                          4,
-                                                          BYTE(count) );
-                                        ntStatus = STATUS_SUCCESS;
-                                    }
-                                }
-                                break;
-                        }
-                    }
-                }
-            }
-
-        } else if(PropertyRequest->Verb & KSPROPERTY_TYPE_BASICSUPPORT)
-        {
-            // service basic support request
-            switch(PropertyRequest->Node)
-            {
-                case WAVEOUT_VOLUME:
-                case SYNTH_VOLUME:
-                case CD_VOLUME:
-                case LINEIN_VOLUME:
-                case MIC_VOLUME:
-                case LINEOUT_VOL:
-                case LINEOUT_GAIN:
-                case WAVEIN_GAIN:
-                    if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
-                    {
-                        ntStatus = BasicSupportHandler(PropertyRequest);
-                    }
-                    break;
-
-                case LINEOUT_BASS:
-                case LINEOUT_TREBLE:
-                    if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
-                          (PropertyRequest->Node == LINEOUT_BASS) ) ||
-                        ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
-                          (PropertyRequest->Node == LINEOUT_TREBLE) ) )
-                    {
-                        ntStatus = BasicSupportHandler(PropertyRequest);
-                    }
-                    break;
-            }
-        }
-    }
-
-    return ntStatus;
-}
 
 /*****************************************************************************
  * PropertyHandler_SuperMixCaps()
@@ -1337,6 +1048,298 @@ PropertyHandler_CpuResources
     return ntStatus;
 }
 
+
+#pragma code_seg()
+
+/*****************************************************************************
+ * PropertyHandler_Level()
+ *****************************************************************************
+ * Accesses a KSAUDIO_LEVEL property.
+ * This function got called at IRQL 2 so i'm making it non pageable (and anything it calls too)
+ */
+static
+NTSTATUS
+PropertyHandler_Level
+(
+    IN      PPCPROPERTY_REQUEST   PropertyRequest
+)
+{
+    ASSERT(PropertyRequest);
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportTopologyHDA::PropertyHandler_Level]"));
+
+    CMiniportTopologyHDA *that =
+        (CMiniportTopologyHDA *) PropertyRequest->MajorTarget;
+
+    NTSTATUS        ntStatus = STATUS_INVALID_PARAMETER;
+    ULONG           count;
+    LONG            channel;
+
+    // validate node
+    if(PropertyRequest->Node != ULONG(-1))
+    {
+        if(PropertyRequest->Verb & KSPROPERTY_TYPE_GET)
+        {
+            // get the instance channel parameter
+            if(PropertyRequest->InstanceSize >= sizeof(LONG))
+            {
+                channel = *(PLONG(PropertyRequest->Instance));
+
+                // only support get requests on either mono/left (0) or right (1) channels
+                if ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) )
+                {
+                    // validate and get the output parameter
+                    if (PropertyRequest->ValueSize >= sizeof(LONG))
+                    {
+                        PLONG Level = (PLONG)PropertyRequest->Value;
+
+                        // switch on node if
+                        switch(PropertyRequest->Node)
+                        {
+                            case WAVEOUT_VOLUME:
+                            case SYNTH_VOLUME:
+                            case CD_VOLUME:
+                            case LINEIN_VOLUME:
+                            case MIC_VOLUME:
+                            case LINEOUT_VOL:
+                                // check if volume property request
+                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
+                                {
+                                    // bail out if a right channel request on the mono mic volume
+                                    if( (PropertyRequest->Node == MIC_VOLUME) && (channel != CHAN_LEFT) )
+                                    {
+                                        break;
+                                    }
+                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
+                                    PropertyRequest->ValueSize = sizeof(LONG);
+                                    ntStatus = STATUS_SUCCESS;
+                                }
+                                break;
+        
+                            case LINEOUT_GAIN:
+                            case WAVEIN_GAIN:
+                                // check if volume property request
+                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
+                                {
+                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
+                                    PropertyRequest->ValueSize = sizeof(LONG);
+                                    ntStatus = STATUS_SUCCESS;
+                                }
+                                break;
+
+                            case LINEOUT_BASS:
+                            case LINEOUT_TREBLE:
+                                if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
+                                      (PropertyRequest->Node == LINEOUT_BASS) ) ||
+                                    ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
+                                      (PropertyRequest->Node == LINEOUT_TREBLE) ) )
+                                {
+                                    *Level = ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + channel ];
+                                    PropertyRequest->ValueSize = sizeof(LONG);
+                                    ntStatus = STATUS_SUCCESS;
+                                }
+                                break;
+                        }
+                    }
+                }
+            }
+
+        } else if(PropertyRequest->Verb & KSPROPERTY_TYPE_SET)
+        {
+            // get the instance channel parameter
+            if(PropertyRequest->InstanceSize >= sizeof(LONG))
+            {
+                channel = *(PLONG(PropertyRequest->Instance));
+
+                // only support set requests on either mono/left (0), right (1), or master (-1) channels
+                if ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER))
+                {
+                    // validate and get the input parameter
+                    if (PropertyRequest->ValueSize == sizeof(LONG))
+                    {
+                        PLONG Level = (PLONG)PropertyRequest->Value;
+
+                        // switch on the node id
+                        switch(PropertyRequest->Node)
+                        {
+                            case WAVEOUT_VOLUME:
+                            case SYNTH_VOLUME:
+                            case CD_VOLUME:
+                            case LINEIN_VOLUME:
+                            case MIC_VOLUME:
+                            case LINEOUT_VOL:
+                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
+                                {
+                                    // convert the level to register bits
+                                    if(*Level <= (-62 << 16))
+                                    {
+                                        count = 0;
+                                    } else if(*Level >= 0)
+                                    {
+                                        count = 0x1F;
+                                    } else
+                                    {
+                                        count = (((*Level >> 16) + 62) >> 1) & 0x1F;
+                                    }
+
+                                    // set right channel if channel requested is right or master
+                                    // and node is not mic volume (mono)
+                                    if ( ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) &&
+                                         ( PropertyRequest->Node != MIC_VOLUME ) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
+
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
+                                                          5,
+                                                          3,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                    // set the left channel if channel requested is left or master
+                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
+                                        
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                          5,
+                                                          3,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                }
+                                break;
+        
+                            case LINEOUT_GAIN:
+                            case WAVEIN_GAIN:
+                                if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
+                                {                                                                        
+                                    // determine register bits
+                                    if(*Level >= (18 << 16))
+                                    {
+                                        count = 0x3;
+                                    } else if(*Level <= 0)
+                                    {
+                                        count = 0;
+                                    } else
+                                    {
+                                        count = (*Level >> 17) / 3;
+                                    }
+    
+                                    // set right channel if channel requested is right or master
+                                    if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
+
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
+                                                          2,
+                                                          6,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                    // set the left channel if channel requested is left or master
+                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
+
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                          2,
+                                                          6,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                }
+                                break;
+        
+                            case LINEOUT_BASS:
+                            case LINEOUT_TREBLE:
+                                if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
+                                      (PropertyRequest->Node == LINEOUT_BASS) ) ||
+                                    ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
+                                      (PropertyRequest->Node == LINEOUT_TREBLE) ) )
+                                {
+                                    // determine register bits
+                                    if(*Level <= (-14 << 16))
+                                    {
+                                        count = 0;
+                                    } else if(*Level >= (14 << 16))
+                                    {
+                                        count = 0xF;
+                                    } else
+                                    {
+                                        count = ((*Level >> 16) + 14) >> 1;
+                                    }
+
+                                    // set right channel if channel requested is right or master
+                                    if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
+        
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister + 1,
+                                                          4,
+                                                          4,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                    // set the left channel if channel requested is left or master
+                                    if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
+                                    {
+                                        // cache the commanded control value
+                                        ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
+                                        
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                          4,
+                                                          4,
+                                                          BYTE(count) );
+                                        ntStatus = STATUS_SUCCESS;
+                                    }
+                                }
+                                break;
+                        }
+                    }
+                }
+            }
+
+        } else if(PropertyRequest->Verb & KSPROPERTY_TYPE_BASICSUPPORT)
+        {
+            // service basic support request
+            switch(PropertyRequest->Node)
+            {
+                case WAVEOUT_VOLUME:
+                case SYNTH_VOLUME:
+                case CD_VOLUME:
+                case LINEIN_VOLUME:
+                case MIC_VOLUME:
+                case LINEOUT_VOL:
+                case LINEOUT_GAIN:
+                case WAVEIN_GAIN:
+                    if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
+                    {
+                        ntStatus = BasicSupportHandler(PropertyRequest);
+                    }
+                    break;
+
+                case LINEOUT_BASS:
+                case LINEOUT_TREBLE:
+                    if( ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_BASS) &&
+                          (PropertyRequest->Node == LINEOUT_BASS) ) ||
+                        ( (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_TREBLE) &&
+                          (PropertyRequest->Node == LINEOUT_TREBLE) ) )
+                    {
+                        ntStatus = BasicSupportHandler(PropertyRequest);
+                    }
+                    break;
+            }
+        }
+    }
+
+    return ntStatus;
+}
+
 /*****************************************************************************
  * ThisManyOnes()
  *****************************************************************************
@@ -1395,5 +1398,3 @@ WriteBitsToMixer
                                       (data & ~mask) | ( (Value << Shift) & mask));
     }
 }
-
-#pragma code_seg()

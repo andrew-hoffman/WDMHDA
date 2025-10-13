@@ -46,6 +46,9 @@ private:
     PDMACHANNELSLAVE    DmaChannel8;                // Abstracted channel.
     PDMACHANNELSLAVE    DmaChannel16;               // Abstracted channel.
 
+	PDMACHANNEL         DmaChannel; 
+	PADAPTER_OBJECT     AdapterObject;
+
     PSERVICEGROUP       ServiceGroup;               // For notification.
     KMUTEX              SampleRateSync;             // Sync for sample rate changes.
 

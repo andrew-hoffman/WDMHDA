@@ -185,15 +185,13 @@ ProcessResources
     }
 #endif
 
-    NTSTATUS ntStatus = STATUS_SUCCESS;
-
-	//let me COOK here dangit!
-	/*
-
-    //
+	//
     // Make sure we have the expected number of resources.
+	// TODO: fix for the resources we actually have.
     //
-    if  (   (countIO != 1)
+
+    /*
+	if  (   (countIO != 1)
         ||  (countIRQ < 1)
         ||  (countDMA < 1)
         )
@@ -201,6 +199,36 @@ ProcessResources
         _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
         ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
     }
+	*/
+
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+
+	    //
+    // Create the DMA Channel object.
+    //
+    ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
+                                          NULL,             // OuterUnknown (opt)
+                                          NULL,             // ResourceList (opt)
+                                          TRUE,             // Dma32BitAddresses
+                                          FALSE,            // Dma64BitAddresses
+                                          FALSE,            // IgnoreCount
+                                          Width32Bits,      // DmaWidth
+                                          MaximumDmaSpeed  // DmaSpeed
+                                          );              
+    if (!NT_SUCCESS (ntStatus))
+    {
+        DOUT (DBG_ERROR, ("Failed on NewMasterDmaChannel!"));
+        return ntStatus;
+    }
+
+    //
+    // Get the DMA adapter.
+    //
+    AdapterObject = DmaChannel->GetAdapterObject ();
+
+
+	//let me COOK here dangit!
+	/*
 
     if (NT_SUCCESS(ntStatus))
     {
@@ -1351,7 +1379,8 @@ Init
 /*****************************************************************************
  * CMiniportWaveCyclicStreamHDA::SetNotificationFreq()
  *****************************************************************************
- * Sets the notification frequency.
+ * Sets the notification frequency. 
+ * the port driver calls this. will only ask for ~10 ms interrupts
  */
 STDMETHODIMP_(ULONG)
 CMiniportWaveCyclicStreamHDA::

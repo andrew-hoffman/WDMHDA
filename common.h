@@ -18,10 +18,15 @@
 #define _COMMON_H_
 
 #define PC_NEW_NAMES    1
+
 #include "portcls.h"
 #include "DMusicKS.h"
+
+//get all debug prints
+#define DEBUG_LEVEL DEBUGLVL_BLAB
 #include "ksdebug.h"
 #include "debug.h"
+
 
 
 

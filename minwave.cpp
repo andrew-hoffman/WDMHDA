@@ -64,85 +64,6 @@ MapUsingTable
 }
 
 /*****************************************************************************
- * CMiniportWaveCyclicHDA::ConfigureDevice()
- *****************************************************************************
- * Configures the hardware to use the indicated interrupt and DMA channels.
- * Returns FALSE iff the configuration is invalid.
- */
-BOOLEAN
-CMiniportWaveCyclicHDA::
-ConfigureDevice
-(
-    IN      ULONG   Interrupt,
-    IN      ULONG   Dma8Bit,
-    IN      ULONG   Dma16Bit
-)
-{
-    PAGED_CODE();
-
-    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ConfigureDevice]"));
-
-    //
-    // Tables mapping DMA and IRQ values to register bit offsets.
-    //
-    static ULONG validDma[] = { 0, 1, ULONG(-1), 3, ULONG(-1), 5, 6, 7 } ;
-    static ULONG validIrq[] = { 9, 5, 7, 10 } ;
-
-    //
-    // Make sure we are using the right DMA channels.
-    //
-    if (Dma8Bit > 3)
-    {
-        return FALSE;
-    }
-    if (Dma16Bit < 5)
-    {
-        return FALSE;
-    }
-
-    //
-    // Generate the register value for interrupts.
-    //
-    int bit = MapUsingTable(Interrupt,validIrq,SIZEOF_ARRAY(validIrq));
-    if (bit == -1)
-    {
-        return FALSE;
-    }
-
-    BYTE irqConfig = BYTE(1 << bit);
-
-    //
-    // Generate the register value for DMA.
-    //
-    bit = MapUsingTable(Dma8Bit,validDma,SIZEOF_ARRAY(validDma));
-    if (bit == -1)
-    {
-        return FALSE;
-    }
-
-    BYTE dmaConfig = BYTE(1 << bit);
-
-    if (Dma16Bit != ULONG(-1))
-    {
-        bit = MapUsingTable(Dma16Bit,validDma,SIZEOF_ARRAY(validDma));
-        if (bit == -1)
-        {
-            return FALSE;
-        }
-
-        dmaConfig |= BYTE(1 << bit);
-    }
-
-    //
-    // Inform the hardware.
-    //
-    AdapterCommon->MixerRegWrite(DSP_MIX_IRQCONFIG,irqConfig);
-    AdapterCommon->MixerRegWrite(DSP_MIX_DMACONFIG,dmaConfig);
-
-    return TRUE;
-}
-
-/*****************************************************************************
  * CMiniportWaveCyclicHDA::ProcessResources()
  *****************************************************************************
  * Processes the resource list, setting up helper objects accordingly.
@@ -167,43 +88,38 @@ ProcessResources
     //
     // Get counts for the types of resources.
     //
-    ULONG   countIO     = ResourceList->NumberOfPorts();
+    ULONG   countMemory    = ResourceList->NumberOfMemories();
     ULONG   countIRQ    = ResourceList->NumberOfInterrupts();
-    ULONG   countDMA    = ResourceList->NumberOfDmas();
 
 #if (DBG)
     _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on IRQ 0x%X",
         ResourceList->FindUntranslatedInterrupt(0)->u.Interrupt.Level) );
 
-    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on Port 0x%X",
-        ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart) );
+    //_DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on Port 0x%X",
+    //    ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart) );
 
-    for (ULONG i = 0; i < countDMA; i++)
-    {
-        _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on DMA 0x%X",
-            ResourceList->FindUntranslatedDma(i)->u.Dma.Channel) );
-    }
+    //for (ULONG i = 0; i < countDMA; i++)
+    //{
+    //    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on DMA 0x%X",
+    //        ResourceList->FindUntranslatedDma(i)->u.Dma.Channel) );
+    //}
 #endif
 
 	//
     // Make sure we have the expected number of resources.
-	// TODO: fix for the resources we actually have.
+	// 
     //
+	NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    /*
-	if  (   (countIO != 1)
+	if  (   (countMemory < 1)
         ||  (countIRQ < 1)
-        ||  (countDMA < 1)
         )
     {
         _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
         ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
     }
-	*/
 
-    NTSTATUS ntStatus = STATUS_SUCCESS;
-
-	    //
+	//
     // Create the DMA Channel object.
     //
     ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
@@ -212,8 +128,8 @@ ProcessResources
                                           TRUE,             // Dma32BitAddresses
                                           FALSE,            // Dma64BitAddresses
                                           FALSE,            // IgnoreCount
-                                          Width32Bits,      // DmaWidth
-                                          MaximumDmaSpeed  // DmaSpeed
+                                          MaximumDmaWidth,  // DmaWidth
+                                          MaximumDmaSpeed   // DmaSpeed
                                           );              
     if (!NT_SUCCESS (ntStatus))
     {
@@ -226,130 +142,48 @@ ProcessResources
     //
     AdapterObject = DmaChannel->GetAdapterObject ();
 
-
-	//let me COOK here dangit!
-	/*
-
-    if (NT_SUCCESS(ntStatus))
-    {
-        //
-        // Get the port address.
-        //
-        PortBase =
-            PUCHAR(ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart);
-
-        //
-        // Instantiate a DMA channel for 8-bit transfers.
-        //
-        ntStatus =
-            Port->NewSlaveDmaChannel
-            (
-                &DmaChannel8,
-                NULL,
-                ResourceList,
-                0,
-                MAXLEN_DMA_BUFFER,
-                FALSE,      // DemandMode
-                Compatible
-            );
-
-        //
-        // Allocate the buffer for 8-bit transfers.
-        //
-        if (NT_SUCCESS(ntStatus))
-        {
-            ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
+	//
+    // Allocate the buffer
+    //
+    if (NT_SUCCESS(ntStatus)) {
+        ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
             
-            do {
-              ntStatus = DmaChannel8->AllocateBuffer(lDMABufferLength,NULL);
-              lDMABufferLength >>= 1;
-            } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE / 2)));
-        }
+        do {
+			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
+			lDMABufferLength >>= 1;
+        } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
+		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
+		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));
+    }
+	if (NT_SUCCESS(ntStatus))
+    {
+        intNumber = ResourceList->
+                    FindUntranslatedInterrupt(0)->u.Interrupt.Level;
+		//give it some fake DMA channel numbers to keep going for now
+		dma8Bit = 1;
+		dma16Bit = 5;
 
-        if (NT_SUCCESS(ntStatus))
-        {
-            dma8Bit = ResourceList->FindUntranslatedDma(0)->u.Dma.Channel;
+		// ConfigureDevice() doesn't do anything we need
+		// it's just setting the irq and dma numbers to the hardware
+		// and the HDA doesnt actually care what IRQ it's on
 
-            if (countDMA > 1)
-            {
-                //
-                // Instantiate a DMA channel for 16-bit transfers.
-                //
-                ntStatus =
-                    Port->NewSlaveDmaChannel
-                    (
-                        &DmaChannel16,
-                        NULL,
-                        ResourceList,
-                        1,
-                        MAXLEN_DMA_BUFFER,
-                        FALSE,
-                        Compatible
-                    );
-
-                //
-                // Allocate the buffer for 16-bit transfers.
-                //
-                if (NT_SUCCESS(ntStatus))
-                {
-                    ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
-                     
-                    do {
-                        ntStatus = DmaChannel16->AllocateBuffer(lDMABufferLength,NULL);
-                        lDMABufferLength >>= 1;
-                    } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE / 2)));
-                }
-
-                if (NT_SUCCESS(ntStatus))
-                {
-                    dma16Bit =
-                        ResourceList->FindUntranslatedDma(1)->u.Dma.Channel;
-                }
-            }
-
-            if (NT_SUCCESS(ntStatus))
-            {
-                //
-                // Get the interrupt number and configure the device.
-                //
-                intNumber =
-                    ResourceList->
-                        FindUntranslatedInterrupt(0)->u.Interrupt.Level;
-
-                if  (!  ConfigureDevice(intNumber,dma8Bit,dma16Bit))
+		/*if  (!  ConfigureDevice(intNumber,dma8Bit,dma16Bit))
                 {
                     _DbgPrintF(DEBUGLVL_TERSE,("ConfigureDevice Failure"));
                     ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
                 }
-            }
-            else
-            {
-                _DbgPrintF(DEBUGLVL_TERSE,("NewSlaveDmaChannel 2 Failure %X", ntStatus ));
-            }
-        }
-        else
+		*/
+	} else {
+		//
+		// Release instantiated objects in case of failure.
+		//
+		_DbgPrintF(DEBUGLVL_TERSE,("NewMasterDmaChannel Failure %X", ntStatus ));
+		if (DmaChannel)
         {
-            _DbgPrintF(DEBUGLVL_TERSE,("NewSlaveDmaChannel 1 Failure %X", ntStatus ));
+            DmaChannel->Release();
+            DmaChannel = NULL;
         }
-    }
-
-    //
-    // Release instantiated objects in case of failure.
-    //
-    if (! NT_SUCCESS(ntStatus))
-    {
-        if (DmaChannel8)
-        {
-            DmaChannel8->Release();
-            DmaChannel8 = NULL;
-        }
-        if (DmaChannel16)
-        {
-            DmaChannel16->Release();
-            DmaChannel16 = NULL;
-        }
-    }
-	*/
+	}
 
     return ntStatus;
 }
@@ -485,14 +319,11 @@ CMiniportWaveCyclicHDA::
     {
         Port->Release();
     }
-    if (DmaChannel8)
+	if (DmaChannel)
     {
-        DmaChannel8->Release();
+        DmaChannel->Release();
     }
-    if (DmaChannel16)
-    {
-        DmaChannel16->Release();
-    }
+
     if (ServiceGroup)
     {
         ServiceGroup->Release();
@@ -616,7 +447,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         8,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
-        5000,   // Minimum rate.
+        8000,   // Minimum rate.
         44100   // Maximum rate.
     }
 };
@@ -1125,7 +956,7 @@ NewStream
         }
     }
 
-    PDMACHANNELSLAVE    dmaChannel = NULL;
+    PDMACHANNEL    dmaChannel = NULL;
     PWAVEFORMATEX       waveFormat = PWAVEFORMATEX(DataFormat + 1);
 
     //
@@ -1137,14 +968,14 @@ NewStream
         {
             if (! Allocated8Bit)
             {
-                dmaChannel = DmaChannel8;
+                dmaChannel = DmaChannel;
             }
         }
         else
         {
             if (! Allocated16Bit)
             {
-                dmaChannel = DmaChannel16;
+                dmaChannel = DmaChannel;
             }
         }
     }
@@ -1329,7 +1160,7 @@ Init
     IN      ULONG                       Channel_,
     IN      BOOLEAN                     Capture_,
     IN      PKSDATAFORMAT               DataFormat,
-    IN      PDMACHANNELSLAVE            DmaChannel_
+    IN      PDMACHANNEL		            DmaChannel_
 )
 {
     PAGED_CODE();
@@ -1506,6 +1337,12 @@ GetPosition
     // Not PAGED_CODE().  May be called at dispatch level.
 
     ASSERT(Position);
+	//TODO: adding fns to IAdapterCommon properly so i can call this
+	//FIXME
+
+	//*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
+
+	/*
 
     ULONG transferCount = DmaChannel->TransferCount();
 
@@ -1521,9 +1358,12 @@ GetPosition
         }
     }
     else
+	*/
+
     {
         *Position = 0;
     }
+	
 
    return STATUS_SUCCESS;
 }
@@ -1626,8 +1466,9 @@ SetState
 
                 Miniport->AdapterCommon->WriteController(DSP_CMD_SPKROFF);
 
-
-                DmaChannel->Stop();
+	//TODO: adding fns to IAdapterCommon properly so i can call this
+	//FIXME
+                //Miniport->AdapterCommon->hda_stop_stream();
 
             }
             break;
@@ -1692,8 +1533,9 @@ SetState
 
                 //
                 // Start DMA.
-                //
-                DmaChannel->Start(DmaChannel->BufferSize(),!Capture);
+                // TODO: hda_start_stream() method
+				//FIXME
+                //DmaChannel->Start(DmaChannel->BufferSize(),!Capture);
 
                 Miniport->AdapterCommon->WriteController(mode) ;
 

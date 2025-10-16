@@ -43,9 +43,6 @@ private:
     BOOLEAN             Allocated8Bit;              // 8-bit DMA in use.
     BOOLEAN             Allocated16Bit;             // 16-bit DMA in use.
 
-    PDMACHANNELSLAVE    DmaChannel8;                // Abstracted channel.
-    PDMACHANNELSLAVE    DmaChannel16;               // Abstracted channel.
-
 	PDMACHANNEL         DmaChannel; 
 	PADAPTER_OBJECT     AdapterObject;
 
@@ -121,7 +118,7 @@ private:
     BOOLEAN                     Format16Bit;    // 16- or 8-bit samples.
     BOOLEAN                     FormatStereo;   // Two or one channel.
     KSSTATE                     State;          // Stop, pause, run.
-    PDMACHANNELSLAVE            DmaChannel;     // DMA channel to use.
+    PDMACHANNEL		            DmaChannel;     // DMA channel to use.
     BOOLEAN                     RestoreInputMixer;  // Restore input mixer.
     UCHAR                       InputMixerLeft; // Cache for left input mixer.
 
@@ -152,7 +149,7 @@ public:
         IN      ULONG                       Channel,
         IN      BOOLEAN                     Capture,
         IN      PKSDATAFORMAT               DataFormat,
-        OUT     PDMACHANNELSLAVE            DmaChannel
+        OUT     PDMACHANNEL		            DmaChannel
     );
 };
 

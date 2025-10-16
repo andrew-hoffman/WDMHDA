@@ -125,9 +125,9 @@ ProcessResources
     ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
                                           NULL,             // OuterUnknown (opt)
                                           NULL,             // ResourceList (opt)
+										  MAXLEN_DMA_BUFFER,// MaxLength
                                           TRUE,             // Dma32BitAddresses
                                           FALSE,            // Dma64BitAddresses
-                                          FALSE,            // IgnoreCount
                                           MaximumDmaWidth,  // DmaWidth
                                           MaximumDmaSpeed   // DmaSpeed
                                           );              

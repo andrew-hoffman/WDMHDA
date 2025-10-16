@@ -138,7 +138,7 @@ ProcessResources
     }
 
     //
-    // Get the DMA adapter.
+    // Get the DMA adapter object.
     //
     AdapterObject = DmaChannel->GetAdapterObject ();
 
@@ -154,25 +154,19 @@ ProcessResources
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
 		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
 		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));
+
+		ASSERT((DmaChannel->PhysicalAddress().LowPart & 0x7F) == 0); //require 128 byte alignment
     }
 	if (NT_SUCCESS(ntStatus))
     {
         intNumber = ResourceList->
                     FindUntranslatedInterrupt(0)->u.Interrupt.Level;
-		//give it some fake DMA channel numbers to keep going for now
+		//give it some fake DMA channel numbers in case those are needed
 		dma8Bit = 1;
 		dma16Bit = 5;
+		//it's showtime then
 
-		// ConfigureDevice() doesn't do anything we need
-		// it's just setting the irq and dma numbers to the hardware
-		// and the HDA doesnt actually care what IRQ it's on
-
-		/*if  (!  ConfigureDevice(intNumber,dma8Bit,dma16Bit))
-                {
-                    _DbgPrintF(DEBUGLVL_TERSE,("ConfigureDevice Failure"));
-                    ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-                }
-		*/
+		ntStatus = AdapterCommon->hda_showtime(DmaChannel);
 	} else {
 		//
 		// Release instantiated objects in case of failure.
@@ -184,6 +178,7 @@ ProcessResources
             DmaChannel = NULL;
         }
 	}
+
 
     return ntStatus;
 }
@@ -1340,7 +1335,7 @@ GetPosition
 	//TODO: adding fns to IAdapterCommon properly so i can call this
 	//FIXME
 
-	//*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
+	*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
 
 	/*
 
@@ -1468,7 +1463,7 @@ SetState
 
 	//TODO: adding fns to IAdapterCommon properly so i can call this
 	//FIXME
-                //Miniport->AdapterCommon->hda_stop_stream();
+                Miniport->AdapterCommon->hda_stop_sound();
 
             }
             break;
@@ -1533,9 +1528,11 @@ SetState
 
                 //
                 // Start DMA.
-                // TODO: hda_start_stream() method
+                // TODO: hda_start_sound() method
 				//FIXME
                 //DmaChannel->Start(DmaChannel->BufferSize(),!Capture);
+
+				Miniport->AdapterCommon->hda_start_sound();
 
                 Miniport->AdapterCommon->WriteController(mode) ;
 

@@ -162,6 +162,9 @@ public:
     STDMETHODIMP_(NTSTATUS) ResetController
     (   void
     );
+	STDMETHODIMP_(NTSTATUS) hda_stop_stream
+    (   void
+    );
     STDMETHODIMP_(void) MixerRegWrite
     (
         IN      BYTE    Index,
@@ -181,54 +184,6 @@ public:
     (   void
     );
 
-    //
-    // Reads a 8 bit ICH bus master register.
-    //
-    STDMETHODIMP_(UCHAR) ReadBMControlRegister8
-    (
-        IN  ULONG ulOffset
-    );
-
-    //
-    // Reads a 16 bit ICH bus master register.
-    //
-    STDMETHODIMP_(USHORT) ReadBMControlRegister16
-    (
-        IN  ULONG ulOffset
-    );
-
-    //
-    // Reads a 32 bit ICH bus master register.
-    //
-    STDMETHODIMP_(ULONG) ReadBMControlRegister32
-    (
-        IN  ULONG ulOffset
-    );
-
-    //
-    // Writes a 8 bit ICH bus master register.
-    //                                        
-    STDMETHODIMP_(void) WriteBMControlRegister
-    (
-        IN  ULONG ulOffset,
-        IN  UCHAR Value
-    );
-
-    //
-    // writes a 16 bit ICH bus master register.
-    //
-    STDMETHODIMP_(void) WriteBMControlRegister
-    (
-        IN  ULONG ulOffset,
-        IN  USHORT Value
-    );
-
-    // writes a 32 bit ICH bus master register.
-    STDMETHODIMP_(void) WriteBMControlRegister
-    (
-        IN  ULONG ulOffset,
-        IN  ULONG Value
-    );
 	STDMETHODIMP_(NTSTATUS) ProgramSampleRate
     (
         IN  DWORD dwSampleRate
@@ -252,14 +207,14 @@ public:
 	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain);
 	STDMETHODIMP_(void)		hda_set_volume(ULONG volume);
 	STDMETHODIMP_(void)		hda_start_sound (void);
-	STDMETHODIMP_(NTSTATUS)	hda_stop_stream (void);
 	STDMETHODIMP_(void)		hda_stop_sound (void);
-	//STDMETHODIMP_(void)	hda_check_headphone_connection_change(void);
+
+	STDMETHODIMP_(void)		hda_check_headphone_connection_change(void);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
-	STDMETHODIMP_(NTSTATUS)	hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate);
+	STDMETHODIMP_(NTSTATUS)	hda_showtime(PDMACHANNEL DmaChannel);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
@@ -360,8 +315,8 @@ NewAdapterCommon
         PADAPTERCOMMON
     );
 }   
-
-	ULONG audBufSize = 4410 * 2 * 2; //100ms of 2ch 16 bit audio
+	//100ms of 2ch 16 bit audio 4410 * 2 * 2
+	ULONG audBufSize = 65536; 
 	ULONG BdlSize = 256 * 16 * 2; //256 entries, 16 bytes, x2 for shadow bdl;
 
 /*****************************************************************************
@@ -620,9 +575,10 @@ Init
 
 
 	//map the audio buffer too
-	// - or should we be doing this through WaveCyclic?
+	//we should be doing this through creating a DmaChannel but we dont have that yet
 	//not sure if that can give me the desired 128 byte phys alignment but we might
 	//get that automatically just by mapping more than a 4k page worth.
+	/*
 
 	PPHYSICAL_ADDRESS pBufLogicalAddress = NULL;
 	BufVirtualAddress = NULL;
@@ -645,136 +601,16 @@ Init
 		DOUT(DBG_ERROR, ("Couldn't map phys Buffer Space"));
 		return STATUS_NO_MEMORY;
 	}
+	*/
 
 	//
     // Reset the controller and init registers
     //
-    ntStatus = InitHDA ();
+   ntStatus = InitHDA ();
+
     if (!NT_SUCCESS (ntStatus))
         return ntStatus;
-    
-
-    //
-    // Probe codec configuration
-    //
-    //ntStatus = ProbeHWConfig ();
-    //if (!NT_SUCCESS (ntStatus)){
-    //    DOUT (DBG_ERROR, ("Probing of hardware configuration failed!"));
-    //    return ntStatus;
-    //}
-
-	
-	//SetAC97Default ();
-
-    //
-    // Initialize the device state.
-    //
-    m_PowerState = PowerDeviceD0;
-
-	DOUT(DBG_SYSINFO, ("reset streams"));
-
-	ntStatus = hda_stop_stream ();
-	if (!NT_SUCCESS (ntStatus)){
-        DOUT (DBG_ERROR, ("Can't reset stream"));
-        return ntStatus;
-    }
-
-	DOUT(DBG_SYSINFO, ("write to audio ram"));
-
-	// can i write to my audio buffer at all?
-	for(i = 0; i < 10; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
-	for(i = 10; i < 20; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xaaaa;
-	for(i = 20; i < 30; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xcccc;
-
-	DOUT(DBG_SYSINFO, ("garbage written in"));
-	ProgramSampleRate(44100);
-
-	//fill buffer entries
-	BdlMemVirt[0] = BufLogicalAddress.LowPart;
-	BdlMemVirt[1] = BufLogicalAddress.HighPart;
-	BdlMemVirt[2] = audBufSize;
-	BdlMemVirt[3] = 0;
-
-	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
-	BdlMemVirt[4] = BufLogicalAddress.LowPart;
-	BdlMemVirt[5] = BufLogicalAddress.HighPart;
-	BdlMemVirt[6] = audBufSize;
-	BdlMemVirt[7] = 0;
-
-	DOUT(DBG_SYSINFO, ("BDL all set up"));
-
-	KeFlushIoBuffers(mdl, FALSE, TRUE); 
-	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
-
-	//set buffer registers
-	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
-	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
-	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
-	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
-
-	DOUT(DBG_SYSINFO, ("buffer address programmed"));
-
-
-	//set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
-
-	//set Audio Output node data format
-	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	if(second_audio_output_node_number != 0) {
-		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	}
-	KeStallExecutionProcessor(10);
-
-	DOUT(DBG_SYSINFO, ("ready to start the stream"));
-
-
-	//start streaming to stream 1
-	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x02);
-
-	DOUT(DBG_SYSINFO, ("done with innit"));
-
-	//TODO: setup interrupt service routine
-
-    /*if(NT_SUCCESS(ntStatus))
-    {
-        _DbgPrintF(DEBUGLVL_VERBOSE,("ResetController Succeeded"));
-        AcknowledgeIRQ();
-    
-        //
-        // Hook up the interrupt.
-        //
-        ntStatus = PcNewInterruptSync(                              // See portcls.h
-                                        &m_pInterruptSync,          // Save object ptr
-                                        NULL,                       // OuterUnknown(optional).
-                                        ResourceList,               // He gets IRQ from ResourceList.
-                                        0,                          // Resource Index
-                                        InterruptSyncModeNormal     // Run ISRs once until we get SUCCESS
-                                     );
-        if (NT_SUCCESS(ntStatus) && m_pInterruptSync)
-        {                                                                       //  run this ISR first
-            ntStatus = m_pInterruptSync->RegisterServiceRoutine(InterruptServiceRoutine,PVOID(this),FALSE);
-            if (NT_SUCCESS(ntStatus))
-            {
-                ntStatus = m_pInterruptSync->Connect();
-            }
-
-            // if we could not connect or register the ISR, release the object.
-            if (!NT_SUCCESS (ntStatus))
-            {
-                m_pInterruptSync->Release();
-                m_pInterruptSync = NULL;
-            }
-        }
-    } else
-    {
-        _DbgPrintF(DEBUGLVL_TERSE,("ResetController Failure"));
-    }
-	*/
-
+	//ntStatus = hda_showtime (NULL);
     return ntStatus;
 }
 
@@ -1205,6 +1041,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
     {        
         DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
     }
+
+
 
     return ntStatus;
 }
@@ -2049,7 +1887,9 @@ MixerReset
 (   void
 )
 {
-    ASSERT(m_pWaveBase);
+
+	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerReset]"));
+    /*ASSERT(m_pWaveBase);
 
     WRITE_PORT_UCHAR
     (
@@ -2064,6 +1904,7 @@ MixerReset
     );
 
     RestoreMixerSettingsFromRegistry();
+	*/
 }
 
 /*****************************************************************************
@@ -2093,26 +1934,11 @@ ResetController(void)
 {
     NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
-    // write a 1 to the reset bit
-    WRITE_PORT_UCHAR(m_pWaveBase + DSP_REG_RESET,1);
+	DOUT (DBG_PRINT, ("[CAdapterCommon::ResetController]"));
 
-    // wait for  at least 3 microseconds
-    KeStallExecutionProcessor( 5L );    // okay, 5us
+	//ntStatus = hda_stop_stream();
 
-    // write a 0 to the reset bit
-    WRITE_PORT_UCHAR(m_pWaveBase + DSP_REG_RESET,0);
-
-    // hang out for 100us
-    KeStallExecutionProcessor( 100L );
-    
-    // read the controller
-    BYTE ReadVal = ReadController();
-
-    // check return value
-    if( ReadVal == BYTE(0xAA) )
-    {
-        ntStatus = STATUS_SUCCESS;
-    }
+	//ntStatus = InitHDA();
 
     return ntStatus;
 }
@@ -2650,33 +2476,56 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 	writeULONG(reg, readULONG(reg) & ~flag);
 }
 
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRESS physAddress, ULONG bufSize, ULONG sample_rate) {
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
-	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_play_pcm_data_in_loop]"));
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_showtime]"));
+
+	//get the physical and virtual address pointers from the dma channel object
+	BufLogicalAddress = DmaChannel->PhysicalAddress();
+	BufVirtualAddress = DmaChannel->SystemAddress();
+	audBufSize = DmaChannel->BufferSize();
+
+    //
+    // Initialize the device state.
+    //
+    m_PowerState = PowerDeviceD0;
+
+	DOUT(DBG_SYSINFO, ("reset streams"));
+
+	ntStatus = hda_stop_stream ();
+	if (!NT_SUCCESS (ntStatus)){
+        DOUT (DBG_ERROR, ("Can't reset stream"));
+        return ntStatus;
+    }
+
+	DOUT(DBG_SYSINFO, ("write to audio ram"));
+
+	// can i write to my audio buffer at all?
+	for(int i = 0; i < 10; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
+	for(i = 10; i < 20; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0xaaaa;
+	for(i = 20; i < 30; ++i)
+		((PUSHORT)BufVirtualAddress)[i] = 0xcccc;
+
+	DOUT(DBG_SYSINFO, ("garbage written in"));
+	ProgramSampleRate(44100);
 
 	//fill buffer entries
-	BdlMemVirt[0] = physAddress.LowPart;
-	BdlMemVirt[1] = physAddress.HighPart;
-	BdlMemVirt[2] = bufSize;
+	BdlMemVirt[0] = BufLogicalAddress.LowPart;
+	BdlMemVirt[1] = BufLogicalAddress.HighPart;
+	BdlMemVirt[2] = audBufSize;
 	BdlMemVirt[3] = 0;
 
 	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
-	//second verse same as the first
-	//writing all-zeros does not seem to work on Virtualbox for some reason.
-	BdlMemVirt[4] = physAddress.LowPart;
-	BdlMemVirt[5] = physAddress.HighPart;
-	BdlMemVirt[6] = bufSize;
+	BdlMemVirt[4] = BufLogicalAddress.LowPart;
+	BdlMemVirt[5] = BufLogicalAddress.HighPart;
+	BdlMemVirt[6] = audBufSize;
 	BdlMemVirt[7] = 0;
 
-
-	DOUT(DBG_SYSINFO, ("Playing buffer at %x size %d", physAddress.LowPart, bufSize));
-
-	//lets check that the BDL looks good from here
-//	for(ULONG i = 0; i < 1024; ++i){
-//		DOUT(DBG_SYSINFO, ("bdl %d %X", i, BdlMemVirt[i]));
-//	}
+	DOUT(DBG_SYSINFO, ("BDL all set up"));
 
 	KeFlushIoBuffers(mdl, FALSE, TRUE); 
 	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
@@ -2684,18 +2533,19 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRE
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
-	writeULONG(OutputStreamBase + 0x08, bufSize);
-	writeUSHORT(OutputStreamBase + 0x0C, 1);
+	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
+	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
+
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
 
 
 	//set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(sample_rate, 2, 16));
+	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
 
 	//set Audio Output node data format
-	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(sample_rate, 2, 16));
+	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
 	if(second_audio_output_node_number != 0) {
-		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(sample_rate, 2, 16));
+		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
 	}
 	KeStallExecutionProcessor(10);
 
@@ -2706,8 +2556,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_play_pcm_data_in_loop(PHYSICAL_ADDRE
 	writeUCHAR(OutputStreamBase + 0x02, 0x14);
 	writeUCHAR(OutputStreamBase + 0x00, 0x02);
 
-	DOUT(DBG_SYSINFO, ("playing"));
-
+	DOUT(DBG_SYSINFO, ("showtime"));
 	
     return ntStatus;
 }

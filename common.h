@@ -259,6 +259,27 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     (   THIS
     )   PURE;
 
+	STDMETHOD_(void,hda_start_sound)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(void,hda_stop_sound)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(NTSTATUS,hda_stop_stream)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(ULONG,hda_get_actual_stream_position)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(NTSTATUS,hda_showtime)
+    (   THIS_
+        IN      PDMACHANNEL DmaChannel
+    )   PURE;
+
     STDMETHOD_(void,MixerRegWrite)
     (   THIS_
         IN      BYTE    Index,

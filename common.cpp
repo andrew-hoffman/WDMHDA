@@ -606,11 +606,44 @@ Init
 	//
     // Reset the controller and init registers
     //
-   ntStatus = InitHDA ();
+	ntStatus = InitHDA ();
 
     if (!NT_SUCCESS (ntStatus))
         return ntStatus;
-	//ntStatus = hda_showtime (NULL);
+	    if(NT_SUCCESS(ntStatus))
+    {
+        _DbgPrintF(DEBUGLVL_VERBOSE,("ResetController Succeeded"));
+        AcknowledgeIRQ();
+    
+        //
+        // Hook up the interrupt.
+        //
+        ntStatus = PcNewInterruptSync(                              // See portcls.h
+                                        &m_pInterruptSync,          // Save object ptr
+                                        NULL,                       // OuterUnknown(optional).
+                                        ResourceList,               // He gets IRQ from ResourceList.
+                                        0,                          // Resource Index
+                                        InterruptSyncModeNormal     // Run ISRs once until we get SUCCESS
+                                     );
+        if (NT_SUCCESS(ntStatus) && m_pInterruptSync)
+        {                                                                       //  run this ISR first
+            ntStatus = m_pInterruptSync->RegisterServiceRoutine(InterruptServiceRoutine,PVOID(this),FALSE);
+            if (NT_SUCCESS(ntStatus))
+            {
+                ntStatus = m_pInterruptSync->Connect();
+            }
+
+            // if we could not connect or register the ISR, release the object.
+            if (!NT_SUCCESS (ntStatus))
+            {
+                m_pInterruptSync->Release();
+                m_pInterruptSync = NULL;
+            }
+        }
+    } else
+    {
+        _DbgPrintF(DEBUGLVL_TERSE,("ResetController Failure"));
+    }
     return ntStatus;
 }
 
@@ -1911,16 +1944,22 @@ MixerReset
  * CAdapterCommon::AcknowledgeIRQ()
  *****************************************************************************
  * Acknowledge interrupt request.
+  TODO FIXME
  */
 void
 CAdapterCommon::
 AcknowledgeIRQ
 (   void
 )
-{
-    ASSERT(m_pWaveBase);
-    READ_PORT_UCHAR(m_pWaveBase + DSP_REG_ACK16BIT);
-    READ_PORT_UCHAR(m_pWaveBase + DSP_REG_ACK8BIT);
+{	
+	//read INTSTS register
+	ULONG u = readULONG(0x24);
+	DOUT (DBG_PRINT, ("[CAdapterCommon::AcknowledgeIRQ], %X", u));
+	//uh how do i actually clear the interrupt from streams?
+	//writeULONG(0x20,0x0); //just disables interrupts it doesnt ack them
+	//write 1 to clear irq status on output stream 1
+	setULONGBit(OutputStreamBase + 3,0x0004);
+
 }
 
 /*****************************************************************************
@@ -1936,7 +1975,7 @@ ResetController(void)
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::ResetController]"));
 
-	//ntStatus = hda_stop_stream();
+	ntStatus = hda_stop_stream();
 
 	//ntStatus = InitHDA();
 
@@ -2327,7 +2366,7 @@ InterruptServiceRoutine
     // We are here because the MPU tried and failed, so
     // must be a wave interrupt.
     //
-    ASSERT(that->m_pWaveBase);
+    //ASSERT(that->m_pWaveBase);
     ASSERT(that->m_pServiceGroupWave);
 
     //
@@ -2342,10 +2381,10 @@ InterruptServiceRoutine
     }
 
     //
-    // ACK the ISR.
+    // ACK the ISR. note we don't have any direct access to CAdapterCommon gotta use the pointer
     //
-    READ_PORT_UCHAR(that->m_pWaveBase + DSP_REG_ACK8BIT);
-    READ_PORT_UCHAR(that->m_pWaveBase + DSP_REG_ACK16BIT);
+	that->AcknowledgeIRQ();
+	
 
     return STATUS_SUCCESS;
 }

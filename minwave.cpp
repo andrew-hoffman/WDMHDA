@@ -92,17 +92,9 @@ ProcessResources
     ULONG   countIRQ    = ResourceList->NumberOfInterrupts();
 
 #if (DBG)
-    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on IRQ 0x%X",
+    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on IRQ %d",
         ResourceList->FindUntranslatedInterrupt(0)->u.Interrupt.Level) );
 
-    //_DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on Port 0x%X",
-    //    ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart) );
-
-    //for (ULONG i = 0; i < countDMA; i++)
-    //{
-    //    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on DMA 0x%X",
-    //        ResourceList->FindUntranslatedDma(i)->u.Dma.Channel) );
-    //}
 #endif
 
 	//
@@ -143,7 +135,8 @@ ProcessResources
     AdapterObject = DmaChannel->GetAdapterObject ();
 
 	//
-    // Allocate the buffer
+    // Allocate the buffer. start MUST be aligned to 128 bytes
+	// and i think it should be as long as we allocate more than a page.
     //
     if (NT_SUCCESS(ntStatus)) {
         ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
@@ -227,10 +220,10 @@ ValidateFormat
         &&  (   (waveFormat->wBitsPerSample == 8)
             ||  (waveFormat->wBitsPerSample == 16)
             )
-        &&  (   (waveFormat->nChannels == 1)
-            ||  (waveFormat->nChannels == 2)
+        &&  (   (waveFormat->nChannels == 2)
+
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 5000)
+        &&  (   (waveFormat->nSamplesPerSec >= 8000)
             &&  (waveFormat->nSamplesPerSec <= 44100)
             )
         )
@@ -1333,32 +1326,9 @@ GetPosition
 
     ASSERT(Position);
 	//TODO: adding fns to IAdapterCommon properly so i can call this
-	//FIXME
+	//FIXME ???
 
-	*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
-
-	/*
-
-    ULONG transferCount = DmaChannel->TransferCount();
-
-    if (DmaChannel && transferCount)
-    {
-        *Position = DmaChannel->ReadCounter();
-
-        ASSERT(*Position <= transferCount);
-
-        if (*Position != 0)
-        {
-            *Position = transferCount - *Position;
-        }
-    }
-    else
-	*/
-
-    {
-        *Position = 0;
-    }
-	
+	*Position = Miniport->AdapterCommon->hda_get_actual_stream_position() % DmaChannel->AllocatedBufferSize();	
 
    return STATUS_SUCCESS;
 }
@@ -1396,7 +1366,7 @@ Return:
 /*****************************************************************************
  * CMiniportWaveCyclicStreamHDA::SetState()
  *****************************************************************************
- * Sets the state of the channel.
+ * Sets the state of the channel. should this be nonpaged?
  */
 STDMETHODIMP
 CMiniportWaveCyclicStreamHDA::
@@ -1407,7 +1377,7 @@ SetState
 {
     PAGED_CODE();
 
-    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::SetState]"));
+    _DbgPrintF(DEBUGLVL_VERBOSE,("CMiniportWaveCyclicStreamHDA[%p]::SetState(%d)", this, NewState));
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
@@ -1427,145 +1397,22 @@ SetState
         case KSSTATE_PAUSE:
             if (State == KSSTATE_RUN)
             {
-                if (Capture)
-                {
-                    // restore if previously setup for mono recording
-                    // (this should really be done via the topology miniport)
-                    if(RestoreInputMixer)
-                    {
-                        Miniport->AdapterCommon->MixerRegWrite( DSP_MIX_ADCMIXIDX_L,
-                                                                InputMixerLeft );
-                        RestoreInputMixer = FALSE;
-                    }
-                }
-                // TODO:  Wait for DMA to complete
 
-                if (Format16Bit)
-                {
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_HALTAUTODMA16);
-                    // TODO:  wait...
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_PAUSEDMA16);
-                }
-                else
-                {
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_HALTAUTODMA);
-                    // TODO:  wait...
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_PAUSEDMA);
-                }
-
-                if ( !(Miniport->AllocatedRender &&
-                       Miniport->AllocatedCapture))
-                {
-                    Miniport->AdapterCommon->ResetController();
-                }
-
-                Miniport->AdapterCommon->WriteController(DSP_CMD_SPKROFF);
-
-	//TODO: adding fns to IAdapterCommon properly so i can call this
-	//FIXME
-                Miniport->AdapterCommon->hda_stop_sound();
+				//TODO: adding fns to IAdapterCommon properly so i can call this
+				//FIXME what if we just never stop? do we hear anything different
+                //Miniport->AdapterCommon->hda_stop_sound();
 
             }
             break;
 
         case KSSTATE_RUN:
             {
-                BYTE mode;
-
-                if (Capture)
-                {
-                    // setup for mono recording
-                    // (this should really be done via the topology miniport)
-                    if(! FormatStereo)
-                    {
-                        InputMixerLeft  = Miniport->AdapterCommon->MixerRegRead( DSP_MIX_ADCMIXIDX_L );
-                        UCHAR InputMixerRight = Miniport->AdapterCommon->MixerRegRead( DSP_MIX_ADCMIXIDX_R );
-                        
-                        UCHAR TempMixerValue = InputMixerLeft | (InputMixerRight & 0x2A);
-
-                        Miniport->AdapterCommon->MixerRegWrite( DSP_MIX_ADCMIXIDX_L,
-                                                                TempMixerValue );
-                        
-                        RestoreInputMixer = TRUE;
-                    }
-
-                    //
-                    // Turn on capture.
-                    //
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_SPKROFF);
-
-                    if (Format16Bit)
-                    {
-                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTADC16);
-                        mode = 0x10;
-                    }
-                    else
-                    {
-                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTADC8);
-                        mode = 0x00;
-                    }
-                }
-                else
-                {
-                    Miniport->AdapterCommon->WriteController(DSP_CMD_SPKRON);
-
-                    if (Format16Bit)
-                    {
-                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTDAC16);
-                        mode = 0x10;
-                    }
-                    else
-                    {
-                        Miniport->AdapterCommon->WriteController(DSP_CMD_STARTDAC8);
-                        mode = 0x00;
-                    }
-                }
-
-                if (FormatStereo)
-                {
-                    mode |= 0x20;
-                }
-
-                //
                 // Start DMA.
-                // TODO: hda_start_sound() method
+                // TODO: something
 				//FIXME
-                //DmaChannel->Start(DmaChannel->BufferSize(),!Capture);
+				//
 
 				Miniport->AdapterCommon->hda_start_sound();
-
-                Miniport->AdapterCommon->WriteController(mode) ;
-
-                //
-                // Calculate sample count for interrupts.
-                //
-                ULONG bufferSizeInFrames = DmaChannel->BufferSize();
-                if( Format16Bit )
-                {
-                    bufferSizeInFrames /= 2;
-                }
-                if( FormatStereo )
-                {
-                    bufferSizeInFrames /= 2;
-                }
-
-                ULONG frameCount =
-                    (   (   Miniport->SamplingFrequency
-                        *   Miniport->NotificationInterval
-                        )
-                    /   1000
-                    );
-
-                if (frameCount > bufferSizeInFrames)
-                {
-                    frameCount = bufferSizeInFrames;
-                }
-
-                frameCount--;
-
-                _DbgPrintF( DEBUGLVL_VERBOSE, ("Run. Setting frame count to %X",frameCount));
-                Miniport->AdapterCommon->WriteController((BYTE) frameCount) ;
-                Miniport->AdapterCommon->WriteController((BYTE) (frameCount >> 8));
             }
             break;
 

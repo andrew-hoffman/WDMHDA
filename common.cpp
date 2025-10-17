@@ -14,8 +14,16 @@
 
 #define STR_MODULENAME "HDAAdapter: "
 
+#define BDLE_FLAG_IOC  0x01
 
+typedef struct _BDLE {
+    ULONG64 Address;
+    ULONG   Length;
+    ULONG   Flags;
+} BDLE;
 
+#define CHUNK_SIZE 1792
+#define TOTAL_SIZE 65536
 
 /*****************************************************************************
  * CAdapterCommon
@@ -231,6 +239,7 @@ public:
 
 	STDMETHODIMP_(void)		setULONGBit(USHORT reg, ULONG flag);
 	STDMETHODIMP_(void)		clearULONGBit(USHORT reg, ULONG flag);
+
     
     /*************************************************************************
      * IAdapterPowerManagement implementation
@@ -420,9 +429,9 @@ Init
 
 #if (DBG)
 	//try reading something from the mapped memory and see if it makes sense as hda registers
-	for (i = 0; i < 16; i++) {
-		DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
-	}
+	//for (i = 0; i < 16; i++) {
+	//	DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
+	//}
 #endif
 	//read capabilities
 	USHORT caps = readUSHORT(0x00);
@@ -635,7 +644,8 @@ Init
 
             // if we could not connect or register the ISR, release the object.
             if (!NT_SUCCESS (ntStatus))
-            {
+            {					
+				_DbgPrintF(DEBUGLVL_TERSE,("ERROR: Could Not Install ISR"));
                 m_pInterruptSync->Release();
                 m_pInterruptSync = NULL;
             }
@@ -1943,8 +1953,7 @@ MixerReset
 /*****************************************************************************
  * CAdapterCommon::AcknowledgeIRQ()
  *****************************************************************************
- * Acknowledge interrupt request.
-  TODO FIXME
+ * Acknowledge interrupt request. TODO: works for output stream 1 only
  */
 void
 CAdapterCommon::
@@ -1952,13 +1961,21 @@ AcknowledgeIRQ
 (   void
 )
 {	
+
 	//read INTSTS register
 	ULONG u = readULONG(0x24);
-	DOUT (DBG_PRINT, ("[CAdapterCommon::AcknowledgeIRQ], %X", u));
-	//uh how do i actually clear the interrupt from streams?
-	//writeULONG(0x20,0x0); //just disables interrupts it doesnt ack them
-	//write 1 to clear irq status on output stream 1
-	setULONGBit(OutputStreamBase + 3,0x0004);
+
+	if (u == 0xFFFFFFFF){
+		//happens during shutdown, disable all controller interrupts so this won't keep happening forever
+		writeULONG(0x20,0x0);
+	} else if(u & 0x10) {
+		//write 1 to clear irq status on output stream 1
+		setUCHARBit(OutputStreamBase + 3,0x0004);
+	} else {
+		//another unknown type of IRQ I can't clear, so just turn them off
+		DOUT (DBG_PRINT, ("???[CAdapterCommon::AcknowledgeIRQ], INSTS=%X, STRSTS=%X", u, readUCHAR(OutputStreamBase + 3)));
+		writeULONG(0x20,0x0);
+	}
 
 }
 
@@ -2360,7 +2377,7 @@ InterruptServiceRoutine
 
     CAdapterCommon *that = (CAdapterCommon *) DynamicContext;
 
-    UCHAR portStatus = 0xff;
+    //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
 
     //
     // We are here because the MPU tried and failed, so
@@ -2439,9 +2456,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
-	//TODO: this may freeze Virtualbox. Why?
+	//start playing output stream 1. With interrupts
 	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x02);
+	writeUCHAR(OutputStreamBase + 0x00, 0x06);
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
@@ -2553,16 +2570,52 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	ProgramSampleRate(44100);
 
 	//fill buffer entries
+	
 	BdlMemVirt[0] = BufLogicalAddress.LowPart;
 	BdlMemVirt[1] = BufLogicalAddress.HighPart;
 	BdlMemVirt[2] = audBufSize;
-	BdlMemVirt[3] = 0;
+	BdlMemVirt[3] = 1; //interrupt on completion ON
 
 	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
 	BdlMemVirt[4] = BufLogicalAddress.LowPart;
 	BdlMemVirt[5] = BufLogicalAddress.HighPart;
 	BdlMemVirt[6] = audBufSize;
-	BdlMemVirt[7] = 0;
+	BdlMemVirt[7] = 1;
+
+	USHORT entry = 2;
+	
+	/*
+	//fill BDL entries out with 10 ms buffer chunks.
+	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlMemVirt);
+	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
+    ULONG offset = 0;
+    USHORT entry = 0;
+
+    while ((offset + CHUNK_SIZE) <= TOTAL_SIZE && entry < 256)
+    {
+        Bdl[entry].Address = BasePhys.QuadPart + offset;
+        Bdl[entry].Length  = CHUNK_SIZE;
+        Bdl[entry].Flags   = BDLE_FLAG_IOC;     // interrupt every ~10 ms
+        offset += CHUNK_SIZE;
+        entry++;
+    }
+
+    // Optional: handle any leftover < CHUNK_SIZE tail
+    ULONG remainder = TOTAL_SIZE - offset;
+    if (remainder >= 128) {
+        remainder &= ~127;  // trim to 128-byte boundary
+        Bdl[entry].Address = BasePhys.QuadPart + offset;
+        Bdl[entry].Length  = remainder;
+        Bdl[entry].Flags   = BDLE_FLAG_IOC;
+        entry++;
+    }
+	*/
+	//let's print enough of the BDL and make sure we've got it right
+	for(i = 0; i < 255; i += 4){
+		DOUT(DBG_SYSINFO, 
+		("BDL %d: Phys Addr 0x%X or %d Length %d Flags %X", 
+				(i/4), BdlMemVirt[i], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
+	}
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));
 
@@ -2573,7 +2626,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
 	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
-	writeUSHORT(OutputStreamBase + 0x0C, 1); //there are two entries in buffer
+	writeUSHORT(OutputStreamBase + 0x0C, entry - 1); //there are entry-1 entries in buffer
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
 
@@ -2591,9 +2644,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	DOUT(DBG_SYSINFO, ("ready to start the stream"));
 
 
-	//start streaming to stream 1
+	//start streaming to stream 1 with interrupts
 	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x02);
+	writeUCHAR(OutputStreamBase + 0x00, 0x06);
+
+	//enable interrupts from output stream 1
+	//TODO account for other amounts of streams available
+	writeULONG(0x20, ((1 << 31) | (1 << 4)) ); 
 
 	DOUT(DBG_SYSINFO, ("showtime"));
 	
@@ -2661,3 +2718,4 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
 STDMETHODIMP_(PULONG) CAdapterCommon::get_bdl_mem(void){
 	return BdlMemVirt;
 }
+

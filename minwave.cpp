@@ -223,7 +223,7 @@ ValidateFormat
         &&  (   (waveFormat->nChannels == 2)
 
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 8000)
+        &&  (   (waveFormat->nSamplesPerSec >= 44100)
             &&  (waveFormat->nSamplesPerSec <= 44100)
             )
         )
@@ -435,7 +435,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         8,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
-        8000,   // Minimum rate.
+        44100,   // Minimum rate. //TODO support more
         44100   // Maximum rate.
     }
 };
@@ -1400,7 +1400,7 @@ SetState
 
 				//TODO: adding fns to IAdapterCommon properly so i can call this
 				//FIXME what if we just never stop? do we hear anything different
-                //Miniport->AdapterCommon->hda_stop_sound();
+                Miniport->AdapterCommon->hda_stop_sound();
 
             }
             break;

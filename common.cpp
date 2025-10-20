@@ -206,7 +206,7 @@ public:
 	STDMETHODIMP_(void)		hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number); 
 	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(void);
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
-	STDMETHODIMP_(ULONG)	hda_get_node_connection_entry(ULONG codec, ULONG node, ULONG connection_entry_number);
+	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(void)		hda_initialize_output_pin(ULONG pin_node_number);
 	STDMETHODIMP_(void)		hda_initalize_audio_output(ULONG audio_output_node_number);
 	STDMETHODIMP_(void)		hda_initalize_audio_mixer(ULONG audio_mixer_node_number);
@@ -947,7 +947,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	else {
 		writeULONG (0x44, 0);
 	}
-	//corb number of entries (each entry is 4 bytes)
+	//corb number of entries (each entries is 4 bytes)
 	//check what is supported and set it to the max supported
 
 	if ((readUCHAR (0x4E)  & 0x40) == 0x40){
@@ -996,7 +996,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	}
 
 	writeUSHORT (0x48,0);
-	CorbPointer = 1; //always points to next free entry
+	CorbPointer = 1; //always points to next free entries
 
 	//rirb addr
 
@@ -1007,7 +1007,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	else {
 		writeULONG (0x54, 0);
 	}
-	//rirb number of entries (each entry is 8 bytes)
+	//rirb number of entries (each entries is 8 bytes)
 	
 	if ((readUCHAR (0x5E)  & 0x40) == 0x40){
 		//rirb size is 256 entries
@@ -1030,7 +1030,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		return STATUS_NOT_IMPLEMENTED;
 	}
 
-	//reset RIRB write pointer to 0th entry
+	//reset RIRB write pointer to 0th entries
 	writeUSHORT (0x58, 0x8000);
 
 	//dma position buffer pointer
@@ -1045,7 +1045,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	KeStallExecutionProcessor(10);
 	writeULONG(0x5A, 0); //disable interrupts
-	RirbPointer = 1; //always points to next free entry
+	RirbPointer = 1; //always points to next free entries
 	
 	//start CORB and RIRB. i think this also makes the HDA controller zero them
 	writeUCHAR ( 0x4C, 0x2);
@@ -1293,12 +1293,12 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 
 		//log all connected nodes
 		DbgPrint( (" "));
-		UCHAR connection_entry_number = 0;
-		ULONG connection_entry_node = hda_get_node_connection_entry(codec_number, node, 0);
-		while (connection_entry_node != 0x0000) {
-			DbgPrint( "%d ", connection_entry_node);
-			connection_entry_number++;
-			connection_entry_node = hda_get_node_connection_entry(codec_number, node, connection_entry_number);
+		UCHAR connection_entries_number = 0;
+		ULONG connection_entries_node = hda_get_node_connection_entries(codec_number, node, 0);
+		while (connection_entries_node != 0x0000) {
+			DbgPrint( "%d ", connection_entries_node);
+			connection_entries_number++;
+			connection_entries_node = hda_get_node_connection_entries(codec_number, node, connection_entries_number);
 		}
 	}
 	
@@ -1381,21 +1381,21 @@ UCHAR CAdapterCommon::hda_get_node_type (ULONG codec, ULONG node){
 	return (UCHAR) ((hda_send_verb(codec, node, 0xF00, 0x09) >> 20) & 0xF);
 }
 
-ULONG CAdapterCommon::hda_get_node_connection_entry (ULONG codec, ULONG node, ULONG connection_entry_number) {
+ULONG CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, ULONG connection_entries_number) {
 	//read connection capabilities
 	ULONG connection_list_capabilities = hda_send_verb(codec, node, 0xF00, 0x0E);
 	
 	//test if this connection even exist
-	if(connection_entry_number >= (connection_list_capabilities & 0x7F)) {
+	if(connection_entries_number >= (connection_list_capabilities & 0x7F)) {
 		return 0x0000;
 	}
 
 	//return number of connected node
 	if((connection_list_capabilities & 0x80) == 0x00) { //short form
-		return ((hda_send_verb(codec, node, 0xF02, ((connection_entry_number/4)*4)) >> ((connection_entry_number%4)*8)) & 0xFF);
+		return ((hda_send_verb(codec, node, 0xF02, ((connection_entries_number/4)*4)) >> ((connection_entries_number%4)*8)) & 0xFF);
 	}
 	else { //long form
-		return ((hda_send_verb(codec, node, 0xF02, ((connection_entry_number/2)*2)) >> ((connection_entry_number%2)*16)) & 0xFFFF);
+		return ((hda_send_verb(codec, node, 0xF02, ((connection_entries_number/2)*2)) >> ((connection_entries_number%2)*16)) & 0xFFFF);
 	}
 }
 
@@ -1481,7 +1481,7 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 	//start enabling path of nodes
 	length_of_node_path = 0;
 	hda_send_verb(codecNumber, pin_node_number, 0x701, 0x00); //select first node
-	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, pin_node_number, 0); //get first node number
+	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, pin_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node==HDA_WIDGET_AUDIO_OUTPUT) {
 		hda_initalize_audio_output(first_connected_node_number);
@@ -1573,7 +1573,7 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 
 	//continue in path
 	length_of_node_path++;
-	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, audio_mixer_node_number, 0); //get first node number
+	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, audio_mixer_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
 		hda_initalize_audio_output(first_connected_node_number);
@@ -1617,7 +1617,7 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 	//continue in path
 	length_of_node_path++;
 	hda_send_verb(codecNumber, audio_selector_node_number, 0x701, 0x00); //select first node
-	ULONG first_connected_node_number = hda_get_node_connection_entry(codecNumber, audio_selector_node_number, 0); //get first node number
+	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, audio_selector_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
 		hda_initalize_audio_output(first_connected_node_number);
@@ -2581,89 +2581,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	ProgramSampleRate(44100);
 
-	//fill buffer entries, 16 manually
-	
-	USHORT entry = 16;
-
-	BdlMemVirt[0] = BufLogicalAddress.LowPart;
-	BdlMemVirt[1] = BufLogicalAddress.HighPart;
-	BdlMemVirt[2] = audBufSize /16 ;
-	BdlMemVirt[3] = 1; //interrupt on completion ON
-
-	BdlMemVirt[4] = BufLogicalAddress.LowPart + (audBufSize/16);
-	BdlMemVirt[5] = BufLogicalAddress.HighPart;
-	BdlMemVirt[6] = audBufSize /16 ;
-	BdlMemVirt[7] = 1;
-
-	BdlMemVirt[8] = BufLogicalAddress.LowPart + 2*(audBufSize/16);
-	BdlMemVirt[9] = BufLogicalAddress.HighPart;
-	BdlMemVirt[10] = audBufSize /16 ;
-	BdlMemVirt[11] = 1;
-
-	BdlMemVirt[12] = BufLogicalAddress.LowPart + 3*(audBufSize/16);
-	BdlMemVirt[13] = BufLogicalAddress.HighPart;
-	BdlMemVirt[14] = audBufSize /16 ;
-	BdlMemVirt[15] = 1;
-	
-	BdlMemVirt[16] = BufLogicalAddress.LowPart + 4*(audBufSize/16);;
-	BdlMemVirt[17] = BufLogicalAddress.HighPart;
-	BdlMemVirt[18] = audBufSize /16 ;
-	BdlMemVirt[19] = 1; //interrupt on completion ON
-
-	BdlMemVirt[20] = BufLogicalAddress.LowPart + 5*(audBufSize/16);
-	BdlMemVirt[21] = BufLogicalAddress.HighPart;
-	BdlMemVirt[22] = audBufSize /16 ;
-	BdlMemVirt[23] = 1;
-
-	BdlMemVirt[24] = BufLogicalAddress.LowPart + 6*(audBufSize/16);
-	BdlMemVirt[25] = BufLogicalAddress.HighPart;
-	BdlMemVirt[26] = audBufSize /16 ;
-	BdlMemVirt[27] = 1;
-
-	BdlMemVirt[28] = BufLogicalAddress.LowPart + 7*(audBufSize/16);
-	BdlMemVirt[29] = BufLogicalAddress.HighPart;
-	BdlMemVirt[30] = audBufSize /16 ;
-	BdlMemVirt[31] = 1;
-
-	BdlMemVirt[32] = BufLogicalAddress.LowPart + 8*(audBufSize/16);
-	BdlMemVirt[33] = BufLogicalAddress.HighPart;
-	BdlMemVirt[34] = audBufSize /16 ;
-	BdlMemVirt[35] = 1;
-
-	BdlMemVirt[36] = BufLogicalAddress.LowPart + 9*(audBufSize/16);
-	BdlMemVirt[37] = BufLogicalAddress.HighPart;
-	BdlMemVirt[38] = audBufSize /16 ;
-	BdlMemVirt[39] = 1;
-
-	BdlMemVirt[40] = BufLogicalAddress.LowPart + 10*(audBufSize/16);
-	BdlMemVirt[41] = BufLogicalAddress.HighPart;
-	BdlMemVirt[42] = audBufSize /16 ;
-	BdlMemVirt[43] = 1;
-
-	BdlMemVirt[44] = BufLogicalAddress.LowPart + 11*(audBufSize/16);
-	BdlMemVirt[45] = BufLogicalAddress.HighPart;
-	BdlMemVirt[46] = audBufSize /16 ;
-	BdlMemVirt[47] = 1;
-	
-	BdlMemVirt[48] = BufLogicalAddress.LowPart + 12*(audBufSize/16);;
-	BdlMemVirt[49] = BufLogicalAddress.HighPart;
-	BdlMemVirt[50] = audBufSize /16 ;
-	BdlMemVirt[51] = 1; //interrupt on completion ON
-
-	BdlMemVirt[52] = BufLogicalAddress.LowPart + 13*(audBufSize/16);
-	BdlMemVirt[53] = BufLogicalAddress.HighPart;
-	BdlMemVirt[54] = audBufSize /16 ;
-	BdlMemVirt[55] = 1;
-
-	BdlMemVirt[56] = BufLogicalAddress.LowPart + 14*(audBufSize/16);
-	BdlMemVirt[57] = BufLogicalAddress.HighPart;
-	BdlMemVirt[58] = audBufSize /16 ;
-	BdlMemVirt[59] = 1;
-
-	BdlMemVirt[60] = BufLogicalAddress.LowPart + 15*(audBufSize/16);
-	BdlMemVirt[61] = BufLogicalAddress.HighPart;
-	BdlMemVirt[62] = audBufSize /16 ;
-	BdlMemVirt[63] = 1;
+	//divide the buffer into <entries> chunks (must be a power of 2)
+	USHORT entries = 64;
+	for(i = 0; i < (entries * 4); i += 4){
+		BdlMemVirt[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
+		BdlMemVirt[i+1] = BufLogicalAddress.HighPart;
+		BdlMemVirt[i+2] = audBufSize /entries;
+		BdlMemVirt[i+3] = 1; //interrupt on completion ON
+	}
 
 	/*
 	//fill BDL entries out with 10 ms buffer chunks.
@@ -2672,25 +2597,25 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlMemVirt);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
     ULONG offset = 0;
-    USHORT entry = 0;
+    USHORT entries = 0;
 
-    while ((offset + CHUNK_SIZE) <= TOTAL_SIZE && entry < 256)
+    while ((offset + CHUNK_SIZE) <= TOTAL_SIZE && entries < 256)
     {
-        Bdl[entry].Address = BasePhys.QuadPart + offset;
-        Bdl[entry].Length  = CHUNK_SIZE;
-        Bdl[entry].Flags   = BDLE_FLAG_IOC;     // interrupt every ~10 ms
+        Bdl[entries].Address = BasePhys.QuadPart + offset;
+        Bdl[entries].Length  = CHUNK_SIZE;
+        Bdl[entries].Flags   = BDLE_FLAG_IOC;     // interrupt every ~10 ms
         offset += CHUNK_SIZE;
-        entry++;
+        entries++;
     }
 
     //handle any leftover < CHUNK_SIZE tail
     ULONG remainder = TOTAL_SIZE - offset;
     if (remainder >= 128) {
         remainder &= ~127;  // trim to 128-byte boundary
-        Bdl[entry].Address = BasePhys.QuadPart + offset;
-        Bdl[entry].Length  = remainder;
-        Bdl[entry].Flags   = BDLE_FLAG_IOC;
-        entry++;
+        Bdl[entries].Address = BasePhys.QuadPart + offset;
+        Bdl[entries].Length  = remainder;
+        Bdl[entries].Flags   = BDLE_FLAG_IOC;
+        entries++;
     }
 	*/
 	
@@ -2710,7 +2635,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
 	writeULONG(OutputStreamBase + 0x08, audBufSize);
-	writeUSHORT(OutputStreamBase + 0x0C, entry - 1); //there are entry-1 entries in buffer
+	writeUSHORT(OutputStreamBase + 0x0C, entries - 1); //there are entries-1 entries in buffer
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
 

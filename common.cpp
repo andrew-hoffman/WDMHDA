@@ -23,7 +23,7 @@ typedef struct _BDLE {
 } BDLE;
 
 #define CHUNK_SIZE 1792
-#define TOTAL_SIZE 65536
+#define TOTAL_SIZE 16384
 
 /*****************************************************************************
  * CAdapterCommon
@@ -325,7 +325,7 @@ NewAdapterCommon
     );
 }   
 	//100ms of 2ch 16 bit audio 4410 * 2 * 2
-	ULONG audBufSize = 65536; 
+	ULONG audBufSize = TOTAL_SIZE; 
 	ULONG BdlSize = 256 * 16 * 2; //256 entries, 16 bytes, x2 for shadow bdl;
 
 /*****************************************************************************
@@ -1961,11 +1961,15 @@ AcknowledgeIRQ
 (   void
 )
 {	
-
+	//DbgPrint( ("i"));
 	//read INTSTS register
 	ULONG u = readULONG(0x24);
-
-	if (u == 0xFFFFFFFF){
+	if (u == 0){
+		//no interrupt from the device at all so what am i even doing here
+		DbgPrint( ("???"));
+		return; 
+	}
+	else if (u == 0xFFFFFFFF){
 		//happens during shutdown, disable all controller interrupts so this won't keep happening forever
 		writeULONG(0x20,0x0);
 	} else if(u & 0x10) {
@@ -2533,7 +2537,8 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 }
 
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
-
+	
+	int i = 0;
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_showtime]"));
@@ -2559,7 +2564,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	DOUT(DBG_SYSINFO, ("write to audio ram"));
 
 	// can i write to my audio buffer at all?
-	for(int i = 0; i < 10; ++i)
+
+	/*
+	for(i = 0; i < 10; ++i)
 		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
 	for(i = 10; i < 20; ++i)
 		((PUSHORT)BufVirtualAddress)[i] = 0xaaaa;
@@ -2567,22 +2574,34 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 		((PUSHORT)BufVirtualAddress)[i] = 0xcccc;
 
 	DOUT(DBG_SYSINFO, ("garbage written in"));
+	*/
 	ProgramSampleRate(44100);
 
 	//fill buffer entries
 	
+	USHORT entry = 4;
 	BdlMemVirt[0] = BufLogicalAddress.LowPart;
 	BdlMemVirt[1] = BufLogicalAddress.HighPart;
-	BdlMemVirt[2] = audBufSize;
+	BdlMemVirt[2] = audBufSize /4 ;
 	BdlMemVirt[3] = 1; //interrupt on completion ON
 
-	//fill buffer entries - there have to be at least two entries in BDL, so i write same one twice
-	BdlMemVirt[4] = BufLogicalAddress.LowPart;
+	//fill buffer entries - four of them?
+	BdlMemVirt[4] = BufLogicalAddress.LowPart + 16384;
 	BdlMemVirt[5] = BufLogicalAddress.HighPart;
-	BdlMemVirt[6] = audBufSize;
+	BdlMemVirt[6] = audBufSize /4 ;
 	BdlMemVirt[7] = 1;
 
-	USHORT entry = 2;
+		//fill buffer entries
+	BdlMemVirt[8] = BufLogicalAddress.LowPart + 32768;
+	BdlMemVirt[9] = BufLogicalAddress.HighPart;
+	BdlMemVirt[10] = audBufSize /4 ;
+	BdlMemVirt[11] = 1;
+
+			//fill buffer entries
+	BdlMemVirt[12] = BufLogicalAddress.LowPart + 49152;
+	BdlMemVirt[13] = BufLogicalAddress.HighPart;
+	BdlMemVirt[14] = audBufSize /4 ;
+	BdlMemVirt[15] = 1;
 	
 	/*
 	//fill BDL entries out with 10 ms buffer chunks.
@@ -2600,7 +2619,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
         entry++;
     }
 
-    // Optional: handle any leftover < CHUNK_SIZE tail
+    //handle any leftover < CHUNK_SIZE tail
     ULONG remainder = TOTAL_SIZE - offset;
     if (remainder >= 128) {
         remainder &= ~127;  // trim to 128-byte boundary
@@ -2610,11 +2629,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
         entry++;
     }
 	*/
+	
 	//let's print enough of the BDL and make sure we've got it right
 	for(i = 0; i < 255; i += 4){
 		DOUT(DBG_SYSINFO, 
-		("BDL %d: Phys Addr 0x%X or %d Length %d Flags %X", 
-				(i/4), BdlMemVirt[i], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
+		("BDL %d: Phys Addr H0x%XL%X Length %d Flags %X", 
+				(i/4), BdlMemVirt[i+1], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
 	}
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));
@@ -2625,7 +2645,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlMemPhys.HighPart);
-	writeULONG(OutputStreamBase + 0x08, audBufSize * 2);
+	writeULONG(OutputStreamBase + 0x08, audBufSize);
 	writeUSHORT(OutputStreamBase + 0x0C, entry - 1); //there are entry-1 entries in buffer
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
@@ -2645,8 +2665,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 
 	//start streaming to stream 1 with interrupts
-	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x06);
+	//no, wait for Play state
+
+	//writeUCHAR(OutputStreamBase + 0x02, 0x14);
+	//writeUCHAR(OutputStreamBase + 0x00, 0x06);
 
 	//enable interrupts from output stream 1
 	//TODO account for other amounts of streams available

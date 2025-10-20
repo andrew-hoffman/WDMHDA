@@ -1324,11 +1324,17 @@ GetPosition
 {
     // Not PAGED_CODE().  May be called at dispatch level.
 
-    ASSERT(Position);
-	//TODO: adding fns to IAdapterCommon properly so i can call this
-	//FIXME ???
+	ASSERT(Position);
 
-	*Position = Miniport->AdapterCommon->hda_get_actual_stream_position() % DmaChannel->AllocatedBufferSize();	
+    if (DmaChannel)
+    {
+        *Position = Miniport->AdapterCommon->hda_get_actual_stream_position(); 
+
+    }
+    else
+    {
+        *Position = 0;
+    }
 
    return STATUS_SUCCESS;
 }
@@ -1353,7 +1359,8 @@ Return:
 
 --*/
 
-{                           
+{   
+	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::NormalizePhysicalPosition] %d", PhysicalPosition));
     *PhysicalPosition =
             (_100NS_UNITS_PER_SECOND / 
                 (1 << (FormatStereo + Format16Bit)) * *PhysicalPosition) / 
@@ -1443,3 +1450,28 @@ Silence
 {
     RtlFillMemory(Buffer,ByteCount,Format16Bit ? 0 : 0x7f);
 }
+
+/*
+STDMETHODIMP_(NTSTATUS) CMiniportWaveCyclicStreamHDA::Service()
+{
+    // Called by PortCls at DPC level when Notify() is triggered from ISR
+
+    // 1. Check which buffer(s) have completed
+    ULONG currentIndex = Miniport->AdapterCommon->hda_get_actual_stream_position();
+
+    // 2. If a new buffer finished, update position and notify PortCls
+    if (currentIndex != m_LastReportedBDLIndex)
+    {
+        m_LastReportedBDLIndex = currentIndex;
+
+        // Update the position for GetPosition()
+        m_ulPosition += m_BytesPerBuffer; 
+        m_ulPosition %= m_TotalBytes; // wrap around
+
+        // Tell PortCls that data was consumed
+        Port->NotifyPosition(m_ulPosition);
+    }
+
+    return STATUS_SUCCESS;
+}
+*/

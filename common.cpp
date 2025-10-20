@@ -2548,6 +2548,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	BufVirtualAddress = DmaChannel->SystemAddress();
 	audBufSize = DmaChannel->BufferSize();
 
+	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
+	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress));
+	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
+
     //
     // Initialize the device state.
     //
@@ -2577,34 +2581,94 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	ProgramSampleRate(44100);
 
-	//fill buffer entries
+	//fill buffer entries, 16 manually
 	
-	USHORT entry = 4;
+	USHORT entry = 16;
+
 	BdlMemVirt[0] = BufLogicalAddress.LowPart;
 	BdlMemVirt[1] = BufLogicalAddress.HighPart;
-	BdlMemVirt[2] = audBufSize /4 ;
+	BdlMemVirt[2] = audBufSize /16 ;
 	BdlMemVirt[3] = 1; //interrupt on completion ON
 
-	//fill buffer entries - four of them?
-	BdlMemVirt[4] = BufLogicalAddress.LowPart + 16384;
+	BdlMemVirt[4] = BufLogicalAddress.LowPart + (audBufSize/16);
 	BdlMemVirt[5] = BufLogicalAddress.HighPart;
-	BdlMemVirt[6] = audBufSize /4 ;
+	BdlMemVirt[6] = audBufSize /16 ;
 	BdlMemVirt[7] = 1;
 
-		//fill buffer entries
-	BdlMemVirt[8] = BufLogicalAddress.LowPart + 32768;
+	BdlMemVirt[8] = BufLogicalAddress.LowPart + 2*(audBufSize/16);
 	BdlMemVirt[9] = BufLogicalAddress.HighPart;
-	BdlMemVirt[10] = audBufSize /4 ;
+	BdlMemVirt[10] = audBufSize /16 ;
 	BdlMemVirt[11] = 1;
 
-			//fill buffer entries
-	BdlMemVirt[12] = BufLogicalAddress.LowPart + 49152;
+	BdlMemVirt[12] = BufLogicalAddress.LowPart + 3*(audBufSize/16);
 	BdlMemVirt[13] = BufLogicalAddress.HighPart;
-	BdlMemVirt[14] = audBufSize /4 ;
+	BdlMemVirt[14] = audBufSize /16 ;
 	BdlMemVirt[15] = 1;
 	
+	BdlMemVirt[16] = BufLogicalAddress.LowPart + 4*(audBufSize/16);;
+	BdlMemVirt[17] = BufLogicalAddress.HighPart;
+	BdlMemVirt[18] = audBufSize /16 ;
+	BdlMemVirt[19] = 1; //interrupt on completion ON
+
+	BdlMemVirt[20] = BufLogicalAddress.LowPart + 5*(audBufSize/16);
+	BdlMemVirt[21] = BufLogicalAddress.HighPart;
+	BdlMemVirt[22] = audBufSize /16 ;
+	BdlMemVirt[23] = 1;
+
+	BdlMemVirt[24] = BufLogicalAddress.LowPart + 6*(audBufSize/16);
+	BdlMemVirt[25] = BufLogicalAddress.HighPart;
+	BdlMemVirt[26] = audBufSize /16 ;
+	BdlMemVirt[27] = 1;
+
+	BdlMemVirt[28] = BufLogicalAddress.LowPart + 7*(audBufSize/16);
+	BdlMemVirt[29] = BufLogicalAddress.HighPart;
+	BdlMemVirt[30] = audBufSize /16 ;
+	BdlMemVirt[31] = 1;
+
+	BdlMemVirt[32] = BufLogicalAddress.LowPart + 8*(audBufSize/16);
+	BdlMemVirt[33] = BufLogicalAddress.HighPart;
+	BdlMemVirt[34] = audBufSize /16 ;
+	BdlMemVirt[35] = 1;
+
+	BdlMemVirt[36] = BufLogicalAddress.LowPart + 9*(audBufSize/16);
+	BdlMemVirt[37] = BufLogicalAddress.HighPart;
+	BdlMemVirt[38] = audBufSize /16 ;
+	BdlMemVirt[39] = 1;
+
+	BdlMemVirt[40] = BufLogicalAddress.LowPart + 10*(audBufSize/16);
+	BdlMemVirt[41] = BufLogicalAddress.HighPart;
+	BdlMemVirt[42] = audBufSize /16 ;
+	BdlMemVirt[43] = 1;
+
+	BdlMemVirt[44] = BufLogicalAddress.LowPart + 11*(audBufSize/16);
+	BdlMemVirt[45] = BufLogicalAddress.HighPart;
+	BdlMemVirt[46] = audBufSize /16 ;
+	BdlMemVirt[47] = 1;
+	
+	BdlMemVirt[48] = BufLogicalAddress.LowPart + 12*(audBufSize/16);;
+	BdlMemVirt[49] = BufLogicalAddress.HighPart;
+	BdlMemVirt[50] = audBufSize /16 ;
+	BdlMemVirt[51] = 1; //interrupt on completion ON
+
+	BdlMemVirt[52] = BufLogicalAddress.LowPart + 13*(audBufSize/16);
+	BdlMemVirt[53] = BufLogicalAddress.HighPart;
+	BdlMemVirt[54] = audBufSize /16 ;
+	BdlMemVirt[55] = 1;
+
+	BdlMemVirt[56] = BufLogicalAddress.LowPart + 14*(audBufSize/16);
+	BdlMemVirt[57] = BufLogicalAddress.HighPart;
+	BdlMemVirt[58] = audBufSize /16 ;
+	BdlMemVirt[59] = 1;
+
+	BdlMemVirt[60] = BufLogicalAddress.LowPart + 15*(audBufSize/16);
+	BdlMemVirt[61] = BufLogicalAddress.HighPart;
+	BdlMemVirt[62] = audBufSize /16 ;
+	BdlMemVirt[63] = 1;
+
 	/*
 	//fill BDL entries out with 10 ms buffer chunks.
+	//why doesnt this work? do buffers really need to be power of 2 secretly?
+
 	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlMemVirt);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
     ULONG offset = 0;

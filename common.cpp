@@ -23,7 +23,6 @@ typedef struct _BDLE {
 } BDLE;
 
 #define CHUNK_SIZE 1792
-#define TOTAL_SIZE 16384
 
 /*****************************************************************************
  * CAdapterCommon
@@ -127,7 +126,7 @@ private:
     BOOL                    m_bCaptureActive;
     BYTE                    MixerSettings[DSP_MIX_MAXREGS];
 
-    void AcknowledgeIRQ
+    BOOLEAN AcknowledgeIRQ
     (   void
     );
     BOOLEAN AdapterISR
@@ -325,7 +324,7 @@ NewAdapterCommon
     );
 }   
 	//100ms of 2ch 16 bit audio 4410 * 2 * 2
-	ULONG audBufSize = TOTAL_SIZE; 
+	ULONG audBufSize = MAXLEN_DMA_BUFFER; 
 	ULONG BdlSize = 256 * 16 * 2; //256 entries, 16 bytes, x2 for shadow bdl;
 
 /*****************************************************************************
@@ -474,7 +473,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= audBufSize + BdlSize + 8192;
+	pDeviceDescription -> MaximumLength		= BdlSize + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -861,6 +860,7 @@ SetWaveServiceGroup
     IN      PSERVICEGROUP   ServiceGroup
 )
 {
+	PAGED_CODE ();
     if (m_pServiceGroupWave)
     {
         m_pServiceGroupWave->Release();
@@ -1134,6 +1134,8 @@ NTSTATUS CAdapterCommon::InitializeCodec (UCHAR codec_number)
  */
 
 void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number) {
+	PAGED_CODE ();
+
 	//reset AFG
 	hda_send_verb(codec_number, afg_node_number, 0x7FF, 0x00);
 
@@ -1378,10 +1380,12 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 }
 
 UCHAR CAdapterCommon::hda_get_node_type (ULONG codec, ULONG node){
+	PAGED_CODE ();
 	return (UCHAR) ((hda_send_verb(codec, node, 0xF00, 0x09) >> 20) & 0xF);
 }
 
 ULONG CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, ULONG connection_entries_number) {
+	PAGED_CODE ();
 	//read connection capabilities
 	ULONG connection_list_capabilities = hda_send_verb(codec, node, 0xF00, 0x0E);
 	
@@ -1400,6 +1404,7 @@ ULONG CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, 
 }
 
 void CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain) {
+	PAGED_CODE ();
 	//this will apply to left and right
 	ULONG payload = 0x3000;
 
@@ -1498,6 +1503,7 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 }
 
 void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) {
+	PAGED_CODE ();
 	DOUT (DBG_PRINT, ("Initalizing Audio Output %d", audio_output_node_number));
 	audio_output_node_number = audio_output_node_number;
 
@@ -1550,6 +1556,7 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 }
 
 void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
+	PAGED_CODE ();
 	if(length_of_node_path>=10) {
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 		return;
@@ -1590,6 +1597,7 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 }
 
 void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_number) {
+	PAGED_CODE ();
 	if(length_of_node_path>=10) {
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 	return;
@@ -1632,7 +1640,11 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
 	}
 }
-/*
+
+//***End of pageable code!***
+//everything above this must have PAGED_CODE ();
+#pragma code_seg() 
+
 void CAdapterCommon::hda_check_headphone_connection_change(void) {
 	//TODO: schedule as a periodic task
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected()==TRUE) { //headphone was connected
@@ -1644,7 +1656,7 @@ void CAdapterCommon::hda_check_headphone_connection_change(void) {
 		selected_output_node = pin_output_node_number;
 	}
 }
-*/
+
 
 UCHAR CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};
@@ -1686,7 +1698,6 @@ UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 	}
 }
 
-#pragma code_seg() //End of pageable code.
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
@@ -1955,7 +1966,7 @@ MixerReset
  *****************************************************************************
  * Acknowledge interrupt request. TODO: works for output stream 1 only
  */
-void
+BOOLEAN
 CAdapterCommon::
 AcknowledgeIRQ
 (   void
@@ -1966,19 +1977,21 @@ AcknowledgeIRQ
 	ULONG u = readULONG(0x24);
 	if (u == 0){
 		//no interrupt from the device at all so what am i even doing here
-		DbgPrint( ("???"));
-		return; 
-	}
-	else if (u == 0xFFFFFFFF){
-		//happens during shutdown, disable all controller interrupts so this won't keep happening forever
-		writeULONG(0x20,0x0);
-	} else if(u & 0x10) {
-		//write 1 to clear irq status on output stream 1
-		setUCHARBit(OutputStreamBase + 3,0x0004);
+		//DbgPrint( ("???"));
+		return false; 
 	} else {
-		//another unknown type of IRQ I can't clear, so just turn them off
-		DOUT (DBG_PRINT, ("???[CAdapterCommon::AcknowledgeIRQ], INSTS=%X, STRSTS=%X", u, readUCHAR(OutputStreamBase + 3)));
-		writeULONG(0x20,0x0);
+		if (u == 0xFFFFFFFF){
+			//happens during shutdown, disable all controller interrupts so this won't keep happening forever
+			writeULONG(0x20,0x0);
+		} else if(u & 0x10) {
+		//write 1 to clear irq status on output stream 1
+			setUCHARBit(OutputStreamBase + 3,0x0004);
+		} else {
+			//another unknown type of IRQ I can't clear, so just turn them off
+			DOUT (DBG_PRINT, ("???[CAdapterCommon::AcknowledgeIRQ], INSTS=%X, STRSTS=%X", u, readUCHAR(OutputStreamBase + 3)));
+			writeULONG(0x20,0x0);
+		}
+		return true;
 	}
 
 }
@@ -2376,18 +2389,20 @@ InterruptServiceRoutine
     IN      PVOID           DynamicContext
 )
 {
-    ASSERT(InterruptSync);
+
     ASSERT(DynamicContext);
 
     CAdapterCommon *that = (CAdapterCommon *) DynamicContext;
 
     //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
 
-    //
-    // We are here because the MPU tried and failed, so
-    // must be a wave interrupt.
-    //
-    //ASSERT(that->m_pWaveBase);
+	//first of all, get out of here if it's not our IRQ
+	BOOLEAN ours = that->AcknowledgeIRQ();
+	if(!ours){
+		return FALSE;
+	}
+
+    ASSERT(InterruptSync);
     ASSERT(that->m_pServiceGroupWave);
 
     //
@@ -2403,9 +2418,7 @@ InterruptServiceRoutine
 
     //
     // ACK the ISR. note we don't have any direct access to CAdapterCommon gotta use the pointer
-    //
-	that->AcknowledgeIRQ();
-	
+    //	
 
     return STATUS_SUCCESS;
 }
@@ -2582,13 +2595,18 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	ProgramSampleRate(44100);
 
 	//divide the buffer into <entries> chunks (must be a power of 2)
-	USHORT entries = 64;
+	USHORT entries = 128;
 	for(i = 0; i < (entries * 4); i += 4){
 		BdlMemVirt[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
 		BdlMemVirt[i+1] = BufLogicalAddress.HighPart;
 		BdlMemVirt[i+2] = audBufSize /entries;
 		BdlMemVirt[i+3] = 1; //interrupt on completion ON
 	}
+	
+	//zero rest of BDL
+	//for(i = (entries * 4); i < BdlSize; ++i){
+	//	BdlMemVirt[i] = 0;
+	//}
 
 	/*
 	//fill BDL entries out with 10 ms buffer chunks.
@@ -2599,7 +2617,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
     ULONG offset = 0;
     USHORT entries = 0;
 
-    while ((offset + CHUNK_SIZE) <= TOTAL_SIZE && entries < 256)
+    while ((offset + CHUNK_SIZE) <= AudBufSize && entries < 256)
     {
         Bdl[entries].Address = BasePhys.QuadPart + offset;
         Bdl[entries].Length  = CHUNK_SIZE;
@@ -2609,7 +2627,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
     }
 
     //handle any leftover < CHUNK_SIZE tail
-    ULONG remainder = TOTAL_SIZE - offset;
+    ULONG remainder = AudBufSize - offset;
     if (remainder >= 128) {
         remainder &= ~127;  // trim to 128-byte boundary
         Bdl[entries].Address = BasePhys.QuadPart + offset;
@@ -2620,7 +2638,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	
 	//let's print enough of the BDL and make sure we've got it right
-	for(i = 0; i < 255; i += 4){
+	for(i = 0; i < (entries * 4); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr H0x%XL%X Length %d Flags %X", 
 				(i/4), BdlMemVirt[i+1], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));

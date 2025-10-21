@@ -1328,8 +1328,14 @@ GetPosition
 
     if (DmaChannel)
     {
-        *Position = Miniport->AdapterCommon->hda_get_actual_stream_position(); 
-
+		if (State == KSSTATE_RUN){
+			//bias the stream position a bit forward in Run mode
+			//to account for the codec's buffer.
+			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 16) % DmaChannel->BufferSize(); 
+		}
+		else {
+			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
+		}
     }
     else
     {
@@ -1450,28 +1456,3 @@ Silence
 {
     RtlFillMemory(Buffer,ByteCount,Format16Bit ? 0 : 0x7f);
 }
-
-/*
-STDMETHODIMP_(NTSTATUS) CMiniportWaveCyclicStreamHDA::Service()
-{
-    // Called by PortCls at DPC level when Notify() is triggered from ISR
-
-    // 1. Check which buffer(s) have completed
-    ULONG currentIndex = Miniport->AdapterCommon->hda_get_actual_stream_position();
-
-    // 2. If a new buffer finished, update position and notify PortCls
-    if (currentIndex != m_LastReportedBDLIndex)
-    {
-        m_LastReportedBDLIndex = currentIndex;
-
-        // Update the position for GetPosition()
-        m_ulPosition += m_BytesPerBuffer; 
-        m_ulPosition %= m_TotalBytes; // wrap around
-
-        // Tell PortCls that data was consumed
-        Port->NotifyPosition(m_ulPosition);
-    }
-
-    return STATUS_SUCCESS;
-}
-*/

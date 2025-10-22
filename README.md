@@ -1,9 +1,10 @@
 # WDMHDA
 HD Audio driver for Windows 98SE / ME
 
-This *technically* outputs some audio now, on Virtualbox ONLY, if you happen to like horrible screeching and popping noises. Still needs a LOT of work.
+This does mostly function as an audio driver, on Virtualbox ONLY, if you don't mind occasional horrible screeching and popping noises. Consider it a MVP Proof of Concept; further development is needed to function with basically any real hardware.
 
-Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
+Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
+
 and [BleskOS](https://github.com/VendelinSlezak/BleskOS/blob/master/source/drivers/sound/hda.c)
 used under MIT license.
 

@@ -38,7 +38,7 @@ class CAdapterCommon
 {
 private:
 	//HDA_DEVICE_EXTENSION m_DevExt;		// Device extension
-	PUCHAR m_pHDARegisters;     // MMIO registers
+	volatile PUCHAR m_pHDARegisters;     // MMIO registers
 	PUCHAR Base;
     USHORT InputStreamBase;
     USHORT OutputStreamBase;
@@ -48,22 +48,22 @@ private:
 	// CORB/RIRB buffers
 	// RIRB is at the beginning of the block, then CORB, then BDL
 
-	PULONG RirbMemVirt;
+	volatile PULONG RirbMemVirt;
 	PHYSICAL_ADDRESS RirbMemPhys;
     USHORT RirbPointer;
     USHORT RirbNumberOfEntries;
 
-    PULONG CorbMemVirt;
+    volatile PULONG CorbMemVirt;
 	PHYSICAL_ADDRESS CorbMemPhys;
     USHORT CorbPointer;
     USHORT CorbNumberOfEntries;
 
-	PULONG BdlMemVirt;
+	volatile PULONG BdlMemVirt;
 	PHYSICAL_ADDRESS BdlMemPhys;
 	USHORT BdlPointer;
     USHORT BdlNumberOfEntries;
 
-	PULONG DmaPosVirt;
+	volatile PULONG DmaPosVirt;
 	PHYSICAL_ADDRESS DmaPosPhys;
 
     // Output buffer information
@@ -566,6 +566,19 @@ Init
 	BdlMemPhys = *pBdlLogicalAddress;
 	BdlMemVirt = (PULONG) BdlVirtualAddress;
 
+	if (!BdlMemVirt) {
+		DOUT(DBG_ERROR, ("Couldn't map virt BDL Space"));
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+	if (BdlMemPhys.QuadPart == 0) {
+		DOUT(DBG_ERROR, ("Couldn't map phys BDL Space"));
+		return STATUS_NO_MEMORY;
+	}
+
+	if (is64OK == FALSE) {
+		ASSERT(BdlMemPhys.HighPart == 0);
+	}
+
 	//same for DMA Position buffer
 
 	PVOID DmaVirtualAddress = NULL;
@@ -581,78 +594,71 @@ Init
 	DmaPosPhys = *pDmaLogicalAddress;
 	DmaPosVirt = (PULONG) DmaVirtualAddress;
 
-
-	//map the audio buffer too
-	//we should be doing this through creating a DmaChannel but we dont have that yet
-	//not sure if that can give me the desired 128 byte phys alignment but we might
-	//get that automatically just by mapping more than a 4k page worth.
-	/*
-
-	PPHYSICAL_ADDRESS pBufLogicalAddress = NULL;
-	BufVirtualAddress = NULL;
-	
-	BufVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
-		DMA_Adapter,
-		audBufSize,
-		pBufLogicalAddress, //out param
-		FALSE );
-	BufLogicalAddress = *pBufLogicalAddress;
-
-	DOUT(DBG_SYSINFO, ("Buffer Virt Addr = 0x%X,", BufVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Buffer Phys Addr = 0x%X,", BufLogicalAddress));
-
-	if (!BufVirtualAddress) {
-		DOUT(DBG_ERROR, ("Couldn't map virt Buffer Space"));
+	if (!DmaPosVirt) {
+		DOUT(DBG_ERROR, ("Couldn't map virt DMA Position Buffer"));
 		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if (BufLogicalAddress.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys Buffer Space"));
+	if (DmaPosPhys.QuadPart == 0) {
+		DOUT(DBG_ERROR, ("Couldn't map phys DMA Position Buffer"));
 		return STATUS_NO_MEMORY;
 	}
-	*/
+
+	if (is64OK == FALSE) {
+		ASSERT(DmaPosPhys.HighPart == 0);
+	}
+
+
+	// Not mapping an audio buffer yet, that happens when the
+	// Wave miniport calls showtime()
 
 	//
     // Reset the controller and init registers
     //
+	//DbgPrint( ("\nInit HDA Controller!\n"));
 	ntStatus = InitHDA ();
 
-    if (!NT_SUCCESS (ntStatus))
+    if (!NT_SUCCESS (ntStatus)){
+		DbgPrint( "\nResetController Failed! 0x%X\n", ntStatus);
         return ntStatus;
-	    if(NT_SUCCESS(ntStatus))
-    {
-        _DbgPrintF(DEBUGLVL_VERBOSE,("ResetController Succeeded"));
-        AcknowledgeIRQ();
+	}
+	DbgPrint( ("\nResetController Succeeded!\n"));
     
-        //
-        // Hook up the interrupt.
-        //
-        ntStatus = PcNewInterruptSync(                              // See portcls.h
+    //
+    // Hook up the interrupt.
+    //
+    ntStatus = PcNewInterruptSync(                              // See portcls.h
                                         &m_pInterruptSync,          // Save object ptr
                                         NULL,                       // OuterUnknown(optional).
                                         ResourceList,               // He gets IRQ from ResourceList.
                                         0,                          // Resource Index
                                         InterruptSyncModeNormal     // Run ISRs once until we get SUCCESS
                                      );
-        if (NT_SUCCESS(ntStatus) && m_pInterruptSync)
-        {                                                                       //  run this ISR first
-            ntStatus = m_pInterruptSync->RegisterServiceRoutine(InterruptServiceRoutine,PVOID(this),FALSE);
-            if (NT_SUCCESS(ntStatus))
-            {
-                ntStatus = m_pInterruptSync->Connect();
-            }
+	if (!NT_SUCCESS(ntStatus) || m_pInterruptSync == NULL) {
+			DbgPrint("PcNewInterruptSync failed: 0x%X\n", ntStatus);
+			return ntStatus;
+	}
 
-            // if we could not connect or register the ISR, release the object.
-            if (!NT_SUCCESS (ntStatus))
-            {					
-				_DbgPrintF(DEBUGLVL_TERSE,("ERROR: Could Not Install ISR"));
-                m_pInterruptSync->Release();
-                m_pInterruptSync = NULL;
-            }
-        }
-    } else
-    {
-        _DbgPrintF(DEBUGLVL_TERSE,("ResetController Failure"));
-    }
+    //  run this ISR first
+
+    ntStatus = m_pInterruptSync->RegisterServiceRoutine(InterruptServiceRoutine,PVOID(this),FALSE);
+
+    if (!NT_SUCCESS(ntStatus)) {
+		DbgPrint("RegisterServiceRoutine failed: 0x%X\n", ntStatus);
+		m_pInterruptSync->Release();
+		m_pInterruptSync = NULL;
+		return ntStatus;
+	}
+       
+	ntStatus = m_pInterruptSync->Connect();
+
+	if (!NT_SUCCESS(ntStatus)) {
+		DbgPrint("InterruptSync->Connect failed: 0x%X\n", ntStatus);
+		m_pInterruptSync->Release();
+		m_pInterruptSync = NULL;
+		return ntStatus;
+	}
+
+	DbgPrint("Init Finished Successfully!\n");
     return ntStatus;
 }
 
@@ -1356,8 +1362,11 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 				selected_output_node = pin_output_node_number;
 			}
 
-			//add task for checking headphone connection
-			//TODO: this will have to be a DPC and hda_send_verb has to be protected by a mutex 1st
+			//check once for now
+			hda_check_headphone_connection_change();
+
+			//TODO: add task for checking headphone connection
+			// this will have to be a DPC
 
 			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
 		}
@@ -1966,34 +1975,39 @@ MixerReset
  *****************************************************************************
  * Acknowledge interrupt request. TODO: works for output stream 1 only
  */
-BOOLEAN
-CAdapterCommon::
-AcknowledgeIRQ
-(   void
-)
-{	
-	//DbgPrint( ("i"));
-	//read INTSTS register
-	ULONG u = readULONG(0x24);
-	if (u == 0){
-		//no interrupt from the device at all so what am i even doing here
-		//DbgPrint( ("???"));
-		return false; 
-	} else {
-		if (u == 0xFFFFFFFF){
-			//happens during shutdown, disable all controller interrupts so this won't keep happening forever
-			writeULONG(0x20,0x0);
-		} else if(u & 0x10) {
-		//write 1 to clear irq status on output stream 1
-			setUCHARBit(OutputStreamBase + 3,0x0004);
-		} else {
-			//another unknown type of IRQ I can't clear, so just turn them off
-			DOUT (DBG_PRINT, ("???[CAdapterCommon::AcknowledgeIRQ], INSTS=%X, STRSTS=%X", u, readUCHAR(OutputStreamBase + 3)));
-			writeULONG(0x20,0x0);
-		}
-		return true;
-	}
+BOOLEAN CAdapterCommon::AcknowledgeIRQ()
+{
+    ULONG intsts = readULONG(0x24);
+    if (intsts == 0 || intsts == 0xFFFFFFFF)
+    {
+        // No valid interrupt or controller shut down.
+        if (intsts == 0xFFFFFFFF)
+            writeULONG(0x20, 0x0); // disable global interrupt enable bit
+        return FALSE; // nothing for us
+    }
 
+    // We're only using output stream #1 (bit 4 in INTSTS)
+    if (intsts & (1 << 4))
+    {
+        UCHAR sdsts = readUCHAR(OutputStreamBase + 3);
+
+        // Clear all bits that are set (ACK)
+        writeUCHAR(OutputStreamBase + 3, sdsts);
+
+        // Also clear INTSTS bit for this stream
+		// TODO confirm necessary, the datasheet says this is RO
+        //writeULONG(0x24, (1 << 4));
+
+        return TRUE; // handled an interrupt
+    }
+
+    // Something else triggered (GPI, StateChange, etc.)
+    DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX", intsts));
+
+    // Best effort: clear and keep running
+    // writeULONG(0x24, intsts);
+
+    return FALSE; // not our stream, but we handled it anyway
 }
 
 /*****************************************************************************
@@ -2382,8 +2396,8 @@ QueryDeviceCapabilities
  *****************************************************************************
  * ISR.
  */
-NTSTATUS
-InterruptServiceRoutine
+
+NTSTATUS InterruptServiceRoutine
 (
     IN      PINTERRUPTSYNC  InterruptSync,
     IN      PVOID           DynamicContext
@@ -2396,9 +2410,11 @@ InterruptServiceRoutine
 
     //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
 
-	//first of all, get out of here if it's not our IRQ
-	BOOLEAN ours = that->AcknowledgeIRQ();
-	if(!ours){
+	//
+    // ACK the ISR. note we don't have any direct access to CAdapterCommon gotta use the pointer
+    // get out of here immediately if it's not our IRQ
+	//
+	if(!that->AcknowledgeIRQ() ){
 		return FALSE;
 	}
 
@@ -2415,21 +2431,20 @@ InterruptServiceRoutine
         //
         that->m_pPortWave->Notify(that->m_pServiceGroupWave);
     }
-
-    //
-    // ACK the ISR. note we don't have any direct access to CAdapterCommon gotta use the pointer
-    //	
-
     return STATUS_SUCCESS;
 }
 
+//stop stream and clear all stream registers
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
+
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
     //stop output DMA engine
 	
 	writeUCHAR(OutputStreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
-	while(ticks++<2) {
+	while(ticks++ < 40) {
+		//wait till the run bit reads 0 to confirm it has stopped
+		//should be within 40 us
 		KeStallExecutionProcessor(1);
 		if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
 			break;
@@ -2480,6 +2495,18 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
 	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+	ULONG ticks = 0;
+	while(ticks++ < 40) {
+		//wait till the run bit reads 0 to confirm it has stopped
+		//should be within 40 us
+		KeStallExecutionProcessor(1);
+		if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
+			break;
+		}
+	}
+	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
+		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
+	}
 }
 
 

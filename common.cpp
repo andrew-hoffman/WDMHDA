@@ -74,8 +74,10 @@ private:
 	PDMA_ADAPTER DMA_Adapter;
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	UCHAR interrupt;
-	ULONG memLength;//check
+	ULONG memLength;
 	UCHAR codecNumber;
+	UCHAR nSDO;
+	UCHAR FirstOutputStream;
 
 	BOOLEAN is64OK;
 
@@ -444,7 +446,28 @@ Init
 
 	//offsets for stream engines
 	InputStreamBase = (0x80);
-	OutputStreamBase = (0x80 + (0x20 * ((caps >> 8) & 0xF))); //skip input streams ports
+	FirstOutputStream = ((caps >> 8) & 0xF);
+	OutputStreamBase = (0x80 + (0x20 * FirstOutputStream)); //skip input streams ports
+	switch((caps >> 1) & 0x3){
+	case 0:
+		nSDO = 1;
+		break;
+	case 1:
+		nSDO = 2;
+		break;
+	case 2:
+		nSDO = 4;
+		break;
+	}
+
+	DOUT( DBG_SYSINFO, ("caps 0x%X: input streams:%d output streams:%d bd streams:%d SDOs:%d 64ok:%d",
+		caps,
+		((caps >> 8) & 0xF),
+		((caps >> 12) & 0xF),
+		((caps >> 3) & 0x1f),
+		nSDO,
+		is64OK
+		));
 
 	//allocate common buffers
 	//for CORB, RIRB, BDL buffer, DMA position buffer
@@ -926,7 +949,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		}
 	}
 
-	//disable interrupts
+	//disable all interrupts
 	writeULONG (0x20, 0);
  
 	//turn off dma position transfer
@@ -1734,14 +1757,16 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
   
 	//wait for RIRB pointer to update to match
 
-	for(ULONG ticks = 0; ticks < 5; ++ticks) {
+	for(ULONG ticks = 0; ticks < 50; ++ticks) {
 		KeStallExecutionProcessor(10);
 		if(readUSHORT (0x58) == CorbPointer) {
 			//KeFlushIoBuffers(mdl, TRUE, TRUE);  
 			break;
 		}
-		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 4)) {
+		if( (readUSHORT (0x58) != CorbPointer) && (ticks == 49)) {
 			DOUT (DBG_ERROR, ("No Response to Codec Verb"));
+			//unlock
+			KeReleaseSpinLock(&QLock, oldirql);
 			//	communication_type = HDA_UNINITIALIZED;
 			return STATUS_TIMEOUT;
 		}
@@ -1973,7 +1998,7 @@ MixerReset
 /*****************************************************************************
  * CAdapterCommon::AcknowledgeIRQ()
  *****************************************************************************
- * Acknowledge interrupt request. TODO: works for output stream 1 only
+ * Acknowledge interrupt request. TODO: works for first output stream only
  */
 BOOLEAN CAdapterCommon::AcknowledgeIRQ()
 {
@@ -1986,17 +2011,13 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
         return FALSE; // nothing for us
     }
 
-    // We're only using output stream #1 (bit 4 in INTSTS)
-    if (intsts & (1 << 4))
+    // We're only using output stream #1 (bit #n in INTSTS)
+    if (intsts & (1 << FirstOutputStream))
     {
         UCHAR sdsts = readUCHAR(OutputStreamBase + 3);
 
-        // Clear all bits that are set (ACK)
+        // Write back to clear all bits that are set for the stream
         writeUCHAR(OutputStreamBase + 3, sdsts);
-
-        // Also clear INTSTS bit for this stream
-		// TODO confirm necessary, the datasheet says this is RO
-        //writeULONG(0x24, (1 << 4));
 
         return TRUE; // handled an interrupt
     }
@@ -2004,10 +2025,9 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
     // Something else triggered (GPI, StateChange, etc.)
     DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX", intsts));
 
-    // Best effort: clear and keep running
-    // writeULONG(0x24, intsts);
-
-    return FALSE; // not our stream, but we handled it anyway
+    //TODO Best effort: should clear any stream irq and keep running
+	writeULONG(0x20, 0x0); // disable global interrupt enable bit
+    return FALSE; 
 }
 
 /*****************************************************************************
@@ -2636,8 +2656,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	//}
 
 	/*
-	//fill BDL entries out with 10 ms buffer chunks.
-	//why doesnt this work? do buffers really need to be power of 2 secretly?
+	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
+	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?
 
 	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlMemVirt);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
@@ -2684,7 +2704,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
 
-
 	//set stream data format
 	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
 
@@ -2697,18 +2716,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	DOUT(DBG_SYSINFO, ("ready to start the stream"));
 
-
-	//start streaming to stream 1 with interrupts
-	//no, wait for Play state
-
-	//writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	//writeUCHAR(OutputStreamBase + 0x00, 0x06);
-
 	//enable interrupts from output stream 1
-	//TODO account for other amounts of streams available
-	writeULONG(0x20, ((1 << 31) | (1 << 4)) ); 
+	//TODO account for other streams in use
+	writeULONG(0x20, ((1 << 31) | (1 << FirstOutputStream)) ); 
 
 	DOUT(DBG_SYSINFO, ("showtime"));
+
+	// wait for Play state to actually start the stream though.
 	
     return ntStatus;
 }
@@ -2771,7 +2785,4 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
  return data_format;
 }
 
-STDMETHODIMP_(PULONG) CAdapterCommon::get_bdl_mem(void){
-	return BdlMemVirt;
-}
 

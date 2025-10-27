@@ -12,7 +12,7 @@
 #include "common.h"
 
 
-#define STR_MODULENAME "HDAAdapter: "
+#define STR_MODULENAME "HDACommon: "
 
 #define BDLE_FLAG_IOC  0x01
 
@@ -629,6 +629,11 @@ Init
 	if (is64OK == FALSE) {
 		ASSERT(DmaPosPhys.HighPart == 0);
 	}
+	
+	if (!NT_SUCCESS (ntStatus)){
+		DbgPrint( "\nBuffer Mapping Failed! 0x%X\n", ntStatus);
+        return ntStatus;
+	}
 
 
 	// Not mapping an audio buffer yet, that happens when the
@@ -637,14 +642,16 @@ Init
 	//
     // Reset the controller and init registers
     //
-	//DbgPrint( ("\nInit HDA Controller!\n"));
+	DbgPrint( ("\nInit HDA Controller!\n"));
+
 	ntStatus = InitHDA ();
 
     if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nResetController Failed! 0x%X\n", ntStatus);
         return ntStatus;
+	} else {
+		DbgPrint( "\nResetController Succeeded! 0x%X\n", ntStatus);
 	}
-	DbgPrint( ("\nResetController Succeeded!\n"));
     
     //
     // Hook up the interrupt.
@@ -911,11 +918,11 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 {
     PAGED_CODE ();
     
-	NTSTATUS ntStatus = STATUS_NOT_IMPLEMENTED;
+	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::InitHDA]"));
 
-	//TODO: try to stop all possible running streams before resetting
+	//TODO: try to stop all possible running streams before resetting?
 
 	//we're not supposed to write to any registers before reset
 
@@ -923,29 +930,29 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	writeUCHAR(0x08,0x0);
 
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 100; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x0) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
 			break;
-		} else if (i == 9) {
+		} else if (i == 99) {
 			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
-			return STATUS_TIMEOUT;
+			return STATUS_UNSUCCESSFUL;
 		}
 	}
 
 	KeStallExecutionProcessor(100);
 	writeUCHAR(0x08,0x1);
 
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < 100; i++) {
 		KeStallExecutionProcessor(100);
 		if ((readUCHAR(0x08) & 0x1) == 0x1) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
 			break;
 		}
-		else if (i == 9) {
+		else if (i == 99) {
 			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
-			return STATUS_TIMEOUT;
+			return STATUS_UNSUCCESSFUL;
 		}
 	}
 
@@ -999,29 +1006,32 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		//i'm not gonna bother for now since CORB/RIRB support is required for
 		//UAA compliant hardware, eg. anything with existing Windows drivers
 		DOUT (DBG_ERROR, ("CORB only supports PIO"));
-		return STATUS_NOT_IMPLEMENTED;
+		//goto hda_use_pio_interface;
+		return STATUS_UNSUCCESSFUL;
 	}
 	//Reset corb read pointer
 	writeUSHORT (0x4A, 0x8000); //write a 1 to bit 15
-	for (i = 0; i < 5; i++) {
-		KeStallExecutionProcessor(10);
+	for (i = 0; i < 50; i++) {
 		if ((readUSHORT(0x4A) & 0x8000) == 0x8000) break;
+		KeStallExecutionProcessor(10);
 		//read back the 1 to verify reset
 	}
 	if ((readUSHORT(0x4A) & 0x8000) == 0x0000){
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset"));
-		return STATUS_TIMEOUT;
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset 1"));
+		//goto hda_use_pio_interface;
+		return STATUS_UNSUCCESSFUL;
 	}
 
 	//then write a 0 and read back the 0 to verify a clear
 	writeUSHORT(0x4A, 0x0000);
-	for (i = 0; i < 5; i++) {
-		KeStallExecutionProcessor(10);
+	for (i = 0; i < 50; i++) {
 		if ((readUSHORT(0x4A) & 0x8000) == 0x0000) break;
+		KeStallExecutionProcessor(10);
 	}
 	if ((readUSHORT(0x4A) & 0x8000) == 0x8000){
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset"));
-		return STATUS_TIMEOUT;
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset 0"));
+		//goto hda_use_pio_interface;
+		return STATUS_UNSUCCESSFUL;
 	}
 
 	writeUSHORT (0x48,0);
@@ -1056,6 +1066,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	} else {
 		//rirb not supported, need to use PIO
 		DOUT (DBG_ERROR, ("RIRB only supports PIO"))
+		//goto hda_use_pio_interface;
 		return STATUS_NOT_IMPLEMENTED;
 	}
 
@@ -1768,7 +1779,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 			//unlock
 			KeReleaseSpinLock(&QLock, oldirql);
 			//	communication_type = HDA_UNINITIALIZED;
-			return STATUS_TIMEOUT;
+			return STATUS_UNSUCCESSFUL;
 		}
 	}
 
@@ -2456,6 +2467,7 @@ NTSTATUS InterruptServiceRoutine
 
 //stop stream and clear all stream registers
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
+	NTSTATUS ntStatus = STATUS_SUCCESS;
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
     //stop output DMA engine
@@ -2472,7 +2484,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 	}
 	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
 		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
-		return STATUS_TIMEOUT;
+		ntStatus = STATUS_TIMEOUT;
 	}
  
 	//reset stream registers
@@ -2498,13 +2510,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 	}
 	if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
 		DOUT (DBG_ERROR, ("HDA: can not stop resetting stream"));
-	return STATUS_TIMEOUT;
+		ntStatus = STATUS_TIMEOUT;
 	}
 	KeStallExecutionProcessor(5);
 
 	//clear error bits
 	writeUCHAR(OutputStreamBase + 0x03, 0x1C);
-    return STATUS_SUCCESS;
+    return ntStatus;
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {

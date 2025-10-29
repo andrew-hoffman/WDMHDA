@@ -960,6 +960,9 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	//disable all interrupts
 	writeULONG (0x20, 0);
+
+	//turn off WAKEEN interrupt
+	writeUSHORT(0x0C, 0);
  
 	//turn off dma position transfer
 	writeULONG (0x70, 0);
@@ -1019,7 +1022,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		//read back the 1 to verify reset
 	}
 	if ((readUSHORT(0x4A) & 0x8000) == 0x0000){
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset 1"));
+		//VMWare never returns a 1 in this bit so we fall back to PIO. that's fine for now
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset On"));
 		goto hda_use_pio_interface;
 		//return STATUS_UNSUCCESSFUL;
 	}
@@ -1031,7 +1035,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		KeStallExecutionProcessor(10);
 	}
 	if ((readUSHORT(0x4A) & 0x8000) == 0x8000){
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset 0"));
+		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset Off"));
 		goto hda_use_pio_interface;
 		//return STATUS_UNSUCCESSFUL;
 	}
@@ -1103,8 +1107,14 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	for(codec_number = 0;  codec_number < 15; codec_number++) {
 		communication_type = HDA_CORB_RIRB;
+
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-		DOUT (DBG_SYSINFO, ("codec %d response 0x%X", codec_number, codec_id));
+		//first time we try to send a verb is here
+		if(codec_id == STATUS_UNSUCCESSFUL){
+			DOUT (DBG_ERROR, ("CORB/RIRB Communication is Broken."));
+			return STATUS_UNSUCCESSFUL;
+		}
+		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 
 		if(codec_id != 0) {
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
@@ -1127,13 +1137,22 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	return ntStatus;
 	
 	hda_use_pio_interface:
+	DOUT (DBG_SYSINFO, ("Using Immediate Command Interface."));
+
 	//stop CORB and RIRB
 	writeUCHAR ( 0x4C, 0x0);
 	writeUCHAR ( 0x5C, 0x0);
 
 	for(codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
 		communication_type = HDA_PIO;
+
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+
+		//first time we try to send a verb is here
+		if(codec_id == STATUS_UNSUCCESSFUL){
+			DOUT (DBG_ERROR, ("PIO Communication is Broken."));
+			return STATUS_UNSUCCESSFUL;
+		}
 
 		if(codec_id != 0) {
 			DOUT (DBG_SYSINFO, ("HDA:  Codec %d PIO communication interface", codec_id));
@@ -1143,7 +1162,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	}
 	if (!NT_SUCCESS (ntStatus))
     {        
-        DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
+        DOUT (DBG_ERROR, ("Initialization of HDA Codec failed."));
     }
     return ntStatus;
 }
@@ -1762,16 +1781,15 @@ UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
-	//using CORB/RIRB interface only (immediate cmd interface is not supported)
 
 	//TODO: check sizes of components passed in 
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
-	//TODO: check for responses with high bit set (those are the eroors)
+	//TODO: check for responses with high bit set (those are the errors)
 	
 	KIRQL oldirql;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
 	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
-	if(communication_type==HDA_CORB_RIRB) {
+	if (communication_type == HDA_CORB_RIRB) {
 		
 		//CORB/RIRB interface
 
@@ -1803,7 +1821,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		}
 
 		//read response. each response is 8 bytes long but we only care about the lower 32 bits
-		value = READ_REGISTER_ULONG (RirbMemVirt + (RirbPointer * 2));
+		ULONG response = READ_REGISTER_ULONG (RirbMemVirt + (RirbPointer * 2));
 
 		//move pointers
 		CorbPointer++;
@@ -1819,12 +1837,12 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		KeReleaseSpinLock(&QLock, oldirql);
 
 		//return response
-		return value;
+		return response;
 
-	} else if (communication_type==HDA_PIO){
+	} else if (communication_type == HDA_PIO){
 		
 		//Immediate command interface
-		//acquire spin lock: this isnt great to do as well as blocking but what can i do
+		//acquire spin lock: this isnt great to do as well as blocking but what can ya do
 		KeAcquireSpinLock(&QLock, &oldirql);
 
 		DOUT (DBG_SYSINFO, ("Write codec verb Immediate:0x%X", value));
@@ -1839,24 +1857,27 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 
 		//poll for response
 		ULONG ticks = 0;
-		while(++ticks < 50) {
+		while (++ticks < 50) {
 			KeStallExecutionProcessor(10);
 
 			//wait for Immediate Result Valid bit = set and Immediate Command Busy bit = clear
 			if((readUSHORT(0x68) & 0x3)==0x2) {
 				//clear Immediate Result Valid bit
 				writeUSHORT(0x68, 0x2);
+				
+				ULONG response = readULONG( 0x64);
 				//unlock
 				KeReleaseSpinLock(&QLock, oldirql);
 				//return response
-				return readULONG( 0x64);
+				return response;
 			}
 		}
   
 		//there was no response after 6 ms
-		DOUT (DBG_ERROR, ("\nHDA PIO ERROR: no response"));
 		//unlock
 		KeReleaseSpinLock(&QLock, oldirql);
+		DOUT (DBG_ERROR, ("\nHDA PIO ERROR: no response"));
+
 		communication_type = HDA_UNINITIALIZED;
 		return STATUS_UNSUCCESSFUL;
 	} else {
@@ -2081,7 +2102,18 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
             writeULONG(0x20, 0x0); // disable global interrupt enable bit
         return FALSE; // nothing for us
     }
+	if (intsts & (1 << 30)){
+		//controller interrupt for 1 of 3 possible reasons
+		//all of which i am ignoring for now.
+		DOUT(DBG_PRINT, ("Controller IRQ: STATESTS=%X RIRBSTS=%X", readUSHORT(0x0E), readUCHAR(0x5D) ));
 
+		//clear Codec State Change flag
+		writeUSHORT(0x0E,readUSHORT(0x0E));
+
+		//clear Response Interrupt or Response Overrun
+		writeUCHAR(0x5D, 0x5);
+		return TRUE;
+	}
     // We're only using output stream #1 (bit #n in INTSTS)
     if (intsts & (1 << FirstOutputStream))
     {
@@ -2096,7 +2128,7 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
     }
 
     // Something else triggered (GPI, StateChange, etc.)
-    DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX", intsts));
+    DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX Disabling further interrupts", intsts));
 
     //TODO Best effort: should clear any other stream irq and keep running
 	writeULONG(0x20, 0x0); // disable global interrupt enable bit
@@ -2789,6 +2821,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	KeStallExecutionProcessor(10);
 
 	DOUT(DBG_SYSINFO, ("ready to start the stream"));
+
+	//clear pending codec interrupts once, we do not care
+	UCHAR rirbsts = readUCHAR(0x5D);
+	DOUT(DBG_SYSINFO, ("rirb sts %X",rirbsts));
+	writeUCHAR(0x5D, 0x5);
 
 	//enable interrupts from output stream 1
 	//TODO account for other streams in use

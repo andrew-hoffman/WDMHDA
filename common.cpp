@@ -367,7 +367,7 @@ Init
 				m_pDeviceObject -> AlignmentRequirement));
 	}
 
-	//init spin lock for protecting the CORB/RIRB
+	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
 
 	//is there anything in config space we need to set?
@@ -933,7 +933,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR(0x08,0x0);
 
 	for (int i = 0; i < 100; i++) {
-		KeStallExecutionProcessor(100);
+		KeStallExecutionProcessor(150);
 		if ((readUCHAR(0x08) & 0x1) == 0x0) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
 			break;
@@ -947,7 +947,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR(0x08,0x1);
 
 	for (i = 0; i < 100; i++) {
-		KeStallExecutionProcessor(100);
+		KeStallExecutionProcessor(150);
 		if ((readUCHAR(0x08) & 0x1) == 0x1) {
 			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
 			break;
@@ -1097,6 +1097,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR ( 0x4C, 0x2);
 	writeUCHAR ( 0x5C, 0x2);
 
+	communication_type = HDA_CORB_RIRB;
+
 	//TODO: i will need 2 implementations of send_codec_verb
 	//one immediate that stalls, and one with a callback
 	//maybe take more than one verb at once w/o blocking
@@ -1104,17 +1106,28 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	//find codecs on the link.
 	//this can also be done by checking bits in STATESTS register
 
+	for(codec_number = 0; codec_number < 16; codec_number++) {
 
-	for(codec_number = 0;  codec_number < 15; codec_number++) {
+		communication_type = HDA_CORB_RIRB;
+		
+		//send codec reset command (Realtek needs it before it will respond to IDs?)
+		//there won't be a response
+		hda_send_verb(codec_number, 1, 0x7ff, 0);
+
+		//stall for at least 477 clocks for codec reset turnaround
+		KeStallExecutionProcessor(50);		
+
 		communication_type = HDA_CORB_RIRB;
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-		//first time we try to send a verb is here
-		if(codec_id == STATUS_UNSUCCESSFUL){
+
+		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
+		
+		if(codec_number == 15 && codec_id == STATUS_UNSUCCESSFUL){
+			//if we got to last codec and no responses from any of them
 			DOUT (DBG_ERROR, ("CORB/RIRB Communication is Broken."));
 			return STATUS_UNSUCCESSFUL;
 		}
-		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 
 		if(codec_id != 0) {
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
@@ -1123,7 +1136,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 			//TODO: init all codecs on link
 			ntStatus = InitializeCodec(codec_number);
 		
-		break; //initalization is complete
+			break; //initalization is complete
 		}
 	}
 
@@ -1143,13 +1156,20 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR ( 0x4C, 0x0);
 	writeUCHAR ( 0x5C, 0x0);
 
+	communication_type = HDA_PIO;
+
 	for(codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
+
+		communication_type = HDA_PIO;
+		
+		hda_send_verb(codec_number, 1, 0x7ff, 0);
+
 		communication_type = HDA_PIO;
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
 
-		//first time we try to send a verb is here
-		if(codec_id == STATUS_UNSUCCESSFUL){
+		if(codec_number == 15 && codec_id == STATUS_UNSUCCESSFUL){
+			//if we got to last codec and no responses from any of them
 			DOUT (DBG_ERROR, ("PIO Communication is Broken."));
 			return STATUS_UNSUCCESSFUL;
 		}
@@ -1805,13 +1825,13 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
   
 		//wait for RIRB pointer to update to match
 
-		for(ULONG ticks = 0; ticks < 50; ++ticks) {
+		for(ULONG ticks = 0; ticks < 600; ++ticks) {
 			KeStallExecutionProcessor(10);
 			if(readUSHORT (0x58) == CorbPointer) {
 				//KeFlushIoBuffers(mdl, TRUE, TRUE);  
 				break;
 			}
-			if( (readUSHORT (0x58) != CorbPointer) && (ticks == 49)) {
+			if( (readUSHORT (0x58) != CorbPointer) && (ticks == 599)) {
 				DOUT (DBG_ERROR, ("No Response to Codec Verb"));
 				//unlock!!
 				KeReleaseSpinLock(&QLock, oldirql);
@@ -1845,7 +1865,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		//acquire spin lock: this isnt great to do as well as blocking but what can ya do
 		KeAcquireSpinLock(&QLock, &oldirql);
 
-		DOUT (DBG_SYSINFO, ("Write codec verb Immediate:0x%X", value));
+		//DOUT (DBG_SYSINFO, ("Write codec verb Immediate:0x%X", value));
 		//clear Immediate Result Valid bit
 		writeUSHORT(0x68, 0x2);
 
@@ -1857,15 +1877,15 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 
 		//poll for response
 		ULONG ticks = 0;
-		while (++ticks < 50) {
+		while (++ticks < 600) {
 			KeStallExecutionProcessor(10);
 
 			//wait for Immediate Result Valid bit = set and Immediate Command Busy bit = clear
-			if((readUSHORT(0x68) & 0x3)==0x2) {
+			if ((readUSHORT(0x68) & 0x3) == 0x2) {
 				//clear Immediate Result Valid bit
 				writeUSHORT(0x68, 0x2);
 				
-				ULONG response = readULONG( 0x64);
+				ULONG response = readULONG(0x64);
 				//unlock
 				KeReleaseSpinLock(&QLock, oldirql);
 				//return response
@@ -2564,8 +2584,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
-    //stop output DMA engine
+    
+	//turn off IRQs for stream 1
 	
+	//stop output DMA engine
 	writeUCHAR(OutputStreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
 	while(ticks++ < 40) {
@@ -2584,7 +2606,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 	//reset stream registers
 	writeUCHAR(OutputStreamBase + 0x00, 0x01);
 	ticks = 0;
-	while(ticks++<10) {
+	while(ticks++ < 10) {
 		KeStallExecutionProcessor(1);
 		if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
 			break;
@@ -2748,7 +2770,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	ProgramSampleRate(44100);
 
 	//divide the buffer into <entries> chunks (must be a power of 2)
-	USHORT entries = 128;
+	USHORT entries = 64;
 	for(i = 0; i < (entries * 4); i += 4){
 		BdlMemVirt[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
 		BdlMemVirt[i+1] = BufLogicalAddress.HighPart;

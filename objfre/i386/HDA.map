@@ -1,6 +1,6 @@
  HDA
 
- Timestamp is 69029d8c (Wed Oct 29 15:04:44 2025)
+ Timestamp is 6903e1b6 (Thu Oct 30 15:07:50 2025)
 
  Preferred load address is 00010000
 
@@ -10,7 +10,7 @@
  0002:000000a0 0000059bH .rdata                  DATA
  0003:00000000 00000cc8H .data                   DATA
  0003:00000cc8 00000010H .bss                    DATA
- 0004:00000000 0000321fH PAGE                    CODE
+ 0004:00000000 00003291H PAGE                    CODE
  0005:00000000 00000015H INIT                    CODE
  0005:00000018 0000003cH .idata$2                CODE
  0005:00000054 00000014H .idata$3                CODE
@@ -30,71 +30,71 @@
  0001:00000064       ?hda_check_headphone_connection_change@CAdapterCommon@@QAGXXZ 00010344 f   common.obj
  0001:000000da       ?hda_is_supported_sample_rate@CAdapterCommon@@QAGEK@Z 000103ba f   common.obj
  0001:00000160       ?hda_send_verb@CAdapterCommon@@QAGKKKKK@Z 00010440 f   common.obj
- 0001:000002ba       ?ReadController@CAdapterCommon@@UAGEXZ 0001059a f   common.obj
- 0001:000002c0       ?WriteController@CAdapterCommon@@UAGEE@Z 000105a0 f   common.obj
- 0001:000002c6       ?MixerRegWrite@CAdapterCommon@@UAGXEE@Z 000105a6 f   common.obj
- 0001:000002e2       ?MixerRegRead@CAdapterCommon@@UAGEE@Z 000105c2 f   common.obj
- 0001:00000300       ?MixerReset@CAdapterCommon@@UAGXXZ 000105e0 f   common.obj
- 0001:00000304       ?AcknowledgeIRQ@CAdapterCommon@@AAEEXZ 000105e4 f   common.obj
- 0001:00000378       ?ResetController@CAdapterCommon@@UAGJXZ 00010658 f   common.obj
- 0001:00000398       ?RestoreMixerSettingsFromRegistry@CAdapterCommon@@UAGJXZ 00010678 f   common.obj
- 0001:000004f6       ?SaveMixerSettingsToRegistry@CAdapterCommon@@UAGJXZ 000107d6 f   common.obj
- 0001:000005ba       ?ProgramSampleRate@CAdapterCommon@@QAGJK@Z 0001089a f   common.obj
- 0001:00000650       ?PowerChangeState@CAdapterCommon@@UAGXT_POWER_STATE@@@Z 00010930 f   common.obj
- 0001:000006a6       ?QueryDeviceCapabilities@CAdapterCommon@@UAGJPAU_DEVICE_CAPABILITIES@@@Z 00010986 f   common.obj
- 0001:000006a6       ?QueryPowerChangeState@CAdapterCommon@@UAGJT_POWER_STATE@@@Z 00010986 f   common.obj
- 0001:000006ac       ?InterruptServiceRoutine@@YGJPAUIInterruptSync@@PAX@Z 0001098c f   common.obj
- 0001:000006d8       ?hda_stop_stream@CAdapterCommon@@UAGJXZ 000109b8 f   common.obj
- 0001:000007ce       ?hda_start_sound@CAdapterCommon@@UAGXXZ 00010aae f   common.obj
- 0001:000007f6       ?hda_stop_sound@CAdapterCommon@@UAGXXZ 00010ad6 f   common.obj
- 0001:0000083c       ?hda_get_actual_stream_position@CAdapterCommon@@UAGKXZ 00010b1c f   common.obj
- 0001:00000852       ?hda_set_volume@CAdapterCommon@@QAGXK@Z 00010b32 f   common.obj
- 0001:000008a0       ?readUCHAR@CAdapterCommon@@QAGEG@Z 00010b80 f   common.obj
- 0001:000008b8       ?writeUCHAR@CAdapterCommon@@QAGXGE@Z 00010b98 f   common.obj
- 0001:000008d4       ?readUSHORT@CAdapterCommon@@QAGGG@Z 00010bb4 f   common.obj
- 0001:000008ec       ?writeUSHORT@CAdapterCommon@@QAGXGG@Z 00010bcc f   common.obj
- 0001:00000908       ?readULONG@CAdapterCommon@@QAGKG@Z 00010be8 f   common.obj
- 0001:00000920       ?writeULONG@CAdapterCommon@@QAGXGK@Z 00010c00 f   common.obj
- 0001:0000093c       ?hda_showtime@CAdapterCommon@@UAGJPAUIDmaChannel@@@Z 00010c1c f   common.obj
- 0001:00000aea       ?hda_return_sound_data_format@CAdapterCommon@@QAGGKKK@Z 00010dca f   common.obj
- 0001:00000ba8       ?QueryInterface@CAdapterCommon@@W3AGJABU_GUID@@PAPAX@Z 00010e88 f i common.obj
- 0001:00000bb2       ?AddRef@CAdapterCommon@@W3AGKXZ 00010e92 f i common.obj
- 0001:00000bbc       ?Release@CAdapterCommon@@W3AGKXZ 00010e9c f i common.obj
- 0001:00000bc6       ?QueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 00010ea6 f i mintopo.obj
- 0001:00000bc6       ?QueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 00010ea6 f i mintopo.obj
- 0001:00000bc6       ?QueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00010ea6 f i mintopo.obj
- 0001:00000bde       ?Release@CMiniportWaveCyclicStreamHDA@@UAGKXZ 00010ebe f i mintopo.obj
- 0001:00000bde       ?Release@CMiniportWaveCyclicHDA@@UAGKXZ 00010ebe f i mintopo.obj
- 0001:00000bde       ?Release@CMiniportTopologyHDA@@UAGKXZ 00010ebe f i mintopo.obj
- 0001:00000bee       ?DataRangeIntersection@CMiniportTopologyHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00010ece f i mintopo.obj
- 0001:00000bf6       ??_ECMiniportTopologyHDA@@UAEPAXI@Z 00010ed6 f i mintopo.obj
- 0001:00000bf6       ??_GCMiniportTopologyHDA@@UAEPAXI@Z 00010ed6 f i mintopo.obj
- 0001:00000ff4       ?ReadBitsFromMixer@CMiniportTopologyHDA@@AAEEEEE@Z 000112d4 f   mintopo.obj
- 0001:0000101c       ?WriteBitsToMixer@CMiniportTopologyHDA@@AAEXEEEE@Z 000112fc f   mintopo.obj
- 0001:00001072       ?AddRef@CMiniportWaveCyclicHDA@@UAGKXZ 00011352 f i minwave.obj
- 0001:00001072       ?AddRef@CMiniportTopologyHDA@@UAGKXZ 00011352 f i minwave.obj
- 0001:00001072       ?AddRef@CMiniportWaveCyclicStreamHDA@@UAGKXZ 00011352 f i minwave.obj
- 0001:00001082       ??_GCMiniportWaveCyclicHDA@@UAEPAXI@Z 00011362 f i minwave.obj
- 0001:00001082       ??_ECMiniportWaveCyclicHDA@@UAEPAXI@Z 00011362 f i minwave.obj
- 0001:000010a2       ??_GCMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 00011382 f i minwave.obj
- 0001:000010a2       ??_ECMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 00011382 f i minwave.obj
- 0001:000010c2       ?GetPosition@CMiniportWaveCyclicStreamHDA@@UAGJPAK@Z 000113a2 f   minwave.obj
- 0001:00001120       ?NormalizePhysicalPosition@CMiniportWaveCyclicStreamHDA@@UAGJPA_J@Z 00011400 f   minwave.obj
- 0001:00001168       ?Silence@CMiniportWaveCyclicStreamHDA@@UAGXPAXK@Z 00011448 f   minwave.obj
- 0001:000011a2       _DbgPrint                  00011482 f   ntoskrnl:ntoskrnl.exe
- 0001:000011a8       __alldiv                   00011488 f   ntoskrnl:ntoskrnl.exe
- 0001:000011ae       __allmul                   0001148e f   ntoskrnl:ntoskrnl.exe
- 0001:000011b4       _PcInitializeAdapterDriver@12 00011494 f   portcls:portcls.sys
- 0001:000011ba       _PcAddAdapterDevice@20     0001149a f   portcls:portcls.sys
- 0001:000011c0       _PcRegisterSubdevice@12    000114a0 f   portcls:portcls.sys
- 0001:000011c6       _PcNewMiniport@8           000114a6 f   portcls:portcls.sys
- 0001:000011cc       _PcNewPort@8               000114ac f   portcls:portcls.sys
- 0001:000011d2       _PcRegisterPhysicalConnection@20 000114b2 f   portcls:portcls.sys
- 0001:000011d8       _PcRegisterAdapterPowerManagement@8 000114b8 f   portcls:portcls.sys
- 0001:000011de       _PcNewResourceSublist@20   000114be f   portcls:portcls.sys
- 0001:000011e4       _PcNewInterruptSync@20     000114c4 f   portcls:portcls.sys
- 0001:000011ea       _PcNewRegistryKey@36       000114ca f   portcls:portcls.sys
- 0001:000011f0       _PcNewServiceGroup@8       000114d0 f   portcls:portcls.sys
+ 0001:000002c4       ?ReadController@CAdapterCommon@@UAGEXZ 000105a4 f   common.obj
+ 0001:000002ca       ?WriteController@CAdapterCommon@@UAGEE@Z 000105aa f   common.obj
+ 0001:000002d0       ?MixerRegWrite@CAdapterCommon@@UAGXEE@Z 000105b0 f   common.obj
+ 0001:000002ec       ?MixerRegRead@CAdapterCommon@@UAGEE@Z 000105cc f   common.obj
+ 0001:0000030a       ?MixerReset@CAdapterCommon@@UAGXXZ 000105ea f   common.obj
+ 0001:0000030e       ?AcknowledgeIRQ@CAdapterCommon@@AAEEXZ 000105ee f   common.obj
+ 0001:00000382       ?ResetController@CAdapterCommon@@UAGJXZ 00010662 f   common.obj
+ 0001:000003a2       ?RestoreMixerSettingsFromRegistry@CAdapterCommon@@UAGJXZ 00010682 f   common.obj
+ 0001:00000500       ?SaveMixerSettingsToRegistry@CAdapterCommon@@UAGJXZ 000107e0 f   common.obj
+ 0001:000005c4       ?ProgramSampleRate@CAdapterCommon@@QAGJK@Z 000108a4 f   common.obj
+ 0001:0000065a       ?PowerChangeState@CAdapterCommon@@UAGXT_POWER_STATE@@@Z 0001093a f   common.obj
+ 0001:000006b0       ?QueryDeviceCapabilities@CAdapterCommon@@UAGJPAU_DEVICE_CAPABILITIES@@@Z 00010990 f   common.obj
+ 0001:000006b0       ?QueryPowerChangeState@CAdapterCommon@@UAGJT_POWER_STATE@@@Z 00010990 f   common.obj
+ 0001:000006b6       ?InterruptServiceRoutine@@YGJPAUIInterruptSync@@PAX@Z 00010996 f   common.obj
+ 0001:000006e2       ?hda_stop_stream@CAdapterCommon@@UAGJXZ 000109c2 f   common.obj
+ 0001:000007d8       ?hda_start_sound@CAdapterCommon@@UAGXXZ 00010ab8 f   common.obj
+ 0001:00000800       ?hda_stop_sound@CAdapterCommon@@UAGXXZ 00010ae0 f   common.obj
+ 0001:00000846       ?hda_get_actual_stream_position@CAdapterCommon@@UAGKXZ 00010b26 f   common.obj
+ 0001:0000085c       ?hda_set_volume@CAdapterCommon@@QAGXK@Z 00010b3c f   common.obj
+ 0001:000008aa       ?readUCHAR@CAdapterCommon@@QAGEG@Z 00010b8a f   common.obj
+ 0001:000008c2       ?writeUCHAR@CAdapterCommon@@QAGXGE@Z 00010ba2 f   common.obj
+ 0001:000008de       ?readUSHORT@CAdapterCommon@@QAGGG@Z 00010bbe f   common.obj
+ 0001:000008f6       ?writeUSHORT@CAdapterCommon@@QAGXGG@Z 00010bd6 f   common.obj
+ 0001:00000912       ?readULONG@CAdapterCommon@@QAGKG@Z 00010bf2 f   common.obj
+ 0001:0000092a       ?writeULONG@CAdapterCommon@@QAGXGK@Z 00010c0a f   common.obj
+ 0001:00000946       ?hda_showtime@CAdapterCommon@@UAGJPAUIDmaChannel@@@Z 00010c26 f   common.obj
+ 0001:00000af4       ?hda_return_sound_data_format@CAdapterCommon@@QAGGKKK@Z 00010dd4 f   common.obj
+ 0001:00000bb2       ?QueryInterface@CAdapterCommon@@W3AGJABU_GUID@@PAPAX@Z 00010e92 f i common.obj
+ 0001:00000bbc       ?AddRef@CAdapterCommon@@W3AGKXZ 00010e9c f i common.obj
+ 0001:00000bc6       ?Release@CAdapterCommon@@W3AGKXZ 00010ea6 f i common.obj
+ 0001:00000bd0       ?QueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 00010eb0 f i mintopo.obj
+ 0001:00000bd0       ?QueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 00010eb0 f i mintopo.obj
+ 0001:00000bd0       ?QueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00010eb0 f i mintopo.obj
+ 0001:00000be8       ?Release@CMiniportWaveCyclicStreamHDA@@UAGKXZ 00010ec8 f i mintopo.obj
+ 0001:00000be8       ?Release@CMiniportWaveCyclicHDA@@UAGKXZ 00010ec8 f i mintopo.obj
+ 0001:00000be8       ?Release@CMiniportTopologyHDA@@UAGKXZ 00010ec8 f i mintopo.obj
+ 0001:00000bf8       ?DataRangeIntersection@CMiniportTopologyHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00010ed8 f i mintopo.obj
+ 0001:00000c00       ??_ECMiniportTopologyHDA@@UAEPAXI@Z 00010ee0 f i mintopo.obj
+ 0001:00000c00       ??_GCMiniportTopologyHDA@@UAEPAXI@Z 00010ee0 f i mintopo.obj
+ 0001:00000ffe       ?ReadBitsFromMixer@CMiniportTopologyHDA@@AAEEEEE@Z 000112de f   mintopo.obj
+ 0001:00001026       ?WriteBitsToMixer@CMiniportTopologyHDA@@AAEXEEEE@Z 00011306 f   mintopo.obj
+ 0001:0000107c       ?AddRef@CMiniportWaveCyclicHDA@@UAGKXZ 0001135c f i minwave.obj
+ 0001:0000107c       ?AddRef@CMiniportTopologyHDA@@UAGKXZ 0001135c f i minwave.obj
+ 0001:0000107c       ?AddRef@CMiniportWaveCyclicStreamHDA@@UAGKXZ 0001135c f i minwave.obj
+ 0001:0000108c       ??_GCMiniportWaveCyclicHDA@@UAEPAXI@Z 0001136c f i minwave.obj
+ 0001:0000108c       ??_ECMiniportWaveCyclicHDA@@UAEPAXI@Z 0001136c f i minwave.obj
+ 0001:000010ac       ??_GCMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 0001138c f i minwave.obj
+ 0001:000010ac       ??_ECMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 0001138c f i minwave.obj
+ 0001:000010cc       ?GetPosition@CMiniportWaveCyclicStreamHDA@@UAGJPAK@Z 000113ac f   minwave.obj
+ 0001:0000112a       ?NormalizePhysicalPosition@CMiniportWaveCyclicStreamHDA@@UAGJPA_J@Z 0001140a f   minwave.obj
+ 0001:00001172       ?Silence@CMiniportWaveCyclicStreamHDA@@UAGXPAXK@Z 00011452 f   minwave.obj
+ 0001:000011ac       _DbgPrint                  0001148c f   ntoskrnl:ntoskrnl.exe
+ 0001:000011b2       __alldiv                   00011492 f   ntoskrnl:ntoskrnl.exe
+ 0001:000011b8       __allmul                   00011498 f   ntoskrnl:ntoskrnl.exe
+ 0001:000011be       _PcInitializeAdapterDriver@12 0001149e f   portcls:portcls.sys
+ 0001:000011c4       _PcAddAdapterDevice@20     000114a4 f   portcls:portcls.sys
+ 0001:000011ca       _PcRegisterSubdevice@12    000114aa f   portcls:portcls.sys
+ 0001:000011d0       _PcNewMiniport@8           000114b0 f   portcls:portcls.sys
+ 0001:000011d6       _PcNewPort@8               000114b6 f   portcls:portcls.sys
+ 0001:000011dc       _PcRegisterPhysicalConnection@20 000114bc f   portcls:portcls.sys
+ 0001:000011e2       _PcRegisterAdapterPowerManagement@8 000114c2 f   portcls:portcls.sys
+ 0001:000011e8       _PcNewResourceSublist@20   000114c8 f   portcls:portcls.sys
+ 0001:000011ee       _PcNewInterruptSync@20     000114ce f   portcls:portcls.sys
+ 0001:000011f4       _PcNewRegistryKey@36       000114d4 f   portcls:portcls.sys
+ 0001:000011fa       _PcNewServiceGroup@8       000114da f   portcls:portcls.sys
  0001:00001200       ??0CUnknown@@QAE@PAUIUnknown@@@Z 000114e0 f   stdunk:stdunk.obj
  0001:00001250       ??_ECUnknown@@UAEPAXI@Z    00011530 f i stdunk:stdunk.obj
  0001:00001250       ??_GCUnknown@@UAEPAXI@Z    00011530 f i stdunk:stdunk.obj
@@ -254,55 +254,55 @@
  0004:00000cf4       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00013754 f   common.obj
  0004:00000d00       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00013760 f   common.obj
  0004:00000d30       ?InitHDA@CAdapterCommon@@QAGJXZ 00013790 f   common.obj
- 0004:00001062       ?InitializeCodec@CAdapterCommon@@QAGJE@Z 00013ac2 f   common.obj
- 0004:00001353       ?hda_initialize_audio_function_group@CAdapterCommon@@QAGXKK@Z 00013db3 f   common.obj
- 0004:00001832       ?hda_get_node_type@CAdapterCommon@@QAGEKK@Z 00014292 f   common.obj
- 0004:00001854       ?hda_get_node_connection_entries@CAdapterCommon@@QAGKKKK@Z 000142b4 f   common.obj
- 0004:000018da       ?hda_set_node_gain@CAdapterCommon@@QAGXKKKKK@Z 0001433a f   common.obj
- 0004:00001948       ?hda_enable_pin_output@CAdapterCommon@@QAGXKK@Z 000143a8 f   common.obj
- 0004:0000197a       ?hda_disable_pin_output@CAdapterCommon@@QAGXKK@Z 000143da f   common.obj
- 0004:000019ac       ?hda_is_headphone_connected@CAdapterCommon@@QAGHXZ 0001440c f   common.obj
- 0004:000019e8       ?hda_initialize_output_pin@CAdapterCommon@@QAGXK@Z 00014448 f   common.obj
- 0004:00001b42       ?hda_initalize_audio_output@CAdapterCommon@@QAGXK@Z 000145a2 f   common.obj
- 0004:00001c4e       ?hda_initalize_audio_mixer@CAdapterCommon@@QAGXK@Z 000146ae f   common.obj
- 0004:00001d2c       ?hda_initalize_audio_selector@CAdapterCommon@@QAGXK@Z 0001478c f   common.obj
- 0004:00001e36       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00014896 f   mintopo.obj
- 0004:00001e96       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 000148f6 f   mintopo.obj
- 0004:00001eba       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 0001491a f   mintopo.obj
- 0004:00001f68       ??1CMiniportTopologyHDA@@UAE@XZ 000149c8 f   mintopo.obj
- 0004:00001fac       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 00014a0c f   mintopo.obj
- 0004:0000200e       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00014a6e f   mintopo.obj
- 0004:00002832       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015292 f   minwave.obj
- 0004:00002892       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 000152f2 f   minwave.obj
- 0004:00002938       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 00015398 f   minwave.obj
- 0004:00002a12       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00015472 f   minwave.obj
- 0004:00002ac0       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00015520 f   minwave.obj
- 0004:00002b14       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 00015574 f   minwave.obj
- 0004:00002bbc       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001561c f   minwave.obj
- 0004:00002bcc       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0001562c f   minwave.obj
- 0004:00002e22       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 00015882 f   minwave.obj
- 0004:00002f62       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000159c2 f   minwave.obj
- 0004:00002fea       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00015a4a f   minwave.obj
- 0004:00003054       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 00015ab4 f   minwave.obj
- 0004:000030da       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00015b3a f   minwave.obj
- 0004:0000311a       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00015b7a f   minwave.obj
- 0004:000031d4       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 00015c34 f   minwave.obj
- 0005:00000000       _DriverEntry@8             00015c80 f   adapter.obj
- 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00015c98     ntoskrnl:ntoskrnl.exe
- 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    00015cac     hal:HAL.dll
- 0005:00000040       __IMPORT_DESCRIPTOR_portcls 00015cc0     portcls:portcls.sys
- 0005:00000054       __NULL_IMPORT_DESCRIPTOR   00015cd4     ntoskrnl:ntoskrnl.exe
+ 0004:000010d4       ?InitializeCodec@CAdapterCommon@@QAGJE@Z 00013b34 f   common.obj
+ 0004:000013c5       ?hda_initialize_audio_function_group@CAdapterCommon@@QAGXKK@Z 00013e25 f   common.obj
+ 0004:000018a4       ?hda_get_node_type@CAdapterCommon@@QAGEKK@Z 00014304 f   common.obj
+ 0004:000018c6       ?hda_get_node_connection_entries@CAdapterCommon@@QAGKKKK@Z 00014326 f   common.obj
+ 0004:0000194c       ?hda_set_node_gain@CAdapterCommon@@QAGXKKKKK@Z 000143ac f   common.obj
+ 0004:000019ba       ?hda_enable_pin_output@CAdapterCommon@@QAGXKK@Z 0001441a f   common.obj
+ 0004:000019ec       ?hda_disable_pin_output@CAdapterCommon@@QAGXKK@Z 0001444c f   common.obj
+ 0004:00001a1e       ?hda_is_headphone_connected@CAdapterCommon@@QAGHXZ 0001447e f   common.obj
+ 0004:00001a5a       ?hda_initialize_output_pin@CAdapterCommon@@QAGXK@Z 000144ba f   common.obj
+ 0004:00001bb4       ?hda_initalize_audio_output@CAdapterCommon@@QAGXK@Z 00014614 f   common.obj
+ 0004:00001cc0       ?hda_initalize_audio_mixer@CAdapterCommon@@QAGXK@Z 00014720 f   common.obj
+ 0004:00001d9e       ?hda_initalize_audio_selector@CAdapterCommon@@QAGXK@Z 000147fe f   common.obj
+ 0004:00001ea8       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00014908 f   mintopo.obj
+ 0004:00001f08       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 00014968 f   mintopo.obj
+ 0004:00001f2c       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 0001498c f   mintopo.obj
+ 0004:00001fda       ??1CMiniportTopologyHDA@@UAE@XZ 00014a3a f   mintopo.obj
+ 0004:0000201e       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 00014a7e f   mintopo.obj
+ 0004:00002080       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00014ae0 f   mintopo.obj
+ 0004:000028a4       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015304 f   minwave.obj
+ 0004:00002904       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015364 f   minwave.obj
+ 0004:000029aa       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 0001540a f   minwave.obj
+ 0004:00002a84       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 000154e4 f   minwave.obj
+ 0004:00002b32       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00015592 f   minwave.obj
+ 0004:00002b86       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 000155e6 f   minwave.obj
+ 0004:00002c2e       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001568e f   minwave.obj
+ 0004:00002c3e       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0001569e f   minwave.obj
+ 0004:00002e94       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 000158f4 f   minwave.obj
+ 0004:00002fd4       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 00015a34 f   minwave.obj
+ 0004:0000305c       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00015abc f   minwave.obj
+ 0004:000030c6       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 00015b26 f   minwave.obj
+ 0004:0000314c       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00015bac f   minwave.obj
+ 0004:0000318c       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00015bec f   minwave.obj
+ 0004:00003246       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 00015ca6 f   minwave.obj
+ 0005:00000000       _DriverEntry@8             00015d00 f   adapter.obj
+ 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00015d18     ntoskrnl:ntoskrnl.exe
+ 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    00015d2c     hal:HAL.dll
+ 0005:00000040       __IMPORT_DESCRIPTOR_portcls 00015d40     portcls:portcls.sys
+ 0005:00000054       __NULL_IMPORT_DESCRIPTOR   00015d54     ntoskrnl:ntoskrnl.exe
 
  entry point at        0005:00000000
 
  Static symbols
 
- 0004:0000201e       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014a7e f   mintopo.obj
- 0004:000021bc       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014c1c f   mintopo.obj
- 0004:00002396       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014df6 f   mintopo.obj
- 0004:000026b2       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015112 f   mintopo.obj
- 0001:00000c16       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00010ef6 f   mintopo.obj
- 0004:0000273e       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 0001519e f   mintopo.obj
+ 0004:00002090       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014af0 f   mintopo.obj
+ 0004:0000222e       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014c8e f   mintopo.obj
+ 0004:00002408       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00014e68 f   mintopo.obj
+ 0004:00002724       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015184 f   mintopo.obj
+ 0001:00000c20       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00010f00 f   mintopo.obj
+ 0004:000027b0       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015210 f   mintopo.obj
 
  115 bytes saved through ICF
 

@@ -1329,9 +1329,9 @@ GetPosition
     if (DmaChannel)
     {
 		if (State == KSSTATE_RUN){
-			//bias the stream position a bit forward in Run mode
-			//to account for the codec's buffer.
-			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 16) % DmaChannel->BufferSize(); 
+			//bias the stream position forward when in Run mode
+			//to account for the DMA engine block size and the codec's buffer.
+			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 128 + 16) % DmaChannel->BufferSize(); 
 		}
 		else {
 			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();

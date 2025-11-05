@@ -1129,7 +1129,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 			return STATUS_UNSUCCESSFUL;
 		}
 
-		if(codec_id != 0) {
+		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
 
 			//initialize the first codec we find that gives a nonzero response
@@ -1174,7 +1174,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 			return STATUS_UNSUCCESSFUL;
 		}
 
-		if(codec_id != 0) {
+		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA:  Codec %d PIO communication interface", codec_id));
 			ntStatus = InitializeCodec(codec_number);
 			return ntStatus; //initalization is complete

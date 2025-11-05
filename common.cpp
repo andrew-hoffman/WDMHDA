@@ -706,7 +706,7 @@ CAdapterCommon::
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CAdapterCommon::~CAdapterCommon]"));
 
-		//At least try to stop the stream before destruction
+	//At least try to stop the stream before destruction
 	hda_stop_stream ();
 	//Free audio buffer
 	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
@@ -958,12 +958,12 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		}
 	}
 
-	//disable all interrupts
-	writeULONG (0x20, 0);
+	//enable only wake interupts
+	writeULONG (0x20, 0xC0000000);
 
-	//turn off WAKEEN interrupt
-	writeUSHORT(0x0C, 0);
- 
+	//turn ON WAKEEN interrupts so we can see if any codecs ever respond to reset
+	writeUSHORT(0x0C, 0x7FFF);
+
 	//turn off dma position transfer
 	writeULONG (0x70, 0);
 	writeULONG (0x74, 0);
@@ -977,6 +977,13 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR (0x5C, 0x0);
 
 	//TODO: cache flush needed here?
+	// now we're supposed to wait at least 1ms for codec reset events before continuing
+	DOUT(DBG_SYSINFO, ("waiting for codecs to enumerate on link"));
+	KeStallExecutionProcessor(1000);
+
+	DOUT(DBG_SYSINFO, ("STATESTS = %X", readUSHORT(0x0E)));
+	//this may read zero, not sure if writing a 1 to a bit just acknowledges or clears it too
+	//but if it clears it we'll get an interrupt with it first and print a msg there
 
 	//write the needed logical addresses for CORB/RIRB to the HDA controller registers
 
@@ -2127,12 +2134,12 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
 		//all of which i am ignoring for now.
 		DOUT(DBG_PRINT, ("Controller IRQ: STATESTS=%X RIRBSTS=%X", readUSHORT(0x0E), readUCHAR(0x5D) ));
 
-		//clear Codec State Change flag
+		//clear Codec State Change flag in STATESTS
 		writeUSHORT(0x0E,readUSHORT(0x0E));
 
 		//clear Response Interrupt or Response Overrun
 		writeUCHAR(0x5D, 0x5);
-		return TRUE;
+		return FALSE; //can't run the irq handler further, hope this doesnt cause more problems
 	}
     // We're only using output stream #1 (bit #n in INTSTS)
     if (intsts & (1 << FirstOutputStream))

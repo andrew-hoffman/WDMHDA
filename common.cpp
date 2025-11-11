@@ -22,7 +22,7 @@ typedef struct _BDLE {
     ULONG   Flags;
 } BDLE;
 
-#define CHUNK_SIZE 1792
+#define CHUNK_SIZE 1792 //100ms of 44khz 16bit stereo
 
 /*****************************************************************************
  * CAdapterCommon
@@ -44,9 +44,12 @@ private:
     USHORT OutputStreamBase;
 	PMDL mdl;
 	KSPIN_LOCK QLock;
+	//PCI IDs
+	ULONG pci_ven;
+	ULONG pci_dev;
 
 	// CORB/RIRB buffers
-	// RIRB is at the beginning of the block, then CORB, then BDL
+	// need to be in different 4k pages
 
 	volatile PULONG RirbMemVirt;
 	PHYSICAL_ADDRESS RirbMemPhys;
@@ -78,6 +81,7 @@ private:
 	UCHAR codecNumber;
 	UCHAR nSDO;
 	UCHAR FirstOutputStream;
+	USHORT statests;
 
 	BOOLEAN is64OK;
 
@@ -370,7 +374,92 @@ Init
 	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
 
-	//is there anything in config space we need to set?
+	//Get our device's PID and VID somehow 
+	//so we can do some controller-specific fixes
+	//we could save it to a registry key in the INF
+	//or read it from PCI config space
+	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
+	
+	/*
+	WCHAR hwid[256];
+	ULONG length;
+
+	ntStatus = IoGetDeviceProperty(
+		DeviceObject,
+		DevicePropertyHardwareID,
+		sizeof(hwid),
+		hwid,
+		&length);
+
+	if (!NT_SUCCESS (ntStatus)){
+		DbgPrint( "\nGetDeviceProperty failed! 0x%X\n", ntStatus);
+        return ntStatus;
+	}
+
+	if (NT_SUCCESS(ntStatus)) {
+		// hwid contains string like "PCI\VEN_8086&DEV_2668&SUBSYS_XXXXYYYY&REV_03"
+		// and we gotta parse that for VEN_ and DEV_. _Carefully_ because we're in the kernel
+		PWCHAR pVen = wcsstr(hwid, L"VEN_");
+		PWCHAR pDev = wcsstr(hwid, L"DEV_");
+		UNICODE_STRING str;
+
+		if (pVen && pDev) {
+			RtlInitUnicodeString(&str, pVen + 4);
+		    ntStatus = RtlUnicodeStringToInteger(&str, 16, &pci_ven);
+			RtlInitUnicodeString(&str, pDev + 4);
+		    ntStatus = RtlUnicodeStringToInteger(&str, 16, &pci_dev);
+			DOUT (DBG_SYSINFO, ("VID=%4X, PID=%4X", pci_ven, pci_dev));
+		}else {
+			DOUT (DBG_ERROR, ("can't get the VID/PID"));
+		}
+	} else {
+		DOUT (DBG_ERROR, ("can't get the VID/PID"));
+	}
+	*/
+
+	//let's try the pci config access solution then
+	//IoGetDeviceInterfaces(
+
+	//vendor & device specific patches needed in config-space
+	UCHAR buf = 0x0;
+	PCI_SLOT_NUMBER sf;
+	sf.u.AsULONG = 0;
+
+	switch(pci_ven){
+	case 0x8086: //Intel
+		switch(pci_dev){
+		case 0x2668://for ICH6
+			DOUT (DBG_SYSINFO, ("Intel ICH6"));
+			//need to set device 30 function 1 configspace offset 40h bit 0 to 1 to enable HDA link mode?
+			//the datasheet only mentions D30:F1 in that exact sentence and nowhere else is that an error?
+			//that's not even the device this driver is bound to so pretty much the only solution left is this
+			// nope can't even do that either, this API is only available in ntddk.h which as a miniport we can't use. 
+			
+			/*buf = 0x1;
+
+			sf.u.bits.DeviceNumber = 30;
+			sf.u.bits.FunctionNumber = 1;
+			HALSetBusDataByOffset(
+				PCIConfiguration, //Space
+				0, //Bus
+				sf, //Slot & Function
+				buf, //buffer to write
+				0x40, //Offset
+				1) //length
+				*/
+			break;
+		case 0x27D8:
+			//for ICH7
+			DOUT (DBG_SYSINFO, ("Intel ICH7"));
+			break;
+		default:
+			break;
+		}
+		break;
+	default:
+		DOUT (DBG_SYSINFO, ("some unknown device, no special patches"));
+		break;
+	}
 
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
@@ -945,6 +1034,8 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	KeStallExecutionProcessor(100);
 	writeUCHAR(0x08,0x1);
+	//try to disable interrupts immediately
+	writeULONG (0x20, 0x0);
 
 	for (i = 0; i < 100; i++) {
 		KeStallExecutionProcessor(150);
@@ -958,17 +1049,17 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		}
 	}
 
-	//enable only wake interupts
-	writeULONG (0x20, 0xC0000000);
+	//disable interrupts again just to be sure
+	writeULONG (0x20, 0x0);
 
 	//turn ON WAKEEN interrupts so we can see if any codecs ever respond to reset
-	writeUSHORT(0x0C, 0x7FFF);
+	//writeUSHORT(0x0C, 0x7FFF);
 
-	//turn off dma position transfer
+	//turn off dma position transfer, TODO may need this on for VIA
 	writeULONG (0x70, 0);
 	writeULONG (0x74, 0);
  
-	//disable synchronization
+	//disable synchronization at both registers it could be
 	writeULONG (0x34, 0);
 	writeULONG (0x38, 0);
 
@@ -980,8 +1071,9 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	// now we're supposed to wait at least 1ms for codec reset events before continuing
 	DOUT(DBG_SYSINFO, ("waiting for codecs to enumerate on link"));
 	KeStallExecutionProcessor(1000);
-
-	DOUT(DBG_SYSINFO, ("STATESTS = %X", readUSHORT(0x0E)));
+	
+	statests = readUSHORT(0x0E);
+	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
 	//this may read zero, not sure if writing a 1 to a bit just acknowledges or clears it too
 	//but if it clears it we'll get an interrupt with it first and print a msg there
 

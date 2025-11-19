@@ -2987,17 +2987,13 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
  return data_format;
 }
 
-/* Function to read/write PCI configuration space using IRP
-from this KB article:
-https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/obtaining-device-configuration-information-at-irql---passive-level
-it's the only working example i found.
-*/
+/* Function to read/write PCI configuration space using IRP */
 
 STDMETHODIMP_(NTSTATUS)
 CAdapterCommon::ReadWriteConfigSpace(
     IN PDEVICE_OBJECT  DeviceObject,
     IN ULONG  ReadOrWrite,  // 0 for read, 1 for write
-    IN PVOID  Buffer, //must be in NONpaged heap
+    IN PVOID  Buffer,
     IN ULONG  Offset,
     IN ULONG  Length
     )

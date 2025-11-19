@@ -206,6 +206,21 @@
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
 
+/* PCI space */
+#define HDA_PCIREG_TCSEL 0x44;
+
+//Defines for Intel SCH HDA snoop control
+#define INTEL_SCH_HDA_DEVC 0x78;
+#define INTEL_SCH_HDA_DEVC_NOSNOOP (1<<11);
+
+/* Defines for ATI HD Audio support in SB450 south bridge */
+#define ATI_SB450_HDAUDIO_MISC_CNTR2_ADDR 0x42;
+#define ATI_SB450_HDAUDIO_ENABLE_SNOOP 0x02;
+
+/* Defines for Nvidia HDA support */
+#define NVIDIA_HDA_TRANSREG_ADDR 0x4e;
+#define NVIDIA_HDA_ENABLE_COHBITS 0x0f;
+
 typedef struct
 {
     PWCHAR   KeyName;

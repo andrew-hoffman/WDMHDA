@@ -43,9 +43,9 @@ private:
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	
 	//PCI IDs
-	ULONG pci_ven;
-	ULONG pci_dev;
-	PVOID configMem;
+	USHORT pci_ven;
+	USHORT pci_dev;
+	PUCHAR configMem;
 
 	// MMIO registers
 	volatile PUCHAR m_pHDARegisters;     
@@ -147,6 +147,7 @@ private:
     IN ULONG  Offset,
     IN ULONG  Length
     );
+	STDMETHODIMP_(NTSTATUS) WriteConfigSpace(UCHAR offset);
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -388,7 +389,7 @@ Init
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
 	ULONG pci_ven = 0;
 	ULONG pci_dev = 0;
-	configMem = ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
+	configMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
 	ntStatus = ReadWriteConfigSpace(
 		m_pDeviceObject,
 		0,			//read
@@ -401,34 +402,61 @@ Init
 		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
         return ntStatus;
 	} else {
-		PUSHORT configMemS = (PUSHORT) configMem;
+		PUSHORT configMemS = (PUSHORT)configMem;
 		pci_ven = (USHORT)configMemS[0];
 		pci_dev = (USHORT)configMemS[1];
 		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X\n", pci_ven, pci_dev);
 	}
 
-	switch(pci_ven){
-	case 0x8086: //Intel
-		switch(pci_dev){
-		case 0x2668://for ICH6
-			DOUT (DBG_SYSINFO, ("Intel ICH6"));
-			//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
-			
+	switch (pci_ven){
+		case 0x1002: //ATI
+			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
+				DOUT (DBG_SYSINFO, ("ATI SB450/600"));
+				configMem[0x42] = (configMem[0x42] & 0xf8) | ATI_SB450_HDAUDIO_ENABLE_SNOOP;
+				ntStatus = WriteConfigSpace(0x42);
+			}
 			break;
-		case 0x27D8://for ICH7
-			DOUT (DBG_SYSINFO, ("Intel ICH7"));
-			//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
+		case 0x10de: //nvidia
+			if((pci_dev == 0x026c) || (pci_dev == 0x0371)){
+				DOUT (DBG_SYSINFO, ("Nforce 510/550"));
+				configMem[0x4e] = (configMem[0x4e] & 0xf0) | NVIDIA_HDA_ENABLE_COHBITS; ;				 
+				ntStatus = WriteConfigSpace(0x4e);
+			}
 			break;
+		case 0x8086: //Intel
+			switch (pci_dev){
+				case 0x2668://for ICH6
+				case 0x27D8://for ICH7
+					DOUT (DBG_SYSINFO, ("Intel ICH6/7"));
+					//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
+					configMem[0x40] |= 1;
+					ntStatus = WriteConfigSpace(0x40);
+					break;
+				case 0x1e20://PCH
+					DOUT (DBG_SYSINFO, ("Intel PCH"));
+					//TODO: need to do a word write
+					break;
+				default:
+					break;
+			}
+			break;
+		//case ULI
+			//TODO: need to do a word write
 		default:
+			DOUT (DBG_SYSINFO, ("unknown device, no special patches"));
 			break;
-		}
-		break; 
-	default:
-		DOUT (DBG_SYSINFO, ("unknown device, no special patches"));
-		//Might need to set TCSEL (offset 44h in config space, lowest 3 bits) to 0 on some hardware to avoid crackling/static.
-		//the Watlers driver sets this byte on all but ATI controllers
-		//I'm not sure if class 0 is the highest or lowest priority. some hardware defaults to traffic class 7
-		break;
+	}
+	//Might need to set TCSEL (offset 44h in config space, lowest 3 bits) to 0 on some hardware to avoid crackling/static.
+	//the Watlers driver sets this byte on all but ATI controllers
+	//I'm not sure if class 0 is the highest or lowest priority. some hardware defaults to traffic class 7
+	if(pci_ven != 0x1002){
+		configMem[0x44] &= 0xf8;
+		ntStatus = WriteConfigSpace(0x44);
+	}
+
+	if (!NT_SUCCESS (ntStatus)){
+		DbgPrint( "\nPCI Configspace Write Failed! 0x%X\n", ntStatus);
+        return ntStatus;
 	}
 
 	//there may be multiple instances of this driver loaded at once
@@ -824,6 +852,10 @@ CAdapterCommon::
 	//free device description
 	if (pDeviceDescription) {
 		ExFreePool(pDeviceDescription);
+	}
+	//free device description
+	if (configMem) {
+		ExFreePool(configMem);
 	}
 	//free PCI BAR space	
     if (m_pHDARegisters) {
@@ -3045,6 +3077,19 @@ End:
     // Done with reference
     ObDereferenceObject(targetObject);
     return status;
+}
+
+//write back one byte in the configspace mirror.
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpace(UCHAR offset){
+	ASSERT(m_pDeviceObject);
+	ASSERT(configMem);
+	return ReadWriteConfigSpace(
+		m_pDeviceObject,
+		1,			//write
+		configMem + offset,	// Buffer to store the configuration data		
+		offset,			// Offset into the configuration space
+		1         // Number of bytes to write
+		);
 }
   
 

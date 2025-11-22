@@ -1622,7 +1622,7 @@ void CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type,
 		payload |= 0x80; //mute
 	}
 	else {
-		payload |= (((capabilities>>8) & 0x7F)*gain/100); //recalculate range 0-100 to range of node steps
+		payload |= (((capabilities>>8) & 0x7F)*gain/256); //recalculate range
 	}
 
 	//change gain
@@ -1677,7 +1677,7 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(codecNumber, pin_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 100);
+	hda_set_node_gain(codecNumber, pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250);
 	if(pin_output_amp_capabilities != 0) {
 		//we will control volume by PIN node
 		output_amp_node_number = pin_node_number;
@@ -1722,7 +1722,7 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 
 	//set maximal volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 100);
+	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250);
 	if(audio_output_amp_capabilities!=0) {
 		//we will control volume by Audio Output node
 		output_amp_node_number = audio_output_node_number;
@@ -1772,7 +1772,7 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 
 	//set maximal volume for Audio Mixer
 	ULONG audio_mixer_amp_capabilities = hda_send_verb(codecNumber, audio_mixer_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 100);
+	hda_set_node_gain(codecNumber, audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 250);
 	if(audio_mixer_amp_capabilities != 0) {
 		//we will control volume by Audio Mixer node
 		output_amp_node_number = audio_mixer_node_number;
@@ -1816,7 +1816,7 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 
 	//set maximal volume for Audio Selector
 	ULONG audio_selector_amp_capabilities = hda_send_verb(codecNumber, audio_selector_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 100);
+	hda_set_node_gain(codecNumber, audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250);
 	if(audio_selector_amp_capabilities != 0) {
 		//we will control volume by Audio Selector node
 		output_amp_node_number = audio_selector_node_number;
@@ -2117,12 +2117,12 @@ MixerRegWrite
 )
 {
 
-	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));\
+	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
 	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
 
-	if (Index == 1){
-		DOUT (DBG_PRINT, ("set volume %d", Value / 2));
-		hda_set_volume(Value / 2); //supposed to be 0-100 this is as close as i can get
+	if (Index == 1 || Index == 2){
+		DOUT (DBG_PRINT, ("set volume %d", Value));
+		hda_set_volume(Value); //supposed to be 0-255 range
 	}
 
     /*
@@ -2167,7 +2167,7 @@ MixerRegRead
 )
 {
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegRead]"));
-	DOUT (DBG_PRINT, ("trying to read from %d", Index));
+	DOUT (DBG_PRINT, ("read from mixer reg %d: %d", Index, MixerSettings[Index]));
 
     if(Index < DSP_MIX_MAXREGS)
     {
@@ -2475,6 +2475,7 @@ SaveMixerSettingsToRegistry
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 (
     IN  DWORD           dwSampleRate
+	//TODO: channels, bit depth here too
 )
 {
     PAGED_CODE ();
@@ -2549,19 +2550,22 @@ PowerChangeState
                 // also be noted that new miniport and new streams will only be
                 // attempted at D0 (portcls will place the device in D0 prior to the
                 // NewStream call).
+				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D0 from",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
 
                 // Save the new state.  This local value is used to determine when to cache
                 // property accesses and when to permit the driver from accessing the hardware.
                 m_PowerState = NewState.DeviceState;
 
                 // restore mixer settings
-                for(i = 0; i < DSP_MIX_MAXREGS - 1; i++)
+                /*
+				for(i = 0; i < DSP_MIX_MAXREGS - 1; i++)
                 {
                     if( i != DSP_MIX_MICVOLIDX )
                     {
                         MixerRegWrite( BYTE(i), MixerSettings[i] );
                     }
                 }
+				*/
 
             case PowerDeviceD1:
                 // This sleep state is the lowest latency sleep state with respect to the
@@ -2932,16 +2936,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	writeUSHORT(OutputStreamBase + 0x0C, entries - 1); //there are entries-1 entries in buffer
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
-/*
-	//set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
 
-	//set Audio Output node data format
-	hda_send_verb(codecNumber, audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	if(second_audio_output_node_number != 0) {
-		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
-	}
-	*/
 	KeStallExecutionProcessor(10);
 
 	DOUT(DBG_SYSINFO, ("ready to start the stream"));
@@ -2966,7 +2961,7 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
  USHORT data_format = 0;
 
  //channels
- data_format = (USHORT)(channels-1);
+ data_format = (USHORT)((channels-1) & 0xf);
 
  //bits per sample
  if(bits_per_sample==16) {

@@ -217,7 +217,7 @@ ValidateFormat
                 KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
             )
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
-        &&  (   (waveFormat->wBitsPerSample == 8)
+        &&  (   (waveFormat->wBitsPerSample == 16)
             ||  (waveFormat->wBitsPerSample == 16)
             )
         &&  (   (waveFormat->nChannels == 2)
@@ -433,7 +433,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
             STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
         },
         2,      // Max number of channels.
-        8,      // Minimum number of bits per sample.
+        16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
         44100,   // Minimum rate. //TODO support more
         44100   // Maximum rate.
@@ -1379,7 +1379,7 @@ Return:
 /*****************************************************************************
  * CMiniportWaveCyclicStreamHDA::SetState()
  *****************************************************************************
- * Sets the state of the channel. should this be nonpaged?
+ * Sets the state of the channel
  */
 STDMETHODIMP
 CMiniportWaveCyclicStreamHDA::
@@ -1411,8 +1411,6 @@ SetState
             if (State == KSSTATE_RUN)
             {
 
-				//TODO: adding fns to IAdapterCommon properly so i can call this
-				//FIXME what if we just never stop? do we hear anything different
                 Miniport->AdapterCommon->hda_stop_sound();
 
             }
@@ -1421,9 +1419,6 @@ SetState
         case KSSTATE_RUN:
             {
                 // Start DMA.
-                // TODO: something
-				//FIXME
-				//
 
 				Miniport->AdapterCommon->hda_start_sound();
             }

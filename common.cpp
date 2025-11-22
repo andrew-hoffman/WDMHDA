@@ -2146,12 +2146,12 @@ MixerRegWrite
             Value
         );
     }
+	*/
 
     if(Index < DSP_MIX_MAXREGS)
     {
         MixerSettings[Index] = Value;
     }
-	*/
 }
 
 /*****************************************************************************
@@ -2932,7 +2932,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	writeUSHORT(OutputStreamBase + 0x0C, entries - 1); //there are entries-1 entries in buffer
 
 	DOUT(DBG_SYSINFO, ("buffer address programmed"));
-
+/*
 	//set stream data format
 	writeUSHORT(OutputStreamBase + 0x12, hda_return_sound_data_format(44100, 2, 16));
 
@@ -2941,6 +2941,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	if(second_audio_output_node_number != 0) {
 		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, hda_return_sound_data_format(44100, 2, 16));
 	}
+	*/
 	KeStallExecutionProcessor(10);
 
 	DOUT(DBG_SYSINFO, ("ready to start the stream"));

@@ -223,12 +223,17 @@ ValidateFormat
         &&  (   (waveFormat->nChannels == 2)
 
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 44100)
-            &&  (waveFormat->nSamplesPerSec <= 44100)
+        &&  (   (waveFormat->nSamplesPerSec >= 8000)
+            &&  (waveFormat->nSamplesPerSec <= 48000)
             )
         )
     {
         ntStatus = STATUS_SUCCESS;
+		//try programming the given sample rate and see if it works
+		ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec);
+		//if (!NT_SUCCESS(ntStatus)){
+		//	AdapterCommon->ProgramSampleRate(44100);
+		//}
     }
     else
     {
@@ -435,8 +440,8 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
-        44100,   // Minimum rate. //TODO support more
-        44100   // Maximum rate.
+        8000,   // Minimum rate. 
+        48000   // Maximum rate.
     }
 };
 
@@ -866,7 +871,7 @@ DataRangeIntersection
         RtlCopyMemory( 
             ResultantFormat, MatchingDataRange, sizeof( KSDATAFORMAT ) );
         *ResultantFormatLength = sizeof( KSDATAFORMAT );
-    }
+    } 
     
     return STATUS_SUCCESS;
 }
@@ -1276,28 +1281,9 @@ SetFormat
         {
             PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
 
-            Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
-    
-            BYTE command =
-                (   Capture
-                ?   DSP_CMD_SETADCRATE
-                :   DSP_CMD_SETDACRATE
-                );
-    
-            Miniport->AdapterCommon->WriteController
-            (
-                command
-            );
-    
-            Miniport->AdapterCommon->WriteController
-            (
-                (BYTE)(waveFormat->nSamplesPerSec >> 8)
-            );
-    
-            Miniport->AdapterCommon->WriteController
-            (
-                (BYTE) waveFormat->nSamplesPerSec
-            );
+            Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;   
+
+			Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
 
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
         }

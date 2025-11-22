@@ -274,6 +274,11 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     (   THIS
     )   PURE;
 
+	STDMETHOD_(NTSTATUS,ProgramSampleRate)
+    (   THIS_
+        IN  DWORD           dwSampleRate
+    )   PURE;
+
 	STDMETHOD_(void,hda_start_sound)
     (   THIS
     )   PURE;

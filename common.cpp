@@ -1109,8 +1109,6 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		writeUCHAR (0x4E, 0x0);
 	} else {
 		//CORB not supported, need to use PIO
-		//i'm not gonna bother for now since CORB/RIRB support is required for
-		//UAA compliant hardware, eg. anything with existing Windows drivers
 		DOUT (DBG_ERROR, ("CORB only supports PIO"));
 		goto hda_use_pio_interface;
 		//return STATUS_UNSUCCESSFUL;
@@ -1720,7 +1718,7 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 	//connect Audio Output to stream 1 channel 0
 	hda_send_verb(codecNumber, audio_output_node_number, 0x706, 0x10);
 
-	//set maximal volume for Audio Output
+	//set maximum volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x12);
 	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250);
 	if(audio_output_amp_capabilities!=0) {
@@ -2505,6 +2503,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 	}
 
 	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
+	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
 
 	//set stream data format
 	writeUSHORT(OutputStreamBase + 0x12, format);
@@ -2555,6 +2554,8 @@ PowerChangeState
                 // Save the new state.  This local value is used to determine when to cache
                 // property accesses and when to permit the driver from accessing the hardware.
                 m_PowerState = NewState.DeviceState;
+
+				//TODO: Re-init the codec if coming from D2 or D3!
 
                 // restore mixer settings
                 /*
@@ -2661,7 +2662,7 @@ NTSTATUS InterruptServiceRoutine
     //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
 
 	//
-    // ACK the ISR. note we don't have any direct access to CAdapterCommon gotta use the pointer
+    // ACK the ISR. note we don't have any direct access to CAdapterCommon, gotta use the pointer
     // get out of here immediately if it's not our IRQ
 	//
 	if(!that->AcknowledgeIRQ() ){

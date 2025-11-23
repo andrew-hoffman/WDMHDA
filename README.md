@@ -1,14 +1,14 @@
 # WDMHDA
 HD Audio driver for Windows 98SE / ME
 
-This does mostly function as a HD Audio controller and codec driver, in VMWare and Virtualbox ONLY so far. If you don't mind a certain level of occasional horrible screeching and popping noises, and possible hard freezes. Consider it a MVP Proof of Concept; further development is needed to function with basically any real hardware. Testing and feedback from anyone who can run this on real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated.
+This does mostly function as a HD Audio controller and codec driver, in VMWare and Virtualbox ONLY so far. If you don't mind possible horrible screeching and popping noises or static, and possible hard freezes when the driver is loaded or unloaded. Consider it a MVP Proof of Concept; further development is needed to function with basically any real hardware. Testing and feedback from anyone who can run this on real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated.
 
 Current Limitations:
-- Only supports 44100hz 16-bit sample rate
+- Only supports 8000-48000hz 16-bit sample rate (up to 176,400 24-bit and 32-bit could be added but what's the point for 9x?)
 - Output only, recording not supported
 - Volume control and mixer are mostly broken
 - Jack detection and retasking is not supported
-- Freezes or fails to start on most real hardware.
+- Freezes, fails to start or outputs horrible noises on most real hardware.
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 

@@ -11,7 +11,7 @@ Signature="$CHICAGO$"
 Class=MEDIA
 ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
 provider=%MSFT%
-DriverVer=11/5/2025,5.00.2195.1
+DriverVer=11/23/2025,5.00.2195.1
 
 ;You must specify which platform is supported by each SourceDisksNames section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64

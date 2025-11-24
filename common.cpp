@@ -1507,6 +1507,9 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 	second_output_amp_node_number = 0;
 	second_output_amp_node_capabilities = 0;
 
+	//Realtek mobile quirk: need to set a stereo format before we power up any output pins
+	ProgramSampleRate(48000);
+
 	//initialize output PINs
 	DbgPrint( ("\n"));
 	if (pin_speaker_default_node_number != 0) {
@@ -1907,13 +1910,19 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	
 	KIRQL oldirql;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
-	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
+	DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
 	if (communication_type == HDA_CORB_RIRB) {
+
+		ULONG response = STATUS_UNSUCCESSFUL;
 		
 		//CORB/RIRB interface
 
 		//acquire spin lock: this isnt great to do as well as blocking but what can i do
 		KeAcquireSpinLock(&QLock, &oldirql);
+
+		//get current rirb pointer temp
+		USHORT RirbTmp = readUSHORT (0x58);
+		BOOLEAN valid = FALSE;
  
 		//write verb
 		WRITE_REGISTER_ULONG(CorbMemVirt + (CorbPointer), value);
@@ -1922,40 +1931,43 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		//move write pointer
 		writeUSHORT(0x48, CorbPointer);
   
-		//wait for RIRB pointer to update to match
+		//wait for RIRB pointer to increment/wrap
 
 		for(ULONG ticks = 0; ticks < 600; ++ticks) {
 			KeStallExecutionProcessor(10);
-			if(readUSHORT (0x58) == CorbPointer) {
-				//KeFlushIoBuffers(mdl, TRUE, TRUE);  
+			if(readUSHORT (0x58) != RirbTmp) {
+				valid = TRUE;
 				break;
-			}
-			if( (readUSHORT (0x58) != CorbPointer) && (ticks == 599)) {
+			} else if (ticks == 599) {
+				//6 ms and no movement
 				DOUT (DBG_ERROR, ("No Response to Codec Verb"));
-				//unlock!!
-				KeReleaseSpinLock(&QLock, oldirql);
-				communication_type = HDA_UNINITIALIZED;
-				return STATUS_UNSUCCESSFUL;
+				//communication_type = HDA_UNINITIALIZED;
 			}
 		}
+		if (valid){
 
-		//read response. each response is 8 bytes long but we only care about the lower 32 bits
-		ULONG response = READ_REGISTER_ULONG (RirbMemVirt + (RirbPointer * 2));
+			//read response. each response is 8 bytes long but we only care about the lower 32 bits
+			response = READ_REGISTER_ULONG (RirbMemVirt + (RirbPointer * 2));
 
-		//move pointers
+			//move RIRB pointer **only if we got a response**
+
+			//TODO: if we have usolicited responses on there may be more than 1 difference
+			//between last read and last written
+			RirbPointer++;
+			if(RirbPointer == RirbNumberOfEntries) {
+				RirbPointer = 0;
+			}
+		} 
+		
+		//move corb pointer
 		CorbPointer++;
 		if(CorbPointer == CorbNumberOfEntries) {
 			CorbPointer = 0;
 		}
-		RirbPointer++;
-		if(RirbPointer == RirbNumberOfEntries) {
-			RirbPointer = 0;
-		}
-
-		//unlock
+		//unlock! must get here!
 		KeReleaseSpinLock(&QLock, oldirql);
 
-		//return response
+		//return response whatever it is. single point of exit
 		return response;
 
 	} else if (communication_type == HDA_PIO){
@@ -1985,7 +1997,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 				writeUSHORT(0x68, 0x2);
 				
 				ULONG response = readULONG(0x64);
-				//unlock
+				//unlock!
 				KeReleaseSpinLock(&QLock, oldirql);
 				//return response
 				return response;
@@ -2513,6 +2525,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 	if(second_audio_output_node_number != 0) {
 		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, format);
 	}
+	//response?
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
     return STATUS_SUCCESS;
@@ -2553,20 +2566,11 @@ PowerChangeState
 
                 // Save the new state.  This local value is used to determine when to cache
                 // property accesses and when to permit the driver from accessing the hardware.
-                m_PowerState = NewState.DeviceState;
 
-				//TODO: Re-init the codec if coming from D2 or D3!
-
-                // restore mixer settings
-                /*
-				for(i = 0; i < DSP_MIX_MAXREGS - 1; i++)
-                {
-                    if( i != DSP_MIX_MICVOLIDX )
-                    {
-                        MixerRegWrite( BYTE(i), MixerSettings[i] );
-                    }
-                }
-				*/
+				//Re-init the codec if coming from D2 or D3
+				if((ULONG(m_PowerState)-ULONG(PowerDeviceD0)) >= 2){
+					InitHDA();
+				}
 
             case PowerDeviceD1:
                 // This sleep state is the lowest latency sleep state with respect to the

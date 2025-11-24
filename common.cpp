@@ -45,7 +45,7 @@ private:
 	//PCI IDs
 	USHORT pci_ven;
 	USHORT pci_dev;
-	PUCHAR configMem;
+	PUCHAR pConfigMem;
 
 	// MMIO registers
 	volatile PUCHAR m_pHDARegisters;     
@@ -389,11 +389,11 @@ Init
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
 	ULONG pci_ven = 0;
 	ULONG pci_dev = 0;
-	configMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
+	pConfigMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
 	ntStatus = ReadWriteConfigSpace(
 		m_pDeviceObject,
 		0,			//read
-		configMem,	// Buffer to store the configuration data		
+		pConfigMem,	// Buffer to store the configuration data		
 		0,			// Offset into the configuration space
 		256         // Number of bytes to read
 	);
@@ -402,9 +402,9 @@ Init
 		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
         return ntStatus;
 	} else {
-		PUSHORT configMemS = (PUSHORT)configMem;
-		pci_ven = (USHORT)configMemS[0];
-		pci_dev = (USHORT)configMemS[1];
+		PUSHORT pConfigMemS = (PUSHORT)pConfigMem;
+		pci_ven = (USHORT)pConfigMemS[0];
+		pci_dev = (USHORT)pConfigMemS[1];
 		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X\n", pci_ven, pci_dev);
 	}
 
@@ -412,14 +412,14 @@ Init
 		case 0x1002: //ATI
 			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
 				DOUT (DBG_SYSINFO, ("ATI SB450/600"));
-				configMem[0x42] = (configMem[0x42] & 0xf8) | ATI_SB450_HDAUDIO_ENABLE_SNOOP;
+				pConfigMem[0x42] = (pConfigMem[0x42] & 0xf8) | ATI_SB450_HDAUDIO_ENABLE_SNOOP;
 				ntStatus = WriteConfigSpace(0x42);
 			}
 			break;
 		case 0x10de: //nvidia
 			if((pci_dev == 0x026c) || (pci_dev == 0x0371)){
 				DOUT (DBG_SYSINFO, ("Nforce 510/550"));
-				configMem[0x4e] = (configMem[0x4e] & 0xf0) | NVIDIA_HDA_ENABLE_COHBITS; ;				 
+				pConfigMem[0x4e] = (pConfigMem[0x4e] & 0xf0) | NVIDIA_HDA_ENABLE_COHBITS; ;				 
 				ntStatus = WriteConfigSpace(0x4e);
 			}
 			break;
@@ -429,7 +429,7 @@ Init
 				case 0x27D8://for ICH7
 					DOUT (DBG_SYSINFO, ("Intel ICH6/7"));
 					//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
-					configMem[0x40] |= 1;
+					pConfigMem[0x40] |= 1;
 					ntStatus = WriteConfigSpace(0x40);
 					break;
 				case 0x1e20://PCH
@@ -450,13 +450,13 @@ Init
 	//the Watlers driver sets this byte on all but ATI controllers
 	//I'm not sure if class 0 is the highest or lowest priority. some hardware defaults to traffic class 7
 	if(pci_ven != 0x1002){
-		configMem[0x44] &= 0xf8;
+		pConfigMem[0x44] &= 0xf8;
 		ntStatus = WriteConfigSpace(0x44);
 	}
 
 	if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nPCI Configspace Write Failed! 0x%X\n", ntStatus);
-        return ntStatus;
+        return ntStatus; //is failure fatal?
 	}
 
 	//there may be multiple instances of this driver loaded at once
@@ -795,16 +795,8 @@ CAdapterCommon::
 
 	//At least try to stop the stream before destruction
 	hda_stop_stream ();
-	//Free audio buffer
-	if((BufVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
-		DOUT (DBG_PRINT, ("freeing audio buffer"));
-		DMA_Adapter->DmaOperations->FreeCommonBuffer(
-					DMA_Adapter,
-					audBufSize,
-                      BufLogicalAddress,
-                      BufVirtualAddress,
-                      FALSE );
-	}
+
+	//do NOT free the audio buffer now minwave is managing it
 
 	//free DMA buffers
 	if((RirbMemVirt != NULL) && (DMA_Adapter!= NULL)){
@@ -815,6 +807,7 @@ CAdapterCommon::
                       RirbMemPhys,
                       RirbMemVirt,
                       FALSE );
+		RirbMemVirt = NULL;
 	}
 	if((CorbMemVirt != NULL) && (DMA_Adapter!= NULL)){
 		DOUT (DBG_PRINT, ("freeing Corb buffer"));
@@ -824,6 +817,7 @@ CAdapterCommon::
                       CorbMemPhys,
                       CorbMemVirt,
                       FALSE );
+		CorbMemVirt = NULL;
 	}
 	if((BdlMemVirt != NULL) && (DMA_Adapter!= NULL)){
 		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
@@ -833,6 +827,7 @@ CAdapterCommon::
                       BdlMemPhys,
                       BdlMemVirt,
                       FALSE );
+		BdlMemVirt = NULL;
 	}
 	if((DmaPosVirt != NULL) && (DMA_Adapter!= NULL)){
 		DOUT (DBG_PRINT, ("freeing Dma buffer"));
@@ -842,6 +837,7 @@ CAdapterCommon::
                       DmaPosPhys,
                       DmaPosVirt,
                       FALSE );
+		DmaPosVirt = NULL;
 	}
 
 	//free DMA adapter object
@@ -852,10 +848,12 @@ CAdapterCommon::
 	//free device description
 	if (pDeviceDescription) {
 		ExFreePool(pDeviceDescription);
+		pDeviceDescription = NULL;
 	}
 	//free device description
-	if (configMem) {
-		ExFreePool(configMem);
+	if (pConfigMem) {
+		ExFreePool(pConfigMem);
+		pConfigMem = NULL;
 	}
 	//free PCI BAR space	
     if (m_pHDARegisters) {
@@ -3083,11 +3081,11 @@ End:
 //write back one byte in the configspace mirror.
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpace(UCHAR offset){
 	ASSERT(m_pDeviceObject);
-	ASSERT(configMem);
+	ASSERT(pConfigMem);
 	return ReadWriteConfigSpace(
 		m_pDeviceObject,
 		1,			//write
-		configMem + offset,	// Buffer to store the configuration data		
+		pConfigMem + offset,	// Buffer to store the configuration data		
 		offset,			// Offset into the configuration space
 		1         // Number of bytes to write
 		);

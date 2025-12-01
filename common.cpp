@@ -147,7 +147,8 @@ private:
     IN ULONG  Offset,
     IN ULONG  Length
     );
-	STDMETHODIMP_(NTSTATUS) WriteConfigSpace(UCHAR offset);
+	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte);
+	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord);
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -384,8 +385,7 @@ Init
 	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
 
-	//Get our device's PID and VID
-	//by sending an IRP asking for it
+	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
 	ULONG pci_ven = 0;
 	ULONG pci_dev = 0;
@@ -403,55 +403,61 @@ Init
         return ntStatus;
 	} else {
 		PUSHORT pConfigMemS = (PUSHORT)pConfigMem;
+		//VID and PID are first 2 words of configspace
 		pci_ven = (USHORT)pConfigMemS[0];
 		pci_dev = (USHORT)pConfigMemS[1];
-		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X\n", pci_ven, pci_dev);
+		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X : ", pci_ven, pci_dev);
 	}
 
 	switch (pci_ven){
 		case 0x1002: //ATI
 			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
-				DOUT (DBG_SYSINFO, ("ATI SB450/600"));
-				pConfigMem[0x42] = (pConfigMem[0x42] & 0xf8) | ATI_SB450_HDAUDIO_ENABLE_SNOOP;
-				ntStatus = WriteConfigSpace(0x42);
+				DbgPrint( "ATI SB450/600\n");
+				ntStatus = WriteConfigSpaceByte(0x42, 0xf8, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
 			}
 			break;
 		case 0x10de: //nvidia
 			if((pci_dev == 0x026c) || (pci_dev == 0x0371)){
-				DOUT (DBG_SYSINFO, ("Nforce 510/550"));
-				pConfigMem[0x4e] = (pConfigMem[0x4e] & 0xf0) | NVIDIA_HDA_ENABLE_COHBITS; ;				 
-				ntStatus = WriteConfigSpace(0x4e);
+				DbgPrint( "Nforce 510/550\n");			 
+				ntStatus = WriteConfigSpaceByte(0x4e, 0xf0, NVIDIA_HDA_ENABLE_COHBITS);
 			}
 			break;
 		case 0x8086: //Intel
 			switch (pci_dev){
 				case 0x2668://for ICH6
 				case 0x27D8://for ICH7
-					DOUT (DBG_SYSINFO, ("Intel ICH6/7"));
+					DbgPrint( "Intel ICH6/7\n");
 					//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
-					pConfigMem[0x40] |= 1;
-					ntStatus = WriteConfigSpace(0x40);
+					ntStatus = WriteConfigSpaceByte(0x40, 0xfe, 0x01);
 					break;
-				case 0x1e20://PCH
-					DOUT (DBG_SYSINFO, ("Intel PCH"));
-					//TODO: need to do a word write
+				case 0x1e20://PCH or SCH
+					DbgPrint( "Intel PCH/SCH\n");
+					//disable no-snoop transaction feature (clear bit 11)
+					ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC, ~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
 					break;
 				default:
 					break;
 			}
 			break;
-		//case ULI
-			//TODO: need to do a word write
+		case 0x10b9://ULI M5461
+			DbgPrint( "ULI\n");
+			//disable and zero out BAR1 on this hardware; it advertises 64 bit addressing support but can't deliver
+			//not that we can use it anyway in 9x.
+			//this is according to ALSA.
+			//TODO: test this if i can find this rare chipset
+			ntStatus = WriteConfigSpaceWord(0x40,0xffef,0x0010);
+			ntStatus = WriteConfigSpaceWord(0x14,0x0000,0x0000);
+			ntStatus = WriteConfigSpaceWord(0x16,0x0000,0x0000);
+			break;
 		default:
-			DOUT (DBG_SYSINFO, ("unknown device, no special patches"));
+			DbgPrint( "unknown or no special patches\n");
 			break;
 	}
-	//Might need to set TCSEL (offset 44h in config space, lowest 3 bits) to 0 on some hardware to avoid crackling/static.
-	//the Watlers driver sets this byte on all but ATI controllers
+	//Set TCSEL (offset 44h in config space, lowest 3 bits) to 0 on some hardware to avoid crackling/static.
+	//the Watlers and MPXPlay drivers set this byte on all but ATI controllers
 	//I'm not sure if class 0 is the highest or lowest priority. some hardware defaults to traffic class 7
 	if(pci_ven != 0x1002){
-		pConfigMem[0x44] &= 0xf8;
-		ntStatus = WriteConfigSpace(0x44);
+		ntStatus = WriteConfigSpaceByte(0x44, 0xf8, 0x0);
 	}
 
 	if (!NT_SUCCESS (ntStatus)){
@@ -1908,7 +1914,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	
 	KIRQL oldirql;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
-	DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
+	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbPointer));
 	if (communication_type == HDA_CORB_RIRB) {
 
 		ULONG response = STATUS_UNSUCCESSFUL;
@@ -1924,7 +1930,6 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
  
 		//write verb
 		WRITE_REGISTER_ULONG(CorbMemVirt + (CorbPointer), value);
-		//KeFlushIoBuffers(mdl, FALSE, TRUE); //does this do anything? it's defined to nothing in wdm.h
   
 		//move write pointer
 		writeUSHORT(0x48, CorbPointer);
@@ -2570,6 +2575,15 @@ PowerChangeState
 					InitHDA();
 				}
 
+				// restore mixer settings
+				for(i = 0; i < DSP_MIX_MAXREGS - 1; i++)
+                {
+                    if( i != DSP_MIX_MICVOLIDX )
+                    {
+                        MixerRegWrite( BYTE(i), MixerSettings[i] );
+                    }
+                }
+
             case PowerDeviceD1:
                 // This sleep state is the lowest latency sleep state with respect to the
                 // latency time required to return to D0.  The driver can still access
@@ -3078,10 +3092,11 @@ End:
     return status;
 }
 
-//write back one byte in the configspace mirror.
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpace(UCHAR offset){
+//set flag in our mirror of configspace and then write it back
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte){
 	ASSERT(m_pDeviceObject);
 	ASSERT(pConfigMem);
+	pConfigMem[offset] = (pConfigMem[offset] & andByte) | orByte;
 	return ReadWriteConfigSpace(
 		m_pDeviceObject,
 		1,			//write
@@ -3091,4 +3106,20 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpace(UCHAR offset){
 		);
 }
   
+
+//set flag in our mirror of configspace and then write it back
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord){
+	ASSERT(m_pDeviceObject);
+	ASSERT(pConfigMem);
+	//cast to get a PUSHORT at arbitrary offset
+	PUSHORT ptemp = (PUSHORT)(&pConfigMem[offset]);
+	*ptemp = (*ptemp & andWord) | orWord;
+	return ReadWriteConfigSpace(
+		m_pDeviceObject,
+		1,			//write
+		pConfigMem + offset,	// Buffer to store the configuration data		
+		offset,			// Offset into the configuration space
+		2         // Number of bytes to write
+		);
+}
 

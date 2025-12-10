@@ -409,6 +409,9 @@ Init
 		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X : ", pci_ven, pci_dev);
 	}
 
+	USHORT tmp;
+	
+	//apply device-specific config space patches depending on the VID/PID
 	switch (pci_ven){
 		case 0x1002: //ATI
 			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
@@ -424,16 +427,76 @@ Init
 			break;
 		case 0x8086: //Intel
 			switch (pci_dev){
-				case 0x2668://for ICH6
-				case 0x27D8://for ICH7
+				case 0x2668://ICH6
+				case 0x27D8://ICH7
 					DbgPrint( "Intel ICH6/7\n");
 					//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
 					ntStatus = WriteConfigSpaceByte(0x40, 0xfe, 0x01);
 					break;
-				case 0x1e20://PCH or SCH
+				//PCH
+				case 0x1c20: 
+				case 0x1d20:
+				case 0x1e20:
+				case 0x8c20:
+				case 0x8ca0:
+				case 0x8d20:
+				case 0x8d21:
+				case 0xa1f0:
+				case 0xa270:
+				case 0x9c20:
+				case 0x9c21:
+				case 0x9ca0:
+
+				//SKL
+				case 0xa170: 
+				case 0x9d70:
+				case 0xa171:
+				case 0x9d71:
+				case 0xa2f0:
+				case 0xa348:
+				case 0x9dc8:
+				case 0x02c8:
+				case 0x06c8:
+				case 0xf1c8:
+				case 0xa3f0:
+				case 0xf0c8:
+				case 0x34c8:
+				case 0x3dc8:
+				case 0x4dc8:
+				case 0xa0c8:
+				case 0x43c8:
+				case 0x490d:
+				case 0x7da0:
+				case 0x51c8:
+				case 0x51cc:
+				case 0x4b55:
+				case 0x4b58:
+				case 0x5a98:
+				case 0x1a98:
+				case 0x3198:
+
+				//HDMI
+				case 0x0a0c: 
+				case 0x0c0c:
+				case 0x0d0c:
+				case 0x160c:
+				
+				//SCH
+				case 0x3b56: 
+				case 0x811b:
+				case 0x080a:
+				case 0x0f04:
+				case 0x2284:
+
 					DbgPrint( "Intel PCH/SCH\n");
-					//disable no-snoop transaction feature (clear bit 11)
-					ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC, ~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
+					//disable no-snoop transaction feature (clear bit 11) if it is set
+					tmp = *((PUSHORT)(pConfigMem[INTEL_SCH_HDA_DEVC]));
+					if(tmp & INTEL_SCH_HDA_DEVC_NOSNOOP){
+						DbgPrint( "0x%X - disabling nosnoop transactions\n", tmp);
+						ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC, ~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
+					} else {
+						DbgPrint( "0x%X - snoop already ok\n", tmp);
+					}
 					break;
 				default:
 					break;

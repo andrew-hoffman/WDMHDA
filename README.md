@@ -1,7 +1,11 @@
 # WDMHDA
 HD Audio driver for Windows 98SE / ME
 
-This does mostly function as a HD Audio controller and codec driver, in VMWare and Virtualbox ONLY so far. Consider it a MVP Proof of Concept; further development is needed to function with basically any real hardware. Testing and feedback from anyone who can run this on real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated. May experience possible horrible screeching and popping noises or static, and possible hard freezes when the driver is loaded or unloaded.
+This project is a High Definition Audio aka Azalia codec and controller driver for all versions of Windows with WDM support which is Windows 98SE and ME (and possibly 98FE and 2000 as well, but not tested there yet.) 
+
+Current status is a MVP Proof of Concept that functions in VMware and VirtualBox; further development is needed to support more real hardware. Testing and feedback from anyone who can run this on real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated. May experience possible horrible screeching and popping noises or static, and possible hard freezes when the driver is loaded or unloaded. 
+
+Windows 9x may need to be patched to function at all on modern hardware even when virtualized. See [JHRobotics' Patcher9x project](github.com/JHRobotics/patcher9x) and [Sweetlow's patch for memory resource conflict issues](https://msfn.org/board/topic/186768-bug-fix-vmmvxd-on-handling-4gib-addresses-and-description-of-problems-with-resource-manager-on-newer-bioses/). 
 
 Current Limitations:
 - Only supports 8000-48000hz 16-bit sample rate (up to 192khz 24-bit and 32-bit could technically be added but what's the point for 9x?)
@@ -9,7 +13,8 @@ Current Limitations:
 - Single audio stream, no hardware mixing
 - Volume and mixer controls are mostly unimplemented
 - Jack detection and retasking is not supported
-- Freezes, fails to start or outputs horrible noises on most real hardware. Intel controller / Realtek codec *MIGHT* work.
+- Only initializes the first codec detected on the link (extra codec in laptop docking stations won't work)
+- Freezes, fails to start or outputs horrible noises on most real hardware. The combination of Intel audio controller and Realtek codec *MIGHT* work. No guarantees. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 
@@ -17,3 +22,5 @@ and [BleskOS](https://github.com/VendelinSlezak/BleskOS/blob/master/source/drive
 used under MIT license.
 
 See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com/archive/p/cmediadrivers/).
+
+for build instructions see Build Instructions.txt

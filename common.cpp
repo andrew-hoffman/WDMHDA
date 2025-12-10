@@ -228,8 +228,8 @@ public:
 	STDMETHODIMP_(void)		hda_initalize_audio_mixer(ULONG audio_mixer_node_number);
 	STDMETHODIMP_(void)		hda_initalize_audio_selector(ULONG audio_selector_node_number);
 	STDMETHODIMP_(BOOL)		hda_is_headphone_connected (void);
-	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain);
-	STDMETHODIMP_(void)		hda_set_volume(ULONG volume);
+	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
+	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch);
 	STDMETHODIMP_(void)		hda_start_sound (void);
 	STDMETHODIMP_(void)		hda_stop_sound (void);
 
@@ -1511,21 +1511,18 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 	second_output_amp_node_number = 0;
 	second_output_amp_node_capabilities = 0;
 
-	//Realtek mobile quirk: need to set a stereo format before we power up any output pins
-	ProgramSampleRate(48000);
-
 	//initialize output PINs
 	DbgPrint( ("\n"));
 	if (pin_speaker_default_node_number != 0) {
 		//initialize speaker
 		is_initialized_useful_output = TRUE;
 		if (pin_speaker_node_number != 0) {
-			DbgPrint("\nSpeaker output");
+			DbgPrint("\nSpeaker output ");
 			hda_initialize_output_pin(pin_speaker_node_number); //initialize speaker with connected output device
 			pin_output_node_number = pin_speaker_node_number; //save speaker node number
 		}	
 		else {
-			DbgPrint("\nDefault speaker output");
+			DbgPrint("\nDefault speaker output ");
 			hda_initialize_output_pin(pin_speaker_default_node_number); //initialize default speaker
 			pin_output_node_number = pin_speaker_default_node_number; //save speaker node number
 		}
@@ -1539,7 +1536,7 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 
 		//if codec has also headphone output, initialize it
 		if (pin_headphone_node_number != 0) {
-			DbgPrint("\n\nHeadphone output");
+			DbgPrint("\n\nHeadphone output ");
 			hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
 
@@ -1569,19 +1566,19 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 		}
 	}
 	else if(pin_headphone_node_number!=0) { //codec do not have speaker, but only headphone output
-		DbgPrint("\nHeadphone output");
+		DbgPrint("\nHeadphone output ");
 		is_initialized_useful_output = TRUE;
 		hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
 	}
 	else if(pin_alternative_output_node_number!=0) { //codec have only alternative output
-		DbgPrint("\nAlternative output");
+		DbgPrint("\nAlternative output ");
 		is_initialized_useful_output = FALSE;
 		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
 		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
 	}
 	else {
-		DbgPrint("\nCodec do not have any output PINs");
+		DbgPrint("\nCodec does not have any output PINs");
 	}
 }
 
@@ -1595,7 +1592,7 @@ ULONG CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, 
 	//read connection capabilities
 	ULONG connection_list_capabilities = hda_send_verb(codec, node, 0xF00, 0x0E);
 	
-	//test if this connection even exist
+	//test if this connection even exists
 	if(connection_entries_number >= (connection_list_capabilities & 0x7F)) {
 		return 0x0000;
 	}
@@ -1609,10 +1606,11 @@ ULONG CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, 
 	}
 }
 
-void CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain) {
+void CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch) {
 	PAGED_CODE ();
-	//this will apply to left and right
-	ULONG payload = 0x3000;
+	//ch bit 0: left channel bit 1: right channel
+	ch &= 3;
+	ULONG payload = ch << 12;
 
 	//set type of node
 	if((node_type & HDA_OUTPUT_NODE) == HDA_OUTPUT_NODE) {
@@ -1665,6 +1663,9 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 	output_amp_node_number = 0;
 	output_amp_node_capabilities = 0;
 
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(codecNumber, pin_node_number, 0x200, 0x11);
+
 	//turn on power for PIN
 	hda_send_verb(codecNumber, pin_node_number, 0x705, 0x00);
 
@@ -1682,7 +1683,7 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(codecNumber, pin_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250);
+	hda_set_node_gain(codecNumber, pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250, 3);
 	if(pin_output_amp_capabilities != 0) {
 		//we will control volume by PIN node
 		output_amp_node_number = pin_node_number;
@@ -1713,6 +1714,9 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 	DOUT (DBG_PRINT, ("Initalizing Audio Output %d", audio_output_node_number));
 	audio_output_node_number = audio_output_node_number;
 
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(codecNumber, audio_output_node_number, 0x200, 0x11);
+
 	//turn on power for Audio Output
 	hda_send_verb(codecNumber, audio_output_node_number, 0x705, 0x00);
 
@@ -1727,7 +1731,7 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 
 	//set maximum volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(codecNumber, audio_output_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250);
+	hda_set_node_gain(codecNumber, audio_output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250, 3);
 	if(audio_output_amp_capabilities!=0) {
 		//we will control volume by Audio Output node
 		output_amp_node_number = audio_output_node_number;
@@ -1769,6 +1773,9 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 	}
 	DOUT (DBG_PRINT,("Initalizing Audio Mixer %d", audio_mixer_node_number));
 
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(codecNumber, audio_mixer_node_number, 0x200, 0x11);
+
 	//turn on power for Audio Mixer
 	hda_send_verb(codecNumber, audio_mixer_node_number, 0x705, 0x00);
 
@@ -1777,7 +1784,7 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 
 	//set maximal volume for Audio Mixer
 	ULONG audio_mixer_amp_capabilities = hda_send_verb(codecNumber, audio_mixer_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 250);
+	hda_set_node_gain(codecNumber, audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 250, 3);
 	if(audio_mixer_amp_capabilities != 0) {
 		//we will control volume by Audio Mixer node
 		output_amp_node_number = audio_mixer_node_number;
@@ -1810,6 +1817,9 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 	}
 	DOUT (DBG_PRINT,("Initalizing Audio Selector %d", audio_selector_node_number));
 
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(codecNumber, audio_selector_node_number, 0x200, 0x11);
+
 	//turn on power for Audio Selector
 	hda_send_verb(codecNumber, audio_selector_node_number, 0x705, 0x00);
 
@@ -1821,7 +1831,7 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 
 	//set maximal volume for Audio Selector
 	ULONG audio_selector_amp_capabilities = hda_send_verb(codecNumber, audio_selector_node_number, 0xF00, 0x12);
-	hda_set_node_gain(codecNumber, audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250);
+	hda_set_node_gain(codecNumber, audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250, 3);
 	if(audio_selector_amp_capabilities != 0) {
 		//we will control volume by Audio Selector node
 		output_amp_node_number = audio_selector_node_number;
@@ -1908,7 +1918,10 @@ UCHAR CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
 
-	//TODO: check sizes of components passed in 
+	//TODO: check sizes of components passed in
+	//note that verbs and parameters are variable length so verbs are left aligned in the fields here
+	//verbs which take a 16 bit payload will be shifted left like verb 2h will be verb 0x200 in this code. 
+
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 	//TODO: check for responses with high bit set (those are the errors)
 	
@@ -2133,9 +2146,9 @@ MixerRegWrite
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
 	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
 
-	if (Index == 1 || Index == 2){
+	if (Index == 1 || Index == 2){ //left or right channel respectively
 		DOUT (DBG_PRINT, ("set volume %d", Value));
-		hda_set_volume(Value); //supposed to be 0-255 range
+		hda_set_volume(Value, Index); //supposed to be 0-255 range
 	}
 
     /*
@@ -2784,10 +2797,10 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
 	return readULONG(OutputStreamBase + 0x04);
 }
 
-void CAdapterCommon::hda_set_volume(ULONG volume) {
-	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume);
+void CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {
+	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume, ch);
 	if(second_output_amp_node_number != 0) {
-		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume);
+		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume, ch);
 	}
 }
 

@@ -2209,9 +2209,9 @@ MixerRegWrite
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
 	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
 
-	if (Index == 1 || Index == 2){ //left or right channel respectively
-		DOUT (DBG_PRINT, ("set volume %d", Value));
-		hda_set_volume(Value, Index); //supposed to be 0-255 range
+	if (Index == 0 || Index == 1){ //left or right channel respectively
+		DOUT (DBG_PRINT, ("set volume of %d to %d", Index, Value));
+		hda_set_volume(Value, Index + 1); //supposed to be 0-255 range
 	}
 
     /*
@@ -3013,7 +3013,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	//let's print enough of the BDL and make sure we've got it right
 	for(i = 0; i < (entries * 4); i += 4){
 		DOUT(DBG_SYSINFO, 
-		("BDL %d: Phys Addr H0x%XL%X Length %d Flags %X", 
+		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), BdlMemVirt[i+1], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
 	}
 

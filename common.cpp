@@ -1,7 +1,9 @@
 /*****************************************************************************
  * common.cpp - Common code used by all the HDA miniports.
  *****************************************************************************
- * Copyright (c) 1997-1999 Microsoft Corporation.  All rights reserved.
+ * Copyright (c) 2025 Drew Hoffman
+ * Code from BleskOS and Microsoft's driver samples used under MIT license. 
+ * See LICENSE.TXT for details
  *
  * Implmentation of the common code object.  This class deals with interrupts
  * for the device, and is a collection of common code used by all the
@@ -2209,33 +2211,14 @@ MixerRegWrite
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
 	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
 
-	if (Index == 0 || Index == 1){ //left or right channel respectively
-		DOUT (DBG_PRINT, ("set volume of %d to %d", Index, Value));
-		hda_set_volume(Value, Index + 1); //supposed to be 0-255 range
-	}
-
-    /*
-	ASSERT( m_pWaveBase );
-    BYTE actualIndex;
-
     // only hit the hardware if we're in an acceptable power state
-    if( m_PowerState <= PowerDeviceD1 )
-    {
-        actualIndex = (BYTE) ((Index < 0x80) ? (Index + DSP_MIX_BASEIDX) : Index);
-    
-        WRITE_PORT_UCHAR
-        (
-            m_pWaveBase + DSP_REG_MIXREG,
-            actualIndex
-        );
-    
-        WRITE_PORT_UCHAR
-        (
-            m_pWaveBase + DSP_REG_MIXDATA,
-            Value
-        );
+    if( m_PowerState <= PowerDeviceD1 ) {
+		if (Index == 0 || Index == 1) { //left or right channel respectively
+			DOUT (DBG_PRINT, ("set volume of %d to %d", Index, Value));
+			hda_set_volume(Value, Index + 1); //supposed to be 0-255 range
+		}
     }
-	*/
+
 
     if(Index < DSP_MIX_MAXREGS)
     {
@@ -2279,22 +2262,7 @@ MixerReset
 {
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerReset]"));
-    /*ASSERT(m_pWaveBase);
-
-    WRITE_PORT_UCHAR
-    (
-        m_pWaveBase + DSP_REG_MIXREG,
-        DSP_MIX_DATARESETIDX
-    );
-
-    WRITE_PORT_UCHAR
-    (
-        m_pWaveBase + DSP_REG_MIXDATA,
-        0
-    );
-
     RestoreMixerSettingsFromRegistry();
-	*/
 }
 
 /*****************************************************************************
@@ -2498,6 +2466,10 @@ SaveMixerSettingsToRegistry
     PREGISTRYKEY    SettingsKey;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[SaveMixerSettingsToRegistry]"));
+
+	if(MixerSettings == NULL || DefaultMixerSettings == NULL) {
+		return STATUS_UNSUCCESSFUL;
+	}
     
     // open the driver registry key
     NTSTATUS ntStatus = PcNewRegistryKey( &DriverKey,               // IRegistryKey
@@ -2509,48 +2481,46 @@ SaveMixerSettingsToRegistry
                                           NULL,                     // ObjectAttributes
                                           0,                        // Create options
                                           NULL );                   // Disposition
-    if(NT_SUCCESS(ntStatus))
-    {
-        UNICODE_STRING  KeyName;
-        
-        // make a unicode strong for the subkey name
-        RtlInitUnicodeString( &KeyName, L"Settings" );
-
-        // open the settings subkey
-        ntStatus = DriverKey->NewSubKey( &SettingsKey,              // Subkey
-                                         NULL,                      // OuterUnknown
-                                         KEY_ALL_ACCESS,            // Access flags
-                                         &KeyName,                  // Subkey name
-                                         REG_OPTION_NON_VOLATILE,   // Create options
-                                         NULL );
-        if(NT_SUCCESS(ntStatus))
-        {
-            // loop through all mixer settings
-            for(UINT i = 0; i < SIZEOF_ARRAY(MixerSettings); i++)
-            {
-                // init key name
-                RtlInitUnicodeString( &KeyName, DefaultMixerSettings[i].KeyName );
-
-                // set the key
-                DWORD KeyValue = DWORD(MixerSettings[DefaultMixerSettings[i].RegisterIndex]);
-                ntStatus = SettingsKey->SetValueKey( &KeyName,                 // Key name
-                                                     REG_DWORD,                // Key type
-                                                     PVOID(&KeyValue),
-                                                     sizeof(DWORD) );
-                if(!NT_SUCCESS(ntStatus))
-                {
-                    break;
-                }
-            }
-
-            // release the settings key
-            SettingsKey->Release();
-        }
-
-        // release the driver key
-        DriverKey->Release();
-
+    if(! NT_SUCCESS(ntStatus) || DriverKey == NULL) {
+		return STATUS_UNSUCCESSFUL;
     }
+    UNICODE_STRING  KeyName;
+        
+    // make a unicode strong for the subkey name
+    RtlInitUnicodeString( &KeyName, L"Settings" );
+
+    // open the settings subkey
+    ntStatus = DriverKey->NewSubKey( &SettingsKey,              // Subkey
+                                     NULL,                      // OuterUnknown
+                                     KEY_ALL_ACCESS,            // Access flags
+                                     &KeyName,                  // Subkey name
+                                     REG_OPTION_NON_VOLATILE,   // Create options
+                                     NULL );
+    if(! NT_SUCCESS(ntStatus) || SettingsKey == NULL) {
+		return STATUS_UNSUCCESSFUL;
+		DriverKey->Release();
+	}
+    // loop through all mixer settings
+    for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++) {
+        // init key name
+        RtlInitUnicodeString( &KeyName, DefaultMixerSettings[i].KeyName );
+
+        // set the key
+        DWORD KeyValue = DWORD(MixerSettings[DefaultMixerSettings[i].RegisterIndex]);
+        ntStatus = SettingsKey->SetValueKey( &KeyName,                 // Key name
+                                             REG_DWORD,                // Key type
+                                             PVOID(&KeyValue),
+                                             sizeof(DWORD) );
+        if(!NT_SUCCESS(ntStatus)) {
+			break;
+        }
+	}
+
+	// release the settings key
+	SettingsKey->Release();
+
+    // release the driver key
+    DriverKey->Release();
 
     return ntStatus;
 }

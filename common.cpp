@@ -2505,8 +2505,15 @@ SaveMixerSettingsToRegistry
         // init key name
         RtlInitUnicodeString( &KeyName, DefaultMixerSettings[i].KeyName );
 
+		//ignore out of bounds mixer settings
+		ULONG reg = DefaultMixerSettings[i].RegisterIndex;
+		if (reg > SIZEOF_ARRAY(MixerSettings)){
+			DOUT (DBG_ERROR, ("Out of bounds mixer setting! %d",reg));
+			continue;
+		}
+
         // set the key
-        DWORD KeyValue = DWORD(MixerSettings[DefaultMixerSettings[i].RegisterIndex]);
+        DWORD KeyValue = DWORD(MixerSettings[reg]);
         ntStatus = SettingsKey->SetValueKey( &KeyName,                 // Key name
                                              REG_DWORD,                // Key type
                                              PVOID(&KeyValue),

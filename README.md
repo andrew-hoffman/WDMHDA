@@ -11,10 +11,10 @@ Current Limitations:
 - Only supports 8000-48000hz 16-bit sample rate (up to 192khz 24-bit and 32-bit could technically be added but what's the point for 9x?)
 - Output only, recording not supported
 - Single audio stream, no hardware mixing
-- Volume and mixer controls are mostly unimplemented
+- Volume control is only implemented for the main mix output and it does nothing on VMWare/Virtualbox
 - Jack detection and retasking is not supported
 - Only initializes the first codec detected on the link (extra codec in laptop docking stations won't work)
-- Freezes, fails to start or outputs horrible noises on most real hardware. The combination of Intel audio controller and Realtek codec *MIGHT* work. No guarantees. 
+- Freezes, fails to start or outputs horrible noises on a lot of real hardware. The combination of Intel audio controller and Realtek codec *MIGHT* work. No guarantees. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 

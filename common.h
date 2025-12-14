@@ -201,6 +201,9 @@
 #define HDA_PIN_DIGITAL_OTHER_IN 0xD
 #define HDA_PIN_RESERVED 0xE
 #define HDA_PIN_OTHER 0xF
+#define HDA_STREAMBASE(n) ((0x80+(0x20*n)))
+#define SDCTL_RUN 0x2
+#define SDCTL_IE 0x10
 
 // Node types
 #define HDA_OUTPUT_NODE 0x1

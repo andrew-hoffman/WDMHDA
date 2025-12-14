@@ -86,6 +86,7 @@ private:
 	UCHAR nSDO;
 	UCHAR FirstOutputStream;
 	USHORT statests;
+	USHORT stucks;
 
 	BOOLEAN is64OK;
 
@@ -607,7 +608,7 @@ Init
 	//offsets for stream engines
 	InputStreamBase = (0x80);
 	FirstOutputStream = ((caps >> 8) & 0xF);
-	OutputStreamBase = (0x80 + (0x20 * FirstOutputStream)); //skip input streams ports
+	OutputStreamBase = HDA_STREAMBASE(FirstOutputStream); //skip input streams ports
 	switch((caps >> 1) & 0x3){
 	case 0:
 		nSDO = 1;
@@ -1274,7 +1275,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	//maybe take more than one verb at once w/o blocking
 
 	//find codecs on the link.
-	//this can also be done by checking bits in STATESTS register
+	//TODO: use the ones found by STATESTS first if available
 
 	for(codec_number = 0; codec_number < 16; codec_number++) {
 
@@ -2270,51 +2271,84 @@ MixerReset
 /*****************************************************************************
  * CAdapterCommon::AcknowledgeIRQ()
  *****************************************************************************
- * Acknowledge interrupt request. TODO: works for first output stream only
+ * Acknowledge any interrupt request
  */
 HDA_INTERRUPT_TYPE CAdapterCommon::AcknowledgeIRQ()
 {
     ULONG intsts = readULONG(0x24);
-    if (intsts == 0) {
-		//Not ours
+
+	if (intsts == 0xFFFFFFFF) {
+		//Device glitch, MMIO Bus Error or controller shut down.
+		DOUT(DBG_PRINT, ("**Glitch IRQ"));
+        return HDAINT_NONE;
+    }
+	if (! (intsts & (1UL << 31))){
+		//IRQ is NOT ours unless GIS=1
 		return HDAINT_NONE;
-	} else if (intsts == 0xFFFFFFFF) {
-		// No valid interrupt or controller shut down.
-        writeULONG(0x20, 0x0); // disable global interrupt enable bit
-        return HDAINT_FATAL;
-    }
-
-	if (intsts & (1 << 30)){
-		//controller interrupt for 1 of 3 possible reasons
-		//all of which i am ignoring for now.
-		DOUT(DBG_PRINT, ("Controller IRQ: STATESTS=%X RIRBSTS=%X", readUSHORT(0x0E), readUCHAR(0x5D) ));
-
-		//clear Codec State Change flag in STATESTS
-		writeUSHORT(0x0E,readUSHORT(0x0E));
-
-		//clear Response Interrupt or Response Overrun
-		writeUCHAR(0x5D, 0x5);
-		return HDAINT_CONTROLLER;
 	}
-    // We're only using output stream #1 (bit #n in INTSTS)
-    if (intsts & (1 << FirstOutputStream))
-    {
-        UCHAR sdsts = readUCHAR(OutputStreamBase + 3);
 
-		//TODO: handle Descriptor & FIFO errors better than just blindly clearing
+	BOOLEAN streamSeen = FALSE;
+    BOOLEAN ctrlSeen   = FALSE;
 
-        // Write back to clear all error bits that are set for the stream
-        writeUCHAR(OutputStreamBase + 3, (sdsts & 0x1c));
+    /* ---- Stream interrupts ---- */
+    ULONG streamMask = intsts & 0x3FFFFFFF; // bits 0-29
 
-        return HDAINT_STREAM; // handled an interrupt
+    for (UCHAR stream = 0; stream < 30; ++stream) {
+		    if (streamMask & (1UL << stream)) {
+
+				UCHAR sdsts = readUCHAR(HDA_STREAMBASE(stream) + 3);
+
+				if (sdsts) {
+					// Acknowledge only asserted bits
+					writeUCHAR(HDA_STREAMBASE(stream) + 3, sdsts);
+
+					// If this is not a stream we manage, quiesce it
+					if (stream != FirstOutputStream) {
+						UCHAR ctl = readUCHAR(HDA_STREAMBASE(stream) + 0);
+						ctl &= ~(SDCTL_RUN | SDCTL_IE);
+						writeUCHAR(HDA_STREAMBASE(stream) + 0, ctl);
+					}
+
+				streamSeen = TRUE;
+			}
+        }
     }
 
-    // Something else triggered (GPI, StateChange, etc.)
-    DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX Disabling further interrupts", intsts));
+    /* ---- Controller interrupts ---- */
 
-    //TODO Best effort: should clear any other stream irq and keep running
-	writeULONG(0x20, 0x0); // disable global interrupt enable bit
-    return HDAINT_FATAL; 
+    /* RIRB */
+    UCHAR rirbsts = readUCHAR(0x5D);
+    if (rirbsts & 0x05)   // response interrupt or overrun
+    {
+        writeUCHAR(0x5D, rirbsts);
+        ctrlSeen = TRUE;
+    }
+
+    /* CORB */
+    UCHAR corbsts = readUCHAR(0x4D);
+    if (corbsts & 0x01)   // memory error
+    {
+        writeUCHAR(0x4D, corbsts);
+        ctrlSeen = TRUE;
+    }
+
+    /* STATESTS */
+    USHORT statests = readUSHORT(0x0E);
+    if (statests)
+    {
+        writeUSHORT(0x0E, statests);
+        ctrlSeen = TRUE;
+    }
+
+    if (streamSeen)
+        return HDAINT_STREAM;
+
+    if (ctrlSeen)
+        return HDAINT_CONTROLLER;
+
+    // GIS was set but nothing decoded. claim and move on
+    DOUT(DBG_PRINT, ("Unexpected IRQ: INTSTS=%08lX", intsts));
+    return HDAINT_CONTROLLER;
 }
 
 /*****************************************************************************
@@ -2776,11 +2810,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 		//wait till the run bit reads 0 to confirm it has stopped
 		//should be within 40 us
 		KeStallExecutionProcessor(1);
-		if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
+		if((readUCHAR(OutputStreamBase + 0x00) & SDCTL_RUN )== 0x0 ) {
 			break;
 		}
 	}
-	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
+	if((readUCHAR(OutputStreamBase + 0x00) & SDCTL_RUN ) == SDCTL_RUN) {
 		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
 		ntStatus = STATUS_TIMEOUT;
 	}

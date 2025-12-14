@@ -1,0 +1,74 @@
+## WDMHDA Alpha-011 2025-12-13
+
+Fixes stupid IRQ sharing bug. Should fix freezes on some platforms where the audio controller shares an interrupt with USB. Also rewrote interrupt service routine to handle all streams and not to try to service the stream for non-stream interrupts. 
+
+
+## WDMHDA Alpha-010 2025-12-11
+
+Fixes out of bounds read (maybe leading to crash) bug when saving mixer settings to registry that was in the original SB16 driver.
+
+
+## WDMHDA Alpha-009 2025-12-10
+
+- Set data format before powering up each node in codec, this fixes horrible distortion on Realtek ALC2xx
+- Add controller-specific PCI configuration writes that are necessary for many systems
+- Fix the mixer controls enough to allow the master volume slider to work on real hardware. On VMWare and Virtualbox it still doesn't do anything but I think that's by design for the VM, you can use the Wave volume slider in the mixer or the host's volume control.
+
+I now consider this driver functional enough to post about on retro hardware forums for further testing.
+
+
+## WDMHDA Alpha-008 2025-11-23
+
+Fixes:
+
+- Fix double-free if device was disabled in Device Manager
+- Add variable sample rates but only the range of 8-48 khz for now. Still locked to 16-bit stereo but Windows can upconvert for anything that opens an 8 bit or mono channel.
+- Fix fundamental CORB/RIRB communication error that was leaving the pointers misaligned if the codec did not respond.
+
+Known Bugs:
+
+- Severe USB & Performance issues when sharing an IRQ with a USB controller
+- Realtek codecs: Left channel sounds fine but right channel is extremely overamplified and distorted
+
+
+## WDMHDA Alpha-007 2025-11-19
+
+Added PCI Configuration Register writes for controller-specific quirks.
+
+
+## WDMHDA Alpha-006 2025-11-05
+
+Still trying to get this working on real hardware. Now including the debug build in the ZIP file, the hda.sys file in that folder may be copied into C:\Windows\System32\Drivers after installation to get full debug log output.
+
+- Check STATESTS register to see if some codecs attach,
+- Wait the required amount of time for codec init,
+- Don't try to continue into codec init with a STATUS_UNSUCCESSFUL.
+
+
+## WDMHDA Alpha-005 2025-10-31
+
+- Add codec reset command listed in Realtek datasheet
+- Tweak delays, timings, and buffer sizes to align with spec.
+- Now packaging the release build instead of the debug build to reduce slowdown from debug-log spam.
+
+
+## WDMHDA Alpha-004 2025-10-29
+
+Now supports immediate command interface to the codec, and now functions in VMWare as well as VirtualBox. Will test on some real hardware but don't get your hopes up. I still get occasional hard freezes for reasons I don't understand yet.
+
+
+## WDMHDA Alpha 003 Pre-release 2025-10-27
+
+Fixed more bugs around interrupts and timeouts. Probably doesn't work on real hardware but at least shouldn't freeze instantly anymore
+
+
+## WDMHDA Alpha 002 Pre-release 2025-10-21
+
+Maybe fixed interrupt issue, some minor polish changes
+
+
+## WDMHDA Alpha 001 Pre-release 2025-10-20
+
+Alpha release. No guarantees whatsoever. Only tested in VirtualBox! Only works at 16-bit 44100 Hz! Winamp produces horrible screeching noises sometimes! Also the release build doesn't produce sound so this is a debug build. For best results, run with a kernel debugger attached so you can tell why it doesn't work and why everything is frozen. You might get sound, or it might wipe your hard drive and unleash the nasal demons. If it doesn't work for you i would like to see the debug logs to figure out why.
+
+No readme and no instructions are provided for this. If you don;t know how to install windows driver binaries through Device Manager this is not the way to learn.

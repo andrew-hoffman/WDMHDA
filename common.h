@@ -228,6 +228,21 @@ typedef struct
     BYTE     RegisterSetting;
 } MIXERSETTING,*PMIXERSETTING;
 
+typedef enum _HDA_INTERRUPT_TYPE
+{
+    HDAINT_NONE = 0,               // IRQ not for us (no status bits set)
+
+    /* Controller-level interrupts (GCTL/INTSTS) */
+    HDAINT_CONTROLLER,             // Non-stream controller event
+
+    /* Stream-related interrupts */
+    HDAINT_STREAM,                 // One or more streams signaled
+    HDAINT_STREAM_ERROR,
+
+    /* Fatal / reset conditions */
+    HDAINT_FATAL                  // Controller halted or unrecoverable error
+} HDA_INTERRUPT_TYPE;
+
 DEFINE_GUID(IID_IAdapterCommon,
 0x7eda2950, 0xbf9f, 0x11d0, 0x87, 0x1f, 0x0, 0xa0, 0xc9, 0x11, 0xb5, 0x44);
 

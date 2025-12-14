@@ -136,7 +136,7 @@ private:
     BOOL                    m_bCaptureActive;
     BYTE                    MixerSettings[DSP_MIX_MAXREGS];
 
-    BOOLEAN AcknowledgeIRQ
+    HDA_INTERRUPT_TYPE AcknowledgeIRQ
     (   void
     );
     BOOLEAN AdapterISR
@@ -386,6 +386,8 @@ Init
 
 	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
+
+	
 
 	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
@@ -2270,16 +2272,18 @@ MixerReset
  *****************************************************************************
  * Acknowledge interrupt request. TODO: works for first output stream only
  */
-BOOLEAN CAdapterCommon::AcknowledgeIRQ()
+HDA_INTERRUPT_TYPE CAdapterCommon::AcknowledgeIRQ()
 {
     ULONG intsts = readULONG(0x24);
-    if (intsts == 0 || intsts == 0xFFFFFFFF)
-    {
-        // No valid interrupt or controller shut down.
-        if (intsts == 0xFFFFFFFF)
-            writeULONG(0x20, 0x0); // disable global interrupt enable bit
-        return FALSE; // nothing for us
+    if (intsts == 0) {
+		//Not ours
+		return HDAINT_NONE;
+	} else if (intsts == 0xFFFFFFFF) {
+		// No valid interrupt or controller shut down.
+        writeULONG(0x20, 0x0); // disable global interrupt enable bit
+        return HDAINT_FATAL;
     }
+
 	if (intsts & (1 << 30)){
 		//controller interrupt for 1 of 3 possible reasons
 		//all of which i am ignoring for now.
@@ -2290,7 +2294,7 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
 
 		//clear Response Interrupt or Response Overrun
 		writeUCHAR(0x5D, 0x5);
-		return FALSE; //can't run the irq handler further, hope this doesnt cause more problems
+		return HDAINT_CONTROLLER;
 	}
     // We're only using output stream #1 (bit #n in INTSTS)
     if (intsts & (1 << FirstOutputStream))
@@ -2302,7 +2306,7 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
         // Write back to clear all error bits that are set for the stream
         writeUCHAR(OutputStreamBase + 3, (sdsts & 0x1c));
 
-        return TRUE; // handled an interrupt
+        return HDAINT_STREAM; // handled an interrupt
     }
 
     // Something else triggered (GPI, StateChange, etc.)
@@ -2310,7 +2314,7 @@ BOOLEAN CAdapterCommon::AcknowledgeIRQ()
 
     //TODO Best effort: should clear any other stream irq and keep running
 	writeULONG(0x20, 0x0); // disable global interrupt enable bit
-    return FALSE; 
+    return HDAINT_FATAL; 
 }
 
 /*****************************************************************************
@@ -2734,8 +2738,11 @@ NTSTATUS InterruptServiceRoutine
     // ACK the ISR. note we don't have any direct access to CAdapterCommon, gotta use the pointer
     // get out of here immediately if it's not our IRQ
 	//
-	if(!that->AcknowledgeIRQ() ){
-		return FALSE;
+	HDA_INTERRUPT_TYPE irqType = that->AcknowledgeIRQ();
+	if(irqType == HDAINT_NONE) {
+		return STATUS_UNSUCCESSFUL;
+	} else if (irqType != HDAINT_STREAM) {
+		return STATUS_SUCCESS; //without queuing the DPC
 	}
 
     ASSERT(InterruptSync);

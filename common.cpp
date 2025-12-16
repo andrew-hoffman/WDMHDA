@@ -1275,8 +1275,51 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	//maybe take more than one verb at once w/o blocking
 
 	//find codecs on the link.
-	//TODO: use the ones found by STATESTS first if available
 
+	//check codecs enumerated in STATESTS first if available
+
+	//TODO: rewrite without the gotos!
+	if(statests == 0)
+		goto blind_probe;
+	
+	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS"));
+
+	for(codec_number = 0; codec_number < 16; codec_number++) {
+		communication_type = HDA_CORB_RIRB;
+		if (((statests >> codec_number) & 1) == 0)
+			continue;
+		communication_type = HDA_CORB_RIRB;
+				communication_type = HDA_CORB_RIRB;
+
+		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+
+		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
+		
+		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
+
+			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
+			//initialize the first codec we find that gives a nonzero response
+			//TODO: init all codecs on link
+			ntStatus = InitializeCodec(codec_number);		
+			break; //initalization is complete
+		} else if((statests >> (codec_number+1)) == 0){
+			//if no further codecs left in statests
+			goto blind_probe;
+		}
+
+	}
+
+	if (!NT_SUCCESS (ntStatus))
+    {        
+        DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
+    }
+	return ntStatus;
+
+blind_probe:
+
+	DOUT (DBG_SYSINFO, ("Probing codecs blind"));
+
+	//If we haven't found anything yet, resort to blindly trying to reset each codec
 	for(codec_number = 0; codec_number < 16; codec_number++) {
 
 		communication_type = HDA_CORB_RIRB;
@@ -1311,16 +1354,14 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		}
 	}
 
-    //ok now if we got here we have a working link
-	//and we're ready to go init whatever codec we found
-
     if (!NT_SUCCESS (ntStatus))
     {        
         DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
     }
 	return ntStatus;
 	
-	hda_use_pio_interface:
+hda_use_pio_interface:
+
 	DOUT (DBG_SYSINFO, ("Using Immediate Command Interface."));
 
 	//stop CORB and RIRB

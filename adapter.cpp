@@ -669,7 +669,6 @@ AssignResources
 
     //
     // Determine the type of card based on port resources.
-    // TODO:  Detect wave table.
     //
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
@@ -689,74 +688,8 @@ AssignResources
 		}
 
 		ntStatus = STATUS_SUCCESS;
-        // TODO: remove other cases
+        //removed other cases
 		break;
-    case 1:
-        //
-        // No FM synth or UART.
-        //
-        if  (   (ResourceList->FindTranslatedPort(0)->u.Port.Length < 16)
-            ||  (countIRQ < 1)
-            ||  (countDMA < 1)
-            )
-        {
-            ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-        }
-        break;
-
-    case 2:
-        //
-        // MPU-401 or FM synth, not both.
-        //
-        if  (   (ResourceList->FindTranslatedPort(0)->u.Port.Length < 16)
-            ||  (countIRQ < 1)
-            ||  (countDMA < 1)
-            )
-        {
-            ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-        }
-        else
-        {
-            //
-            // Length of second port indicates which function.
-            //
-            switch (ResourceList->FindTranslatedPort(1)->u.Port.Length)
-            {
-            case 2:
-                detectedUart = TRUE;
-                break;
-
-            case 4:
-                detectedFmSynth = TRUE;
-                break;
-
-            default:
-                ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-                break;
-            }
-        }
-        break;
-
-    case 3:
-        //
-        // Both MPU-401 and FM synth.
-        //
-        if  (   (ResourceList->FindTranslatedPort(0)->u.Port.Length < 16)
-            ||  (ResourceList->FindTranslatedPort(1)->u.Port.Length != 2)
-            ||  (ResourceList->FindTranslatedPort(2)->u.Port.Length != 4)
-            ||  (countIRQ < 1)
-            ||  (countDMA < 1)
-            )
-        {
-            ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-        }
-        else
-        {
-            detectedUart    = TRUE;
-            detectedFmSynth = TRUE;
-        }
-        break;
-
     default:
         ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
         break;

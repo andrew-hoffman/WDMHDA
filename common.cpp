@@ -86,7 +86,6 @@ private:
 	UCHAR nSDO;
 	UCHAR FirstOutputStream;
 	USHORT statests;
-	USHORT stucks;
 
 	BOOLEAN is64OK;
 
@@ -122,9 +121,6 @@ private:
     BOOLEAN m_bCORBInitialized;  // CORB initialized flag
     BOOLEAN m_bRIRBInitialized;  // RIRB initialized flag
     PDEVICE_OBJECT m_pDeviceObject;     // Device object used for registry access.
-    PWORD m_pCodecBase;                 // The HDA I/O port address.
-    PUCHAR m_pBusMasterBase;            // The Bus Master base address.
-    BOOL m_bDirectRead;                 // Used during init time.
     DEVICE_POWER_STATE m_PowerState;    // Current power state of the device.
 
     PINTERRUPTSYNC          m_pInterruptSync;
@@ -217,7 +213,7 @@ public:
     );
 
 
-	STDMETHODIMP_(NTSTATUS) InitHDA (void);
+	STDMETHODIMP_(NTSTATUS) InitHDAController (void);
 	STDMETHODIMP_(NTSTATUS) InitializeCodec (UCHAR num);
 
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
@@ -227,9 +223,9 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(void)		hda_initialize_output_pin(ULONG pin_node_number);
-	STDMETHODIMP_(void)		hda_initalize_audio_output(ULONG audio_output_node_number);
-	STDMETHODIMP_(void)		hda_initalize_audio_mixer(ULONG audio_mixer_node_number);
-	STDMETHODIMP_(void)		hda_initalize_audio_selector(ULONG audio_selector_node_number);
+	STDMETHODIMP_(void)		hda_initialize_audio_output(ULONG audio_output_node_number);
+	STDMETHODIMP_(void)		hda_initialize_audio_mixer(ULONG audio_mixer_node_number);
+	STDMETHODIMP_(void)		hda_initialize_audio_selector(ULONG audio_selector_node_number);
 	STDMETHODIMP_(BOOL)		hda_is_headphone_connected (void);
 	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
 	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch);
@@ -311,6 +307,12 @@ MIXERSETTING DefaultMixerSettings[] =
     { L"LeftBass",        DSP_MIX_BASSIDX_L,          0x80 },
     { L"RightBass",       DSP_MIX_BASSIDX_R,          0x80 },
 };
+
+	//driver settings via registry keys
+	static BOOLEAN skipControllerReset = false;
+	static BOOLEAN skipCodecReset = false;
+	static BOOLEAN useAltOut = false;
+	static BOOLEAN useSPDIF = false;
 
 
 
@@ -805,7 +807,7 @@ Init
     //
 	DbgPrint( ("\nInit HDA Controller!\n"));
 
-	ntStatus = InitHDA ();
+	ntStatus = InitHDAController ();
 
     if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nResetController Failed! 0x%X\n", ntStatus);
@@ -1072,55 +1074,74 @@ SetWaveServiceGroup
     }
 }
 /*****************************************************************************
- * CAdapterCommon::InitHDA
+ * CAdapterCommon::InitHDAController
  *****************************************************************************
  * Initialize the HDA controller. Only call this from IRQL = Passive
  */
 
-NTSTATUS CAdapterCommon::InitHDA (void)
+NTSTATUS CAdapterCommon::InitHDAController (void)
 {
     PAGED_CODE ();
 	UCHAR codec_number;
 	ULONG codec_id;
+	ULONG i;
     
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::InitHDA]"));
+    DOUT (DBG_PRINT, ("[CAdapterCommon::InitHDAController]"));
 
 	//TODO: try to stop all possible running streams before resetting?
 
 	//we're not supposed to write to any registers before reset
 
-	//Reset the whole controller. Spec says this can take up to 521 us
+	statests = readUSHORT(0x0E);
+	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
 
-	writeUCHAR(0x08,0x0);
+	//to preserve BIOS pin information,
+	//ONLY reset the whole controller if no codecs have enum. in statests
+	if ((statests != 0) && skipControllerReset) {
+		DOUT(DBG_SYSINFO, ("Skipping reset"));
+	} else {
+		
+		//Reset the whole controller. Spec says this can take up to 521 us
 
-	for (int i = 0; i < 100; i++) {
-		KeStallExecutionProcessor(150);
-		if ((readUCHAR(0x08) & 0x1) == 0x0) {
-			DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
-			break;
-		} else if (i == 99) {
-			DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
-			return STATUS_UNSUCCESSFUL;
+		DOUT(DBG_SYSINFO, ("Resetting HDA Controller"));
+
+		writeUCHAR(0x08,0x0);
+		
+		//wait for reset start acknowledgement
+		for (i = 0; i < 100; i++) {
+			KeStallExecutionProcessor(150);
+			if ((readUCHAR(0x08) & 0x1) == 0x0) {
+				DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
+				break;
+			} else if (i == 99) {
+				DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
+				return STATUS_UNSUCCESSFUL;
+			}
 		}
-	}
 
-	KeStallExecutionProcessor(100);
-	writeUCHAR(0x08,0x1);
-	//try to disable interrupts immediately
-	writeULONG (0x20, 0x0);
+		KeStallExecutionProcessor(100);
+		writeUCHAR(0x08,0x1);
+		//try to disable interrupts immediately
+		writeULONG (0x20, 0x0);
+	
+		//wait for reset complete
+		for (i = 0; i < 100; i++) {
+			KeStallExecutionProcessor(150);
+			if ((readUCHAR(0x08) & 0x1) == 0x1) {
+				DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
+				break;
+			}
+			else if (i == 99) {
+				DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
+				return STATUS_UNSUCCESSFUL;
+			}
+		}
 
-	for (i = 0; i < 100; i++) {
-		KeStallExecutionProcessor(150);
-		if ((readUCHAR(0x08) & 0x1) == 0x1) {
-			DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
-			break;
-		}
-		else if (i == 99) {
-			DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
-			return STATUS_UNSUCCESSFUL;
-		}
+		// now we're supposed to wait at least 1ms for codec reset events before continuing
+		DOUT(DBG_SYSINFO, ("waiting for codecs to enumerate on link"));
+		KeStallExecutionProcessor(1000);
 	}
 
 	//disable interrupts again just to be sure
@@ -1141,10 +1162,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 	writeUCHAR (0x4C, 0x0);
 	writeUCHAR (0x5C, 0x0);
 
-	//TODO: cache flush needed here?
-	// now we're supposed to wait at least 1ms for codec reset events before continuing
-	DOUT(DBG_SYSINFO, ("waiting for codecs to enumerate on link"));
-	KeStallExecutionProcessor(1000);
+
 	
 	statests = readUSHORT(0x0E);
 	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
@@ -1288,20 +1306,19 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 		communication_type = HDA_CORB_RIRB;
 		if (((statests >> codec_number) & 1) == 0)
 			continue;
+
 		communication_type = HDA_CORB_RIRB;
-				communication_type = HDA_CORB_RIRB;
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
 
 		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
-		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
-
+		if((codec_id != 0x0) && (codec_id != 0xFFFFFFFF) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
 			//initialize the first codec we find that gives a nonzero response
 			//TODO: init all codecs on link
 			ntStatus = InitializeCodec(codec_number);		
-			break; //initalization is complete
+			break; //initialization is complete
 		} else if((statests >> (codec_number+1)) == 0){
 			//if no further codecs left in statests
 			goto blind_probe;
@@ -1311,7 +1328,7 @@ NTSTATUS CAdapterCommon::InitHDA (void)
 
 	if (!NT_SUCCESS (ntStatus))
     {        
-        DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
+        DOUT (DBG_ERROR, ("Initialization of HDA Codec failed."));
     }
 	return ntStatus;
 
@@ -1320,7 +1337,7 @@ blind_probe:
 	DOUT (DBG_SYSINFO, ("Probing codecs blind"));
 
 	//If we haven't found anything yet, resort to blindly trying to reset each codec
-	for(codec_number = 0; codec_number < 16; codec_number++) {
+	for (codec_number = 0; codec_number < 16; codec_number++) {
 
 		communication_type = HDA_CORB_RIRB;
 		
@@ -1343,14 +1360,15 @@ blind_probe:
 			return STATUS_UNSUCCESSFUL;
 		}
 
-		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
+		if((codec_id != 0) && (codec_id != 0xFFFFFFFF) && (codec_id != STATUS_UNSUCCESSFUL)) {
+
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
 
 			//initialize the first codec we find that gives a nonzero response
 			//TODO: init all codecs on link
 			ntStatus = InitializeCodec(codec_number);
 		
-			break; //initalization is complete
+			break; //initialization is complete
 		}
 	}
 
@@ -1389,7 +1407,7 @@ hda_use_pio_interface:
 		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA:  Codec %d PIO communication interface", codec_id));
 			ntStatus = InitializeCodec(codec_number);
-			return ntStatus; //initalization is complete
+			return ntStatus; //initialization is complete
 		}
 	}
 	if (!NT_SUCCESS (ntStatus))
@@ -1551,26 +1569,51 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 				DbgPrint( ("CD"));
 	
 				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				if (useAltOut){
+					pin_alternative_output_node_number = node;
+					DbgPrint( (" used"));
+				} else {
+					DbgPrint( (" not considered"));
+				}
 			} else if(type_of_node == HDA_PIN_SPDIF_OUT) {
 				DbgPrint( ("SPDIF Out"));
 	
 				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				if (useSPDIF){
+					pin_alternative_output_node_number = node;
+					DbgPrint( (" used"));
+				} else {
+					DbgPrint( (" not considered"));
+				}
 			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_OUT) {
 				DbgPrint( ("Digital Other Out"));
 				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				if (useAltOut){
+					pin_alternative_output_node_number = node;
+					DbgPrint( (" used"));
+				} else {
+					DbgPrint( (" not considered"));
+				}
 			} else if(type_of_node == HDA_PIN_MODEM_LINE_SIDE) {
 				DbgPrint( ("Modem Line Side"));
 
 				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				if (useAltOut){
+					pin_alternative_output_node_number = node;
+					DbgPrint( (" used"));
+				} else {
+					DbgPrint( (" not considered"));
+				}
 			} else if(type_of_node == HDA_PIN_MODEM_HANDSET_SIDE) {
 				DbgPrint( ("Modem Handset Side"));
 	
 				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				if (useAltOut){
+					pin_alternative_output_node_number = node;
+					DbgPrint( (" used"));
+				} else {
+					DbgPrint( (" not considered"));
+				}
 			} else if(type_of_node == HDA_PIN_LINE_IN) {
 				DbgPrint( ("Line In"));
 			} else if(type_of_node == HDA_PIN_AUX) {
@@ -1675,13 +1718,13 @@ void CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULO
 		}
 	}
 	else if(pin_headphone_node_number!=0) { //codec do not have speaker, but only headphone output
-		DbgPrint("\nHeadphone output ");
+		DbgPrint("\nHeadphone output selected");
 		is_initialized_useful_output = TRUE;
 		hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
 	}
 	else if(pin_alternative_output_node_number!=0) { //codec have only alternative output
-		DbgPrint("\nAlternative output ");
+		DbgPrint("\nAlternative output selected");
 		is_initialized_useful_output = FALSE;
 		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
 		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
@@ -1764,7 +1807,7 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::hda_initialize_output_pin]"));
+    DOUT (DBG_PRINT, ("[CAdapterCommon::hda_initialize_output_pin] %d", pin_node_number));
 	//reset variables of first path
 	audio_output_node_number = 0;
 	audio_output_node_sample_capabilities = 0;
@@ -1772,23 +1815,23 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 	output_amp_node_number = 0;
 	output_amp_node_capabilities = 0;
 
-	//set 16-bit stereo format before turning on power so it sticks
-	hda_send_verb(codecNumber, pin_node_number, 0x200, 0x11);
-
-	//turn on power for PIN
-	hda_send_verb(codecNumber, pin_node_number, 0x705, 0x00);
-
 	//disable unsolicited responses
 	hda_send_verb(codecNumber, pin_node_number, 0x708, 0x00);
 
 	//disable any processing
 	hda_send_verb(codecNumber, pin_node_number, 0x703, 0x00);
 
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(codecNumber, pin_node_number, 0x200, 0x11);
+
+	//turn on power for PIN
+	hda_send_verb(codecNumber, pin_node_number, 0x705, 0x00);
+
 	//enable PIN
 	hda_send_verb(codecNumber, pin_node_number, 0x707, (hda_send_verb(codecNumber, pin_node_number, 0xF07, 0x00) | 0x80 | 0x40));
 
-	//enable EAPD + L-R swap
-	hda_send_verb(codecNumber, pin_node_number, 0x70C, 0x6);
+	//enable EAPD. do not enable L-R swap, why were we doing that, the channel order is correct
+	hda_send_verb(codecNumber, pin_node_number, 0x70C, 0x0002);
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(codecNumber, pin_node_number, 0xF00, 0x12);
@@ -1805,22 +1848,22 @@ void CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_number) {
 	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, pin_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node==HDA_WIDGET_AUDIO_OUTPUT) {
-		hda_initalize_audio_output(first_connected_node_number);
+		hda_initialize_audio_output(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
-		hda_initalize_audio_mixer(first_connected_node_number);
+		hda_initialize_audio_mixer(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
-		hda_initalize_audio_selector(first_connected_node_number);
+		hda_initialize_audio_selector(first_connected_node_number);
 	}
 	else {
 		DOUT (DBG_PRINT, ("\nHDA ERROR: PIN have connection %d", first_connected_node_number));
 	}
 }
 
-void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) {
+void CAdapterCommon::hda_initialize_audio_output(ULONG audio_output_node_number) {
 	PAGED_CODE ();
-	DOUT (DBG_PRINT, ("Initalizing Audio Output %d", audio_output_node_number));
+	DOUT (DBG_PRINT, ("Initializing Audio Output %d", audio_output_node_number));
 	audio_output_node_number = audio_output_node_number;
 
 	//set 16-bit stereo format before turning on power so it sticks
@@ -1874,13 +1917,13 @@ void CAdapterCommon::hda_initalize_audio_output(ULONG audio_output_node_number) 
 	DOUT (DBG_PRINT, ("Volume capabilities: 0x%x", output_amp_node_capabilities));
 }
 
-void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
+void CAdapterCommon::hda_initialize_audio_mixer(ULONG audio_mixer_node_number) {
 	PAGED_CODE ();
 	if(length_of_node_path>=10) {
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 		return;
 	}
-	DOUT (DBG_PRINT,("Initalizing Audio Mixer %d", audio_mixer_node_number));
+	DOUT (DBG_PRINT,("Initializing Audio Mixer %d", audio_mixer_node_number));
 
 	//set 16-bit stereo format before turning on power so it sticks
 	hda_send_verb(codecNumber, audio_mixer_node_number, 0x200, 0x11);
@@ -1905,26 +1948,26 @@ void CAdapterCommon::hda_initalize_audio_mixer(ULONG audio_mixer_node_number) {
 	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, audio_mixer_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
-		hda_initalize_audio_output(first_connected_node_number);
+		hda_initialize_audio_output(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
-		hda_initalize_audio_mixer(first_connected_node_number);
+		hda_initialize_audio_mixer(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
-		hda_initalize_audio_selector(first_connected_node_number);
+		hda_initialize_audio_selector(first_connected_node_number);
 	}
 	else {
 		DOUT (DBG_PRINT,("HDA ERROR: Mixer have connection %d", first_connected_node_number));
 	}
 }
 
-void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_number) {
+void CAdapterCommon::hda_initialize_audio_selector(ULONG audio_selector_node_number) {
 	PAGED_CODE ();
 	if(length_of_node_path>=10) {
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 	return;
 	}
-	DOUT (DBG_PRINT,("Initalizing Audio Selector %d", audio_selector_node_number));
+	DOUT (DBG_PRINT,("Initializing Audio Selector %d", audio_selector_node_number));
 
 	//set 16-bit stereo format before turning on power so it sticks
 	hda_send_verb(codecNumber, audio_selector_node_number, 0x200, 0x11);
@@ -1953,13 +1996,13 @@ void CAdapterCommon::hda_initalize_audio_selector(ULONG audio_selector_node_numb
 	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, audio_selector_node_number, 0); //get first node number
 	ULONG type_of_first_connected_node = hda_get_node_type(codecNumber, first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
-		hda_initalize_audio_output(first_connected_node_number);
+		hda_initialize_audio_output(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
-		hda_initalize_audio_mixer(first_connected_node_number);
+		hda_initialize_audio_mixer(first_connected_node_number);
 	}
 	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
-		hda_initalize_audio_selector(first_connected_node_number);
+		hda_initialize_audio_selector(first_connected_node_number);
 	}
 	else {
 		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
@@ -2407,7 +2450,7 @@ ResetController(void)
 
 	ntStatus = hda_stop_stream();
 
-	//ntStatus = InitHDA();
+	//ntStatus = InitHDAController();
 
     return ntStatus;
 }
@@ -2704,7 +2747,7 @@ PowerChangeState
 
 				//Re-init the codec if coming from D2 or D3
 				if((ULONG(m_PowerState)-ULONG(PowerDeviceD0)) >= 2){
-					InitHDA();
+					InitHDAController();
 				}
 
 				// restore mixer settings

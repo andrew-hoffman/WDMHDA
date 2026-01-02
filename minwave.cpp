@@ -231,9 +231,6 @@ ValidateFormat
         ntStatus = STATUS_SUCCESS;
 		//try programming the given sample rate and see if it works
 		ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec);
-		//if (!NT_SUCCESS(ntStatus)){
-		//	AdapterCommon->ProgramSampleRate(44100);
-		//}
     }
     else
     {

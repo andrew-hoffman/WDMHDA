@@ -231,6 +231,15 @@ typedef struct
     BYTE     RegisterSetting;
 } MIXERSETTING,*PMIXERSETTING;
 
+typedef struct
+{
+	ULONG audio_output_node_number;
+    ULONG audio_output_node_sample_capabilities;
+    ULONG audio_output_node_stream_format_capabilities;
+    ULONG output_amp_node_number;
+    ULONG output_amp_node_capabilities;
+} NODE_PATH, *PNODE_PATH;
+
 typedef enum _HDA_INTERRUPT_TYPE
 {
     HDAINT_NONE = 0,               // IRQ not for us (no status bits set)

@@ -100,7 +100,9 @@ private:
     ULONG afg_node_input_amp_capabilities;
     ULONG afg_node_output_amp_capabilities;
 
-	//Codec output paths - TODO turn into a list
+	//Codec output paths
+	HDA_OUTPUT_LIST out_paths;
+
     ULONG audio_output_node_number;
     ULONG audio_output_node_sample_capabilities;
     ULONG audio_output_node_stream_format_capabilities;
@@ -1467,6 +1469,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitializeCodec (UCHAR codec_number)
 
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULONG codec_number, ULONG afg_node_number) {
 	PAGED_CODE ();
+	HDA_NODE_PATH path;
 
 	//reset AFG
 	hda_send_verb(codec_number, afg_node_number, 0x7FF, 0x00);
@@ -1498,7 +1501,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
-
 
 	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
 		type_of_node = 0; node < last_node; node++) {
@@ -1672,6 +1674,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 	second_output_amp_node_capabilities = 0;
 
 	//initialize output PINs
+	// TODO: turn else-ifs to ifs and save more than 2 paths
 	DbgPrint( ("\n"));
 	if (pin_speaker_default_node_number != 0) {
 		//initialize speaker
@@ -1694,6 +1697,16 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		second_output_amp_node_number = output_amp_node_number;
 		second_output_amp_node_capabilities = output_amp_node_capabilities;
 
+		//add path to paths list
+		path.audio_output_node_number = audio_output_node_number;
+		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+		path.output_amp_node_number = output_amp_node_number;
+		path.output_amp_node_capabilities = output_amp_node_capabilities;
+		if (out_paths.count < MAX_OUTPUT_PATHS) {
+			out_paths.paths[out_paths.count++] = path;
+		}
+
 		//if codec has also headphone output, initialize it
 		if (pin_headphone_node_number != 0) {
 			DbgPrint("\n\nHeadphone output ");
@@ -1701,10 +1714,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
 
 			//if first path and second path share nodes, left only info for first path
-			if(audio_output_node_number==second_audio_output_node_number) {
+			if(audio_output_node_number == second_audio_output_node_number) {
 				second_audio_output_node_number = 0;
 			}
-			if(output_amp_node_number==second_output_amp_node_number) {
+			if(output_amp_node_number == second_output_amp_node_number) {
 				second_output_amp_node_number = 0;
 			}
 
@@ -1723,21 +1736,59 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			// this will have to be a DPC
 
 			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
+
+			//add path to paths list
+			path.audio_output_node_number = audio_output_node_number;
+			path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+			path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+			path.output_amp_node_number = output_amp_node_number;
+			path.output_amp_node_capabilities = output_amp_node_capabilities;
+			if (out_paths.count < MAX_OUTPUT_PATHS) {
+				out_paths.paths[out_paths.count++] = path;
+			}
 		}
 	}
 	else if(pin_headphone_node_number != 0) { //codec do not have speaker, but only headphone output
-		DbgPrint("\nHeadphone output selected");
+		DbgPrint("\nHeadphone output selected ");
 		is_initialized_useful_output = TRUE;
 		hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
 	}
-	else if(pin_alternative_output_node_number != 0) { //codec has only alternative output
-		DbgPrint("\nAlternative output selected");
-		is_initialized_useful_output = FALSE;
+
+	if (pin_alternative_output_node_number != 0) { //codec has alternative output
+		DbgPrint("\nAlternative output selected ");
+		//is_initialized_useful_output = FALSE;
 		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
 		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
+		//add path to paths list
+		path.audio_output_node_number = audio_output_node_number;
+		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+		path.output_amp_node_number = output_amp_node_number;
+		path.output_amp_node_capabilities = output_amp_node_capabilities;
+		if (out_paths.count < MAX_OUTPUT_PATHS) {
+			out_paths.paths[out_paths.count++] = path;
+		}
 	}
-	else {
+
+	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
+		DbgPrint("\nSPDIF output selected ");
+		//is_initialized_useful_output = FALSE;
+		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
+		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
+		//add path to paths list
+		path.audio_output_node_number = audio_output_node_number;
+		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+		path.output_amp_node_number = output_amp_node_number;
+		path.output_amp_node_capabilities = output_amp_node_capabilities;
+		if (out_paths.count < MAX_OUTPUT_PATHS) {
+			out_paths.paths[out_paths.count++] = path;
+		}
+	}
+	DbgPrint("\n%d Output paths found", out_paths.count);
+	if(out_paths.count == 0) {
+		//no usable output paths have been found
 		DbgPrint("\nCodec does not have any usable output PINs");
 		return STATUS_UNSUCCESSFUL;
 	}
@@ -2948,12 +2999,16 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {
-	//TODO: go through list of output paths and set same volume on all of them
 
-	hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume, ch);
-	if(second_output_amp_node_number != 0) {
-		hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume, ch);
+	//go through list of output paths and set same volume on all of them
+	for( ULONG i = 0; i < out_paths.count; ++i){
+		hda_set_node_gain(codecNumber, out_paths.paths[i].output_amp_node_number, HDA_OUTPUT_NODE, out_paths.paths[i].output_amp_node_capabilities, volume, ch);
 	}
+
+	//hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume, ch);
+	//if(second_output_amp_node_number != 0) {
+	//	hda_set_node_gain(codecNumber, second_output_amp_node_number, HDA_OUTPUT_NODE, second_output_amp_node_capabilities, volume, ch);
+	//}
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch) {

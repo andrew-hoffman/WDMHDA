@@ -231,6 +231,8 @@ typedef struct
     BYTE     RegisterSetting;
 } MIXERSETTING,*PMIXERSETTING;
 
+#define MAX_OUTPUT_PATHS 8
+
 typedef struct
 {
 	ULONG audio_output_node_number;
@@ -238,7 +240,12 @@ typedef struct
     ULONG audio_output_node_stream_format_capabilities;
     ULONG output_amp_node_number;
     ULONG output_amp_node_capabilities;
-} NODE_PATH, *PNODE_PATH;
+} HDA_NODE_PATH, *PHDA_NODE_PATH;
+
+typedef struct _HDA_OUTPUT_LIST {
+    ULONG count;
+    HDA_NODE_PATH paths[MAX_OUTPUT_PATHS];
+} HDA_OUTPUT_LIST;
 
 typedef enum _HDA_INTERRUPT_TYPE
 {

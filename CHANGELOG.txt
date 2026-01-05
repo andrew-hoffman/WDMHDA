@@ -1,3 +1,12 @@
+## WDMHDA Alpha-012 2026-01-02
+
+- tries to init the codecs listed in STATESTS before resorting to probing blindly
+- SPDIF, CD and Phone outputs will NOT be used as audio outputs. May add these back later
+- add more debugging info to determine the output nodes the driver is actually using
+- code cleanups, decreases file size a bit
+- set the version and other information of the dll file so you can tell what release is installed from the device manager
+
+
 ## WDMHDA Alpha-011 2025-12-13
 
 Fixes stupid IRQ sharing bug. Should fix freezes on some platforms where the audio controller shares an interrupt with USB. Also rewrote interrupt service routine to handle all streams and not to try to service the stream for non-stream interrupts. 

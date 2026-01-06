@@ -118,6 +118,8 @@ private:
     ULONG pin_output_node_number;
     ULONG pin_headphone_node_number;
 
+	ULONG debug_kludge;
+
 
     BOOLEAN m_bDMAInitialized;   // DMA initialized flag
     BOOLEAN m_bCORBInitialized;  // CORB initialized flag
@@ -1453,9 +1455,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitializeCodec (UCHAR codec_number)
 	ULONG node = (response >> 16) & 0xFF;
 	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
 		if((hda_send_verb(codec_number, node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
-			//initialize (first) Audio Function Group
-			return hda_initialize_audio_function_group(codec_number, node); 
-			//todo: handle multiple AFGs?
+			//initialize first Audio Function Group
+			if ( NT_SUCCESS( hda_initialize_audio_function_group(codec_number, node) )){
+				return STATUS_SUCCESS;
+			}
 		}
 	}
 	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
@@ -1502,6 +1505,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
 
+	//For all nodes in this AFG
 	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
 		type_of_node = 0; node < last_node; node++) {
 
@@ -1512,8 +1516,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		type_of_node = hda_get_node_type(codec_number, node);
 
 		//process node
-		//TODO: can i express this more compactly as a switch statement?
-
 		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
 			DbgPrint( ("Audio Output"));
 
@@ -1536,10 +1538,22 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			type_of_node = ((hda_send_verb(codec_number, node, 0xF1C, 0x00) >> 20) & 0xF);
 
 			if(type_of_node == HDA_PIN_LINE_OUT) {
-				DbgPrint( ("Line Out"));
+				DbgPrint( ("Line Out "));
 	
-				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
+				//try to init ALL line-outs now, not worrying about jack detect yet
+				hda_initialize_output_pin(node); //initialize line out
+				pin_output_node_number = node; //save output node number
+
+				//add path to paths list
+				path.audio_output_node_number = audio_output_node_number;
+				path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+				path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+				path.output_amp_node_number = output_amp_node_number;
+				path.output_amp_node_capabilities = output_amp_node_capabilities;
+				if (out_paths.count < MAX_OUTPUT_PATHS) {
+					out_paths.paths[out_paths.count++] = path;
+				}
+
 			} else if(type_of_node == HDA_PIN_SPEAKER) {
 				DbgPrint( ("Speaker "));
 
@@ -1674,8 +1688,28 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 	second_output_amp_node_capabilities = 0;
 
 	//initialize output PINs
-	// TODO: turn else-ifs to ifs and save more than 2 paths
-	DbgPrint( ("\n"));
+	//TODO: get rid of globals 
+	DbgPrint( ("\n Init these output PINs: \n"));
+
+	//initialize spdif output first
+	//because i want any other output format support list to override spdif's
+	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
+		DbgPrint("\nSPDIF output ");
+		//is_initialized_useful_output = FALSE;
+		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
+		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
+
+		//add path to paths list
+		path.audio_output_node_number = audio_output_node_number;
+		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
+		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
+		path.output_amp_node_number = output_amp_node_number;
+		path.output_amp_node_capabilities = output_amp_node_capabilities;
+		if (out_paths.count < MAX_OUTPUT_PATHS) {
+			out_paths.paths[out_paths.count++] = path;
+		}
+	}
+
 	if (pin_speaker_default_node_number != 0) {
 		//initialize speaker
 		is_initialized_useful_output = TRUE;
@@ -1734,6 +1768,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 			//TODO: add task for checking headphone connection
 			// this will have to be a DPC
+			//or do with unsolicited responses
 
 			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
 
@@ -1753,23 +1788,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		is_initialized_useful_output = TRUE;
 		hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
-	}
-
-	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
-		DbgPrint("\nSPDIF output selected ");
-		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
-		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
-
-		//add path to paths list
-		path.audio_output_node_number = audio_output_node_number;
-		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-		path.output_amp_node_number = output_amp_node_number;
-		path.output_amp_node_capabilities = output_amp_node_capabilities;
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
 	}
 
 	if (pin_alternative_output_node_number != 0) { //codec has alternative output
@@ -2059,7 +2077,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) 
 		hda_disable_pin_output(codecNumber, pin_output_node_number);
 		selected_output_node = pin_headphone_node_number;
 	}
-	else if(selected_output_node == pin_headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+	else if(selected_output_node == pin_headphone_node_number && hda_is_headphone_connected() == FALSE) { //headphone was disconnected
 		hda_enable_pin_output(codecNumber, pin_output_node_number);
 		selected_output_node = pin_output_node_number;
 	}
@@ -2331,26 +2349,37 @@ STDMETHODIMP_(void)
 CAdapterCommon::
 MixerRegWrite
 (
-    IN      BYTE    Index,
+    IN      BYTE    index,
     IN      BYTE    Value
 )
 {
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
-	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, Index));
+	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, index));
 
     // only hit the hardware if we're in an acceptable power state
     if( m_PowerState <= PowerDeviceD1 ) {
-		if (Index == 0 || Index == 1) { //left or right channel respectively
-			DOUT (DBG_PRINT, ("set volume of %d to %d", Index, Value));
-			hda_set_volume(Value, Index + 1); //supposed to be 0-255 range
+		if (index == 0 || index == 1) { //left or right channel respectively
+			DOUT (DBG_PRINT, ("set volume of %d to %d", index, Value));
+			hda_set_volume(Value, index + 1); //supposed to be 0-255 range
 		}
+#if (DBG)
+		if ((index == 20) && (debug_kludge == 1)){
+			//Terrible Kludge to reset the codec
+			//and dump the codec config to the console
+			//when the Master Volume, then Treble sliders are moved in Audio Properties
+			//(in that order)
+			InitializeCodec(codecNumber);
+		}
+#endif
     }
 
+	debug_kludge = index;
 
-    if(Index < DSP_MIX_MAXREGS)
+
+    if(index < DSP_MIX_MAXREGS)
     {
-        MixerSettings[Index] = Value;
+        MixerSettings[index] = Value;
     }
 }
 

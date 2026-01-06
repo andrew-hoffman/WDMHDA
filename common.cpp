@@ -1755,11 +1755,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
 	}
 
-	if (pin_alternative_output_node_number != 0) { //codec has alternative output
-		DbgPrint("\nAlternative output selected ");
+	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
+		DbgPrint("\nSPDIF output selected ");
 		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
-		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
+		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
+		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
+
 		//add path to paths list
 		path.audio_output_node_number = audio_output_node_number;
 		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
@@ -1771,11 +1772,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		}
 	}
 
-	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
-		DbgPrint("\nSPDIF output selected ");
+	if (pin_alternative_output_node_number != 0) { //codec has alternative output
+		DbgPrint("\nAlternative output selected ");
 		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
-		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
+		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
+		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
+
 		//add path to paths list
 		path.audio_output_node_number = audio_output_node_number;
 		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
@@ -1786,6 +1788,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			out_paths.paths[out_paths.count++] = path;
 		}
 	}
+
+
 	DbgPrint("\n%d Output paths found", out_paths.count);
 	if(out_paths.count == 0) {
 		//no usable output paths have been found
@@ -2061,6 +2065,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) 
 	}
 }
 
+//todo: capabilities are set by the LAST path we init and that may not be correct if the last path is SPDIF
 
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};

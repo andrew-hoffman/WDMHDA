@@ -8,11 +8,11 @@ Current status is a MVP Proof of Concept that functions in VMware and VirtualBox
 
 Windows 9x may need to be patched to function at all on modern hardware even when virtualized. See [JHRobotics' Patcher9x project](https://github.com/JHRobotics/patcher9x) which now includes [Sweetlow's patch for memory resource conflict issues](https://msfn.org/board/topic/186768-bug-fix-vmmvxd-on-handling-4gib-addresses-and-description-of-problems-with-resource-manager-on-newer-bioses/). 
 
-##Installation:
+## Installation:
 
 Install HDA.inf with device manager on the Unknown Device which shows up as "PCI Card" with class code 0403. Select the location of the HDA.sys file when Windows asks you. The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386. 
 
-##Current Limitations:
+## Current Limitations:
 
 - Only supports 8000-48000hz 16-bit sample rate (up to 192khz 24-bit and 32-bit could technically be added but what's the point for 9x?)
 - Output only, recording not supported

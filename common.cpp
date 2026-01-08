@@ -317,6 +317,7 @@ MIXERSETTING DefaultMixerSettings[] =
 	static BOOLEAN skipCodecReset = false;
 	static BOOLEAN useAltOut = false;
 	static BOOLEAN useSPDIF = true;
+	static BOOLEAN useDisabledPins = false;
 
 
 
@@ -1517,13 +1518,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 		//process node
 		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
-			DbgPrint( ("Audio Output"));
+			DbgPrint( ("DAC"));
 
 			//disable every audio output by connecting it to stream 0
 			hda_send_verb(codec_number, node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
-			DbgPrint( ("Audio Input"));
+			DbgPrint( ("ADC"));
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
 			DbgPrint( ("Audio Mixer"));
@@ -1534,10 +1535,68 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 		else if(type_of_node == HDA_WIDGET_PIN_COMPLEX) {
 			DbgPrint( ("Pin Complex "));
 
-			//read type of PIN
-			type_of_node = ((hda_send_verb(codec_number, node, 0xF1C, 0x00) >> 20) & 0xF);
+			//read pin_config register
+			ULONG pin_config = hda_send_verb(codec_number, node, 0xF1C, 0x00);
 
-			if(type_of_node == HDA_PIN_LINE_OUT) {
+			//break out all pin config fields
+			ULONG pin_connectivity		= (pin_config >> 30) & 0x3;
+			ULONG pin_loaction_fr		= (pin_config >> 28) & 0x3;
+			ULONG pin_location_geo		= (pin_config >> 24) & 0xf;
+			ULONG pin_node_type			= (pin_config >> 20) & 0xF;
+			ULONG pin_connection_type	= (pin_config >> 16) & 0xF;
+			ULONG pin_color				= (pin_config >> 12) & 0xF;
+			ULONG pin_misc				= (pin_config >> 8) & 0xF;
+			ULONG pin_association		= (pin_config >> 4) & 0xF;
+			ULONG pin_sequence			= pin_config & 0xF;
+
+			if ((pin_connectivity == 0x1) && (!useDisabledPins) ){
+				DbgPrint( ("No Connect\n") );
+				continue;
+			} else if (pin_connectivity == 0x0){
+				DbgPrint( ("Port ") );
+			} else if (pin_connectivity == 0x2){
+				DbgPrint( ("Internal ") );
+			} else if (pin_connectivity == 0x3){
+				DbgPrint( ("Int+Ext ") );
+			}
+
+			switch(pin_color){
+			case 0:
+				DbgPrint( ("? ") );
+				break;
+			case 1:
+				DbgPrint( ("Blk ") );
+				break;
+			case 2:
+				DbgPrint( ("Gry ") );
+				break;
+			case 3:
+				DbgPrint( ("Blu ") );
+				break;
+			case 4:
+				DbgPrint( ("Grn ") );
+				break;
+			case 5:
+				DbgPrint( ("Red ") );
+				break;
+			case 6:
+				DbgPrint( ("Ora ") );
+				break;
+			case 7:
+				DbgPrint( ("Yel ") );
+				break;
+			case 8:
+				DbgPrint( ("Pur ") );
+				break;
+			case 9:
+				DbgPrint( ("Pnk ") );
+				break;
+			case 0xE:
+				DbgPrint( ("Wht ") );
+				break;
+			}
+			
+			if(pin_node_type == HDA_PIN_LINE_OUT) {
 				DbgPrint( ("Line Out "));
 	
 				//try to init ALL line-outs now, not worrying about jack detect yet
@@ -1554,7 +1613,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 					out_paths.paths[out_paths.count++] = path;
 				}
 
-			} else if(type_of_node == HDA_PIN_SPEAKER) {
+			} else if(pin_node_type == HDA_PIN_SPEAKER) {
 				DbgPrint( ("Speaker "));
 
 				//first speaker node is default speaker
@@ -1583,13 +1642,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( ("no output device"));
 				}
-			} else if(type_of_node == HDA_PIN_HEADPHONE_OUT) {
+			} else if(pin_node_type == HDA_PIN_HEADPHONE_OUT) {
 				DbgPrint( ("Headphone Out"));
 
 				//save node number
 				//TODO: handle if there are multiple HP nodes
 				pin_headphone_node_number = node;
-			} else if(type_of_node == HDA_PIN_CD) {
+			} else if(pin_node_type == HDA_PIN_CD) {
 				DbgPrint( ("CD"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -1599,7 +1658,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_SPDIF_OUT) {
+			} else if(pin_node_type == HDA_PIN_SPDIF_OUT) {
 				DbgPrint( ("SPDIF Out"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -1609,7 +1668,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_OUT) {
+			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_OUT) {
 				DbgPrint( ("Digital Other Out"));
 				//save this node, this variable contain number of last alternative output
 				if (useAltOut){
@@ -1618,7 +1677,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_MODEM_LINE_SIDE) {
+			} else if(pin_node_type == HDA_PIN_MODEM_LINE_SIDE) {
 				DbgPrint( ("Modem Line Side"));
 
 				//save this node, this variable contain number of last alternative output
@@ -1628,7 +1687,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_MODEM_HANDSET_SIDE) {
+			} else if(pin_node_type == HDA_PIN_MODEM_HANDSET_SIDE) {
 				DbgPrint( ("Modem Handset Side"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -1638,21 +1697,21 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_LINE_IN) {
+			} else if(pin_node_type == HDA_PIN_LINE_IN) {
 				DbgPrint( ("Line In"));
-			} else if(type_of_node == HDA_PIN_AUX) {
+			} else if(pin_node_type == HDA_PIN_AUX) {
 				DbgPrint( ("AUX"));
-			} else if(type_of_node == HDA_PIN_MIC_IN) {
+			} else if(pin_node_type == HDA_PIN_MIC_IN) {
 				DbgPrint( ("Mic In"));
-			} else if(type_of_node == HDA_PIN_TELEPHONY) {
+			} else if(pin_node_type == HDA_PIN_TELEPHONY) {
 				DbgPrint( ("Telephony"));
-			} else if(type_of_node == HDA_PIN_SPDIF_IN) {
+			} else if(pin_node_type == HDA_PIN_SPDIF_IN) {
 				DbgPrint( ("SPDIF In"));
-			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_IN) {
+			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_IN) {
 				DbgPrint( ("Digital Other In"));
-			} else if(type_of_node == HDA_PIN_RESERVED) {
+			} else if(pin_node_type == HDA_PIN_RESERVED) {
 				DbgPrint( ("Reserved"));
-			} else if(type_of_node == HDA_PIN_OTHER) {
+			} else if(pin_node_type == HDA_PIN_OTHER) {
 				DbgPrint( ("Other"));
 			}
 		}
@@ -1899,7 +1958,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_initialize_output_pin ( ULONG pin_node_n
 		output_amp_node_capabilities = pin_output_amp_capabilities;
 	}
 
-	//start enabling path of nodes
+	//start enabling path of nodes backwards from the output pin
 	length_of_node_path = 0;
 	hda_send_verb(codecNumber, pin_node_number, 0x701, 0x00); //select first node
 	ULONG first_connected_node_number = hda_get_node_connection_entries(codecNumber, pin_node_number, 0); //get first node number
@@ -3152,24 +3211,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
         DOUT (DBG_ERROR, ("Can't reset stream"));
         return ntStatus;
     }
-
-	DOUT(DBG_SYSINFO, ("write to audio ram"));
-
-	// can i write to my audio buffer at all?
-
-	/*
-	for(i = 0; i < 10; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xeeee;
-	for(i = 10; i < 20; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xaaaa;
-	for(i = 20; i < 30; ++i)
-		((PUSHORT)BufVirtualAddress)[i] = 0xcccc;
-
-	DOUT(DBG_SYSINFO, ("garbage written in"));
-	*/
-	ProgramSampleRate(44100);
-
+	//ProgramSampleRate(44100);
+	
 	//divide the buffer into <entries> chunks (must be a power of 2)
+	
 	USHORT entries = 64;
 	for(i = 0; i < (entries * 4); i += 4){
 		BdlMemVirt[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
@@ -3179,20 +3224,21 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	}
 	
 	//zero rest of BDL
-	//for(i = (entries * 4); i < BdlSize; ++i){
-	//	BdlMemVirt[i] = 0;
-	//}
-
-	/*
+	
+	for(i = (entries * 4); i < ((int)BdlSize); ++i){
+		BdlMemVirt[i] = 0;
+	}
+	
+	
 	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
 	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?
-
+	/*
 	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlMemVirt);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
     ULONG offset = 0;
     USHORT entries = 0;
 
-    while ((offset + CHUNK_SIZE) <= AudBufSize && entries < 256)
+    while ((offset + CHUNK_SIZE) <= audBufSize && entries < 256)
     {
         Bdl[entries].Address = BasePhys.QuadPart + offset;
         Bdl[entries].Length  = CHUNK_SIZE;
@@ -3202,7 +3248,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
     }
 
     //handle any leftover < CHUNK_SIZE tail
-    ULONG remainder = AudBufSize - offset;
+    ULONG remainder = audBufSize - offset;
     if (remainder >= 128) {
         remainder &= ~127;  // trim to 128-byte boundary
         Bdl[entries].Address = BasePhys.QuadPart + offset;
@@ -3213,11 +3259,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	
 	//let's print enough of the BDL and make sure we've got it right
-	for(i = 0; i < (entries * 4); i += 4){
+	
+	for(i = 0; i < ((int)BdlSize); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), BdlMemVirt[i+1], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
 	}
+	
+	
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));
 

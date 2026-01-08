@@ -26,7 +26,7 @@ HDA.sys=222
 [Manufacturer]
 %CLMfgName%=Creative
 
-;;
+;;WD
 ;; Mechanism for excluding drivers from the "Add New Hardware" list.
 ;;
 [ControlFlags]
@@ -306,8 +306,8 @@ ServiceBinary  = %10%\system32\drivers\HDA.sys
 MSFT="Microsoft"
 CLMfgName="Sirius Cybernetics Corp."
 DiskDescription="HD Audio WDM Sample Driver Disk"
-*WDMPNPB003.DeviceDesc="WDM Sample Driver for HD Audio"
-*WDM_HDA.DeviceDesc="WDM Sample Driver for HD Audio"
+*WDMPNPB003.DeviceDesc="HD Audio Controller (WDM)"
+*WDM_HDA.DeviceDesc="HD Audio Controller (WDM)"
 *CTL0051.DeviceDesc = "WDM Sample Driver for 3D Stereo Enhancement Technology (inactive)"
 *CTL7FFF.DeviceDesc = "WDM Sample Driver for Plug and Play Device (Reserved) (inactive)"
 SBAWE_Virtual_Mpu.DeviceDesc="WDM Sample Driver for MPU401 Emulation (inactive)"

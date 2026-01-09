@@ -12,7 +12,7 @@ Windows 9x may need to be patched to function at all on modern hardware even whe
 
 Install HDA.inf with device manager on the Unknown Device which shows up as "PCI Card" with class code 0403. Select the location of the HDA.sys file when Windows asks you. The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
-For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Resampling Quality to Best (all the way to the right). 
+For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right). 
 
 ## Current Limitations:
 

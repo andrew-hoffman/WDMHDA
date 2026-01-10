@@ -119,6 +119,7 @@ private:
     ULONG pin_headphone_node_number;
 
 	ULONG debug_kludge;
+	static tHardwareConfig m_stHardwareConfig;      // The hardware configuration.
 
 
     BOOLEAN m_bDMAInitialized;   // DMA initialized flag
@@ -152,6 +153,7 @@ private:
     );
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte);
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord);
+	BOOL DisableHDAPin (IN  TopoPinConfig);
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -312,12 +314,37 @@ MIXERSETTING DefaultMixerSettings[] =
     { L"RightBass",       DSP_MIX_BASSIDX_R,          0x80 },
 };
 
-	//driver settings via registry keys
-	static BOOLEAN skipControllerReset = false;
-	static BOOLEAN skipCodecReset = false;
-	static BOOLEAN useAltOut = false;
-	static BOOLEAN useSPDIF = true;
-	static BOOLEAN useDisabledPins = false;
+//driver settings via registry keys
+static BOOLEAN skipControllerReset = false;
+static BOOLEAN skipCodecReset = false;
+static BOOLEAN useAltOut = false;
+static BOOLEAN useSPDIF = true;
+static BOOLEAN useDisabledPins = false;
+//
+// This is the hardware configuration information.  The first struct is for 
+// nodes, which we default to FALSE.  The second struct is for Pins, which 
+// contains the configuration (FALSE) and the registry string which is the
+// reason for making a static struct so we can just fill in the name.
+//
+tHardwareConfig CAdapterCommon::m_stHardwareConfig =
+{
+    // Nodes
+    {{FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE},
+     {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}},
+    // Pins
+    {{FALSE, L"DisablePCBeep"},     // PINC_PCBEEP_PRESENT
+     {FALSE, L"DisablePhone"},      // PINC_PHONE_PRESENT
+     {FALSE, L"DisableMic2"},       // PINC_MIC2_PRESENT
+     {FALSE, L"DisableVideo"},      // PINC_VIDEO_PRESENT
+     {FALSE, L"DisableAUX"},        // PINC_AUX_PRESENT
+     {FALSE, L"DisableHeadphone"},  // PINC_HPOUT_PRESENT
+     {FALSE, L"DisableMonoOut"},    // PINC_MONOOUT_PRESENT
+     {FALSE, L"DisableMicIn"},      // PINC_MICIN_PRESENT
+     {FALSE, L"DisableMic"},        // PINC_MIC_PRESENT
+     {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
+     {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
+};
+
 
 
 
@@ -1518,13 +1545,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 		//process node
 		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
-			DbgPrint( ("DAC"));
+			DbgPrint( ("Output Converter"));
 
 			//disable every audio output by connecting it to stream 0
 			hda_send_verb(codec_number, node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
-			DbgPrint( ("ADC"));
+			DbgPrint( ("Input Converter"));
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
 			DbgPrint( ("Audio Mixer"));
@@ -1549,9 +1576,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			ULONG pin_association		= (pin_config >> 4) & 0xF;
 			ULONG pin_sequence			= pin_config & 0xF;
 
-			if ((pin_connectivity == 0x1) && (!useDisabledPins) ){
+			if ((pin_connectivity == 0x1) ){
 				DbgPrint( ("No Connect\n") );
-				continue;
+				if (!useDisabledPins) 
+					continue;
 			} else if (pin_connectivity == 0x0){
 				DbgPrint( ("Port ") );
 			} else if (pin_connectivity == 0x2){
@@ -1562,7 +1590,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 			switch(pin_color){
 			case 0:
-				DbgPrint( ("? ") );
+				//DbgPrint( ("??? ") );
 				break;
 			case 1:
 				DbgPrint( ("Blk ") );
@@ -2124,6 +2152,108 @@ STDMETHODIMP_(void) CAdapterCommon::hda_initialize_audio_selector(ULONG audio_se
 		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
 	}
 }
+
+/*****************************************************************************
+ * CAdapterCommon::DisableHDAPin
+ *****************************************************************************
+ * Returns TRUE when the HW vendor wants to disable the pin. A disabled pin is
+ * not shown to the user (means it is not included in the topology). The
+ * reason for doing this could be that some of the input lines like Aux or
+ * Video are not available to the user (to plug in something) but the codec
+ * can handle those lines.
+ * TODO: reworking this into general registry setting reader
+ * but i do need to be able to disable pins as well. 
+ */
+BOOL CAdapterCommon::DisableHDAPin
+(
+    IN  TopoPinConfig pin
+)
+{
+    PAGED_CODE ();
+
+    PREGISTRYKEY    DriverKey;
+    PREGISTRYKEY    SettingsKey;
+    UNICODE_STRING  sKeyName;
+    ULONG           ulDisposition;
+    ULONG           ulResultLength;
+    PVOID           KeyInfo = NULL;
+    BOOL            bDisable = FALSE;
+
+    DOUT (DBG_PRINT, ("[CAdapterCommon::DisableHDAPin]"));
+    
+    // open the driver registry key
+    NTSTATUS ntStatus = PcNewRegistryKey (&DriverKey,        // IRegistryKey
+                                          NULL,              // OuterUnknown
+                                          DriverRegistryKey, // Registry key type
+                                          KEY_ALL_ACCESS,    // Access flags
+                                          m_pDeviceObject,   // Device object
+                                          NULL,              // Subdevice
+                                          NULL,              // ObjectAttributes
+                                          0,                 // Create options
+                                          NULL);             // Disposition
+    if (NT_SUCCESS (ntStatus))
+    {
+        // make a unicode string for the subkey name
+        RtlInitUnicodeString (&sKeyName, L"Settings");
+
+        // open the settings subkey
+        ntStatus = DriverKey->NewSubKey (&SettingsKey,            // Subkey
+                                         NULL,                    // OuterUnknown
+                                         KEY_ALL_ACCESS,          // Access flags
+                                         &sKeyName,               // Subkey name
+                                         REG_OPTION_NON_VOLATILE, // Create options
+                                         &ulDisposition);
+
+        if (NT_SUCCESS (ntStatus))
+        {
+            // allocate data to hold key info
+            KeyInfo = ExAllocatePool (PagedPool,
+                                      sizeof(KEY_VALUE_PARTIAL_INFORMATION) +
+                                      sizeof(BYTE));
+            if (NULL != KeyInfo)
+            {
+                // init key name
+                RtlInitUnicodeString (&sKeyName, m_stHardwareConfig.
+                                            Pins[pin].sRegistryName);
+    
+                // query the value key
+                ntStatus = SettingsKey->QueryValueKey (&sKeyName,
+                                   KeyValuePartialInformation,
+                                   KeyInfo,
+                                   sizeof(KEY_VALUE_PARTIAL_INFORMATION) +
+                                        sizeof(BYTE),
+                                   &ulResultLength );
+                if (NT_SUCCESS (ntStatus))
+                {
+                    PKEY_VALUE_PARTIAL_INFORMATION PartialInfo =
+                                (PKEY_VALUE_PARTIAL_INFORMATION)KeyInfo;
+
+                    if (PartialInfo->DataLength == sizeof(BYTE))
+                    {
+                        // store the value
+                        if (*(PBYTE)PartialInfo->Data)
+                            bDisable = TRUE;
+                        else
+                            bDisable = FALSE;
+                    }
+                }
+
+                // free the key info
+                ExFreePool (KeyInfo);
+            }
+
+            // release the settings key
+            SettingsKey->Release ();
+        }
+
+        // release the driver key
+        DriverKey->Release ();
+    }
+
+    // if one of the stuff above fails we return the default, which is FALSE.
+    return bDisable;
+}
+
 
 //***End of pageable code!***
 //everything above this must have PAGED_CODE ();
@@ -3219,8 +3349,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	for(i = 0; i < (entries * 4); i += 4){
 		BdlMemVirt[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
 		BdlMemVirt[i+1] = BufLogicalAddress.HighPart;
-		BdlMemVirt[i+2] = audBufSize /entries;
-		BdlMemVirt[i+3] = 1; //interrupt on completion ON
+		BdlMemVirt[i+2] = audBufSize / entries;
+		BdlMemVirt[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
 	}
 	
 	//zero rest of BDL
@@ -3259,13 +3389,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	
 	//let's print enough of the BDL and make sure we've got it right
-	
+	/*
 	for(i = 0; i < ((int)BdlSize); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), BdlMemVirt[i+1], BdlMemVirt[i], BdlMemVirt[i+2], BdlMemVirt[i+3]));
 	}
-	
+	*/
 	
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));

@@ -1,23 +1,23 @@
  HDA
 
- Timestamp is 69603958 (Thu Jan 08 15:10:16 2026)
+ Timestamp is 6961963a (Fri Jan 09 15:58:50 2026)
 
  Preferred load address is 00010000
 
  Start         Length     Name                   Class
  0001:00000000 00001520H .text                   CODE
  0002:00000000 000000acH .idata$5                DATA
- 0002:000000b0 00000568H .rdata                  DATA
- 0003:00000000 00000cd0H .data                   DATA
- 0003:00000cd0 00000014H .bss                    DATA
- 0004:00000000 00003c07H PAGE                    CODE
+ 0002:000000b0 00000690H .rdata                  DATA
+ 0003:00000000 00000d68H .data                   DATA
+ 0003:00000d68 00000014H .bss                    DATA
+ 0004:00000000 00003c05H PAGE                    CODE
  0005:00000000 00000015H INIT                    CODE
  0005:00000018 0000003cH .idata$2                CODE
  0005:00000054 00000014H .idata$3                CODE
  0005:00000068 000000acH .idata$4                CODE
  0005:00000114 00000384H .idata$6                CODE
  0006:00000000 00000058H .rsrc$01                DATA
- 0006:00000060 000003c8H .rsrc$02                DATA
+ 0006:00000060 000003d8H .rsrc$02                DATA
 
   Address         Publics by Value              Rva+Base     Lib:Object
 
@@ -63,22 +63,22 @@
  0001:00000dea       ?QueryInterface@CAdapterCommon@@W3AGJABU_GUID@@PAPAX@Z 000110ca f i common.obj
  0001:00000df4       ?AddRef@CAdapterCommon@@W3AGKXZ 000110d4 f i common.obj
  0001:00000dfe       ?Release@CAdapterCommon@@W3AGKXZ 000110de f i common.obj
- 0001:00000e08       ?AddRef@CMiniportTopologyHDA@@UAGKXZ 000110e8 f i mintopo.obj
  0001:00000e08       ?AddRef@CMiniportWaveCyclicHDA@@UAGKXZ 000110e8 f i mintopo.obj
  0001:00000e08       ?AddRef@CMiniportWaveCyclicStreamHDA@@UAGKXZ 000110e8 f i mintopo.obj
- 0001:00000e18       ?DataRangeIntersection@CMiniportTopologyHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 000110f8 f i mintopo.obj
- 0001:00000e20       ??_ECMiniportTopologyHDA@@UAEPAXI@Z 00011100 f i mintopo.obj
- 0001:00000e20       ??_GCMiniportTopologyHDA@@UAEPAXI@Z 00011100 f i mintopo.obj
- 0001:0000121e       ?ReadBitsFromMixer@CMiniportTopologyHDA@@AAEEEEE@Z 000114fe f   mintopo.obj
- 0001:00001246       ?WriteBitsToMixer@CMiniportTopologyHDA@@AAEXEEEE@Z 00011526 f   mintopo.obj
- 0001:0000129c       ?Release@CMiniportWaveCyclicHDA@@UAGKXZ 0001157c f i minwave.obj
- 0001:0000129c       ?Release@CMiniportTopologyHDA@@UAGKXZ 0001157c f i minwave.obj
- 0001:0000129c       ?Release@CMiniportWaveCyclicStreamHDA@@UAGKXZ 0001157c f i minwave.obj
+ 0001:00000e08       ?AddRef@CMiniportTopologyHDA@@UAGKXZ 000110e8 f i mintopo.obj
+ 0001:00000e18       ?Release@CMiniportTopologyHDA@@UAGKXZ 000110f8 f i mintopo.obj
+ 0001:00000e18       ?Release@CMiniportWaveCyclicHDA@@UAGKXZ 000110f8 f i mintopo.obj
+ 0001:00000e18       ?Release@CMiniportWaveCyclicStreamHDA@@UAGKXZ 000110f8 f i mintopo.obj
+ 0001:00000e28       ?DataRangeIntersection@CMiniportTopologyHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00011108 f i mintopo.obj
+ 0001:00000e30       ??_GCMiniportTopologyHDA@@UAEPAXI@Z 00011110 f i mintopo.obj
+ 0001:00000e30       ??_ECMiniportTopologyHDA@@UAEPAXI@Z 00011110 f i mintopo.obj
+ 0001:0000122e       ?ReadBitsFromMixer@CMiniportTopologyHDA@@AAEEEEE@Z 0001150e f   mintopo.obj
+ 0001:00001256       ?WriteBitsToMixer@CMiniportTopologyHDA@@AAEXEEEE@Z 00011536 f   mintopo.obj
  0001:000012ac       ??_ECMiniportWaveCyclicHDA@@UAEPAXI@Z 0001158c f i minwave.obj
  0001:000012ac       ??_GCMiniportWaveCyclicHDA@@UAEPAXI@Z 0001158c f i minwave.obj
- 0001:000012cc       ?QueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000115ac f i minwave.obj
  0001:000012cc       ?QueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 000115ac f i minwave.obj
  0001:000012cc       ?QueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 000115ac f i minwave.obj
+ 0001:000012cc       ?QueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000115ac f i minwave.obj
  0001:000012e4       ??_ECMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 000115c4 f i minwave.obj
  0001:000012e4       ??_GCMiniportWaveCyclicStreamHDA@@UAEPAXI@Z 000115c4 f i minwave.obj
  0001:00001304       ?GetPosition@CMiniportWaveCyclicStreamHDA@@UAGJPAK@Z 000115e4 f   minwave.obj
@@ -99,8 +99,8 @@
  0001:00001430       _PcNewRegistryKey@36       00011710 f   portcls:portcls.sys
  0001:00001436       _PcNewServiceGroup@8       00011716 f   portcls:portcls.sys
  0001:0000143c       ??0CUnknown@@QAE@PAUIUnknown@@@Z 0001171c f   stdunk:stdunk.obj
- 0001:0000145b       ??_GCUnknown@@UAEPAXI@Z    0001173b f i stdunk:stdunk.obj
  0001:0000145b       ??_ECUnknown@@UAEPAXI@Z    0001173b f i stdunk:stdunk.obj
+ 0001:0000145b       ??_GCUnknown@@UAEPAXI@Z    0001173b f i stdunk:stdunk.obj
  0001:00001477       ??1CUnknown@@UAE@XZ        00011757 f   stdunk:stdunk.obj
  0001:0000147e       ?NonDelegatingAddRef@CUnknown@@UAGKXZ 0001175e f   stdunk:stdunk.obj
  0001:00001494       ?NonDelegatingRelease@CUnknown@@UAGKXZ 00011774 f   stdunk:stdunk.obj
@@ -111,10 +111,10 @@
  0002:0000000c       \177HAL_NULL_THUNK_DATA    0001180c     hal:HAL.dll
  0002:00000010       __imp__KeInitializeSpinLock@4 00011810     ntoskrnl:ntoskrnl.exe
  0002:00000014       __imp__MmUnmapIoSpace@8    00011814     ntoskrnl:ntoskrnl.exe
- 0002:00000018       __imp__READ_REGISTER_ULONG@4 00011818     ntoskrnl:ntoskrnl.exe
+ 0002:00000018       __imp__RtlInitUnicodeString@8 00011818     ntoskrnl:ntoskrnl.exe
  0002:0000001c       __imp__DbgPrint            0001181c     ntoskrnl:ntoskrnl.exe
- 0002:00000020       __imp__WRITE_REGISTER_ULONG@8 00011820     ntoskrnl:ntoskrnl.exe
- 0002:00000024       __imp__RtlInitUnicodeString@8 00011824     ntoskrnl:ntoskrnl.exe
+ 0002:00000020       __imp__READ_REGISTER_ULONG@4 00011820     ntoskrnl:ntoskrnl.exe
+ 0002:00000024       __imp__WRITE_REGISTER_ULONG@8 00011824     ntoskrnl:ntoskrnl.exe
  0002:00000028       __imp__READ_REGISTER_UCHAR@4 00011828     ntoskrnl:ntoskrnl.exe
  0002:0000002c       __imp__WRITE_REGISTER_UCHAR@8 0001182c     ntoskrnl:ntoskrnl.exe
  0002:00000030       __imp__READ_REGISTER_USHORT@4 00011830     ntoskrnl:ntoskrnl.exe
@@ -160,149 +160,161 @@
  0002:00000198       _IID_IMiniportTopology     00011998     adapter.obj
  0002:000001a8       _IID_IMiniport             000119a8     adapter.obj
  0002:000001b8       _IID_IUnknown              000119b8     adapter.obj
- 0002:000001c8       ??_C@_1BE@ENEK@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAB?$AAa?$AAs?$AAs?$AA?$AA@ 000119c8     common.obj
- 0002:000001dc       ??_C@_1BC@JMJO@?$AAL?$AAe?$AAf?$AAt?$AAB?$AAa?$AAs?$AAs?$AA?$AA@ 000119dc     common.obj
- 0002:000001f0       ??_C@_1BI@KGAJ@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAT?$AAr?$AAe?$AAb?$AAl?$AAe?$AA?$AA@ 000119f0     common.obj
- 0002:00000208       ??_C@_1BG@BGGD@?$AAL?$AAe?$AAf?$AAt?$AAT?$AAr?$AAe?$AAb?$AAl?$AAe?$AA?$AA@ 00011a08     common.obj
- 0002:00000220       ??_C@_1O@IECC@?$AAM?$AAi?$AAc?$AAA?$AAG?$AAC?$AA?$AA@ 00011a20     common.obj
- 0002:00000230       ??_C@_1CA@EJHI@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011a30     common.obj
- 0002:00000250       ??_C@_1BO@PPLI@?$AAL?$AAe?$AAf?$AAt?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011a50     common.obj
- 0002:00000270       ??_C@_1BO@PMCJ@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011a70     common.obj
- 0002:00000290       ??_C@_1BM@CFEM@?$AAL?$AAe?$AAf?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011a90     common.obj
- 0002:000002ac       ??_C@_1CA@CIKM@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011aac     common.obj
- 0002:000002cc       ??_C@_1BO@JOGM@?$AAL?$AAe?$AAf?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011acc     common.obj
- 0002:000002ec       ??_C@_1BI@BMOJ@?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011aec     common.obj
- 0002:00000304       ??_C@_1BE@GLOL@?$AAP?$AAc?$AAS?$AAp?$AAk?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011b04     common.obj
- 0002:00000318       ??_C@_1O@MNBB@?$AAM?$AAi?$AAc?$AAV?$AAo?$AAl?$AA?$AA@ 00011b18     common.obj
- 0002:00000328       ??_C@_1BO@HCKE@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAL?$AAi?$AAn?$AAe?$AAI?$AAn?$AAV?$AAo?$AAl?$AA?$AA@ 00011b28     common.obj
- 0002:00000348       ??_C@_1BM@KLMB@?$AAL?$AAe?$AAf?$AAt?$AAL?$AAi?$AAn?$AAe?$AAI?$AAn?$AAV?$AAo?$AAl?$AA?$AA@ 00011b48     common.obj
- 0002:00000364       ??_C@_1BG@COJL@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAC?$AAD?$AAV?$AAo?$AAl?$AA?$AA@ 00011b64     common.obj
- 0002:0000037c       ??_C@_1BE@KMKA@?$AAL?$AAe?$AAf?$AAt?$AAC?$AAD?$AAV?$AAo?$AAl?$AA?$AA@ 00011b7c     common.obj
- 0002:00000390       ??_C@_1BK@JCIM@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAM?$AAi?$AAd?$AAi?$AAV?$AAo?$AAl?$AA?$AA@ 00011b90     common.obj
- 0002:000003ac       ??_C@_1BI@KBIJ@?$AAL?$AAe?$AAf?$AAt?$AAM?$AAi?$AAd?$AAi?$AAV?$AAo?$AAl?$AA?$AA@ 00011bac     common.obj
- 0002:000003c4       ??_C@_1BK@MFCG@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAW?$AAa?$AAv?$AAe?$AAV?$AAo?$AAl?$AA?$AA@ 00011bc4     common.obj
- 0002:000003e0       ??_C@_1BI@PGCD@?$AAL?$AAe?$AAf?$AAt?$AAW?$AAa?$AAv?$AAe?$AAV?$AAo?$AAl?$AA?$AA@ 00011be0     common.obj
- 0002:000003f8       ??_C@_1BO@NHA@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAM?$AAa?$AAs?$AAt?$AAe?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011bf8     common.obj
- 0002:00000418       ??_C@_1BM@NEBF@?$AAL?$AAe?$AAf?$AAt?$AAM?$AAa?$AAs?$AAt?$AAe?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011c18     common.obj
- 0002:00000434       ??_7CAdapterCommon@@6BIAdapterPowerManagement@@@ 00011c34     common.obj
- 0002:0000044c       ??_7CAdapterCommon@@6BIAdapterCommon@@@ 00011c4c     common.obj
- 0002:000004a4       ??_7CAdapterCommon@@6BCUnknown@@@ 00011ca4     common.obj
- 0002:00000580       ??_7CMiniportTopologyHDA@@6BIMiniportTopology@@@ 00011d80     mintopo.obj
- 0002:00000598       ??_7CMiniportTopologyHDA@@6BCUnknown@@@ 00011d98     mintopo.obj
- 0002:000005a8       ??_7CMiniportWaveCyclicHDA@@6BIMiniportWaveCyclic@@@ 00011da8     minwave.obj
- 0002:000005c4       ??_7CMiniportWaveCyclicHDA@@6BCUnknown@@@ 00011dc4     minwave.obj
- 0002:000005d4       ??_7CMiniportWaveCyclicStreamHDA@@6BIMiniportWaveCyclicStream@@@ 00011dd4     minwave.obj
- 0002:000005f8       ??_7CMiniportWaveCyclicStreamHDA@@6BCUnknown@@@ 00011df8     minwave.obj
- 0002:00000608       ??_7CUnknown@@6B@          00011e08     stdunk:stdunk.obj
- 0003:00000000       __GUID_b7902fe9_fb0a_11d1_81b0_0060083316c1 00011e20     adapter.obj
- 0003:00000010       __GUID_d3f0ce1c_fffc_11d1_81b0_0060083316c1 00011e30     adapter.obj
- 0003:00000020       __GUID_c096df9c_fb09_11d1_81b0_0060083316c1 00011e40     adapter.obj
- 0003:000000f4       ?audBufSize@@3KA           00011f14     common.obj
- 0003:000000f8       ?BdlSize@@3KA              00011f18     common.obj
- 0003:000007f8       __GUID_185fedf6_9905_11d1_95a9_00c04fb925d3 00012618     mintopo.obj
- 0003:00000808       __GUID_185fedef_9905_11d1_95a9_00c04fb925d3 00012628     mintopo.obj
- 0003:00000818       __GUID_185fede1_9905_11d1_95a9_00c04fb925d3 00012638     mintopo.obj
- 0003:00000828       __GUID_185fede0_9905_11d1_95a9_00c04fb925d3 00012648     mintopo.obj
- 0003:00000838       __GUID_7607e580_c557_11d0_8a2b_00a0c9255ac1 00012658     mintopo.obj
- 0003:00000848       __GUID_185fede3_9905_11d1_95a9_00c04fb925d3 00012668     mintopo.obj
- 0003:00000858       __GUID_da441a60_c556_11d0_8a2b_00a0c9255ac1 00012678     mintopo.obj
- 0003:00000868       __GUID_185fedee_9905_11d1_95a9_00c04fb925d3 00012688     mintopo.obj
- 0003:00000878       __GUID_02b223c0_c557_11d0_8a2b_00a0c9255ac1 00012698     mintopo.obj
- 0003:00000888       __GUID_185feded_9905_11d1_95a9_00c04fb925d3 000126a8     mintopo.obj
- 0003:00000898       __GUID_e88c9ba0_c557_11d0_8a2b_00a0c9255ac1 000126b8     mintopo.obj
- 0003:000008a8       __GUID_185fedec_9905_11d1_95a9_00c04fb925d3 000126c8     mintopo.obj
- 0003:000008b8       __GUID_185fedeb_9905_11d1_95a9_00c04fb925d3 000126d8     mintopo.obj
- 0003:000008c8       __GUID_185fedea_9905_11d1_95a9_00c04fb925d3 000126e8     mintopo.obj
- 0003:000008d8       __GUID_185fede9_9905_11d1_95a9_00c04fb925d3 000126f8     mintopo.obj
- 0003:000008e8       __GUID_185fede8_9905_11d1_95a9_00c04fb925d3 00012708     mintopo.obj
- 0003:000008f8       __GUID_e573adc0_c555_11d0_8a2b_00a0c9255ac1 00012718     mintopo.obj
- 0003:00000908       __GUID_185fede7_9905_11d1_95a9_00c04fb925d3 00012728     mintopo.obj
- 0003:00000918       __GUID_185fede5_9905_11d1_95a9_00c04fb925d3 00012738     mintopo.obj
- 0003:00000928       __GUID_3a5acc00_c557_11d0_8a2b_00a0c9255ac1 00012748     mintopo.obj
- 0003:00000938       __GUID_45ffaaa0_6e1b_11d0_bcf2_444553540000 00012758     mintopo.obj
- 0003:00000948       __GUID_6994ad04_93ef_11d0_a3cc_00a0c9223196 00012768     mintopo.obj
- 0003:00000958       __GUID_185fedf7_9905_11d1_95a9_00c04fb925d3 00012778     mintopo.obj
- 0003:00000968       __GUID_dff21ce1_f70f_11d0_b917_00a0c9223196 00012788     mintopo.obj
- 0003:00000978       __GUID_dff21be1_f70f_11d0_b917_00a0c9223196 00012798     mintopo.obj
- 0003:00000988       __GUID_185fedf9_9905_11d1_95a9_00c04fb925d3 000127a8     mintopo.obj
- 0003:00000998       __GUID_dff21fe3_f70f_11d0_b917_00a0c9223196 000127b8     mintopo.obj
- 0003:000009a8       __GUID_185fedfb_9905_11d1_95a9_00c04fb925d3 000127c8     mintopo.obj
- 0003:000009b8       __GUID_dff220e3_f70f_11d0_b917_00a0c9223196 000127d8     mintopo.obj
- 0003:000009c8       __GUID_185fedf8_9905_11d1_95a9_00c04fb925d3 000127e8     mintopo.obj
- 0003:000009d8       __GUID_dff220f3_f70f_11d0_b917_00a0c9223196 000127f8     mintopo.obj
- 0003:000009e8       __GUID_dff21fe4_f70f_11d0_b917_00a0c9223196 00012808     mintopo.obj
- 0003:000009f8       __GUID_97e99ba0_bdea_11cf_a5d6_28db04c10000 00012818     mintopo.obj
- 0003:00000c40       __GUID_507ae360_c554_11d0_8a2b_00a0c9255ac1 00012a60     minwave.obj
- 0003:00000c50       __GUID_4d837fe0_c555_11d0_8a2b_00a0c9255ac1 00012a70     minwave.obj
- 0003:00000c60       __GUID_185fedfa_9905_11d1_95a9_00c04fb925d3 00012a80     minwave.obj
- 0003:00000c70       __GUID_fb6c4281_0353_11d1_905f_0000c0cc16ba 00012a90     minwave.obj
- 0003:00000c80       __GUID_05589f81_c356_11ce_bf01_00aa0055595a 00012aa0     minwave.obj
- 0003:00000c90       __GUID_00000001_0000_0010_8000_00aa00389b71 00012ab0     minwave.obj
- 0003:00000ca0       __GUID_73647561_0000_0010_8000_00aa00389b71 00012ac0     minwave.obj
- 0003:00000cb0       __GUID_0f6417d6_c318_11d0_a43f_00a0c9223196 00012ad0     minwave.obj
- 0003:00000cc0       __GUID_518590a2_a184_11d0_8522_00c04fd9baf3 00012ae0     minwave.obj
- 0003:00000cd0       __GUID_00000000_0000_0000_0000_000000000000 00012af0     adapter.obj
- 0004:00000000       _AddDevice@8               00012b20 f   adapter.obj
- 0004:0000001a       ?InstallSubdevice@@YGJPAU_DEVICE_OBJECT@@PAU_IRP@@PAGABU_GUID@@3P6GJPAPAUIUnknown@@3PAU4@W4_POOL_TYPE@@@Z5PAUIResourceList@@344@Z 00012b3a f   adapter.obj
- 0004:00000120       ?StartDevice@@YGJPAU_DEVICE_OBJECT@@PAU_IRP@@PAUIResourceList@@@Z 00012c40 f   adapter.obj
- 0004:0000036e       ?AssignResources@@YGJPAUIResourceList@@PAPAU1@11111@Z 00012e8e f   adapter.obj
- 0004:000004fe       ?NewAdapterCommon@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001301e f   common.obj
- 0004:0000076f       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 0001328f f   common.obj
- 0004:00000e92       ??1CAdapterCommon@@UAE@XZ  000139b2 f   common.obj
- 0004:00000fe6       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00013b06 f   common.obj
- 0004:000010a6       ?WavePortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00013bc6 f   common.obj
- 0004:000010b2       ?GetInterruptSync@CAdapterCommon@@UAGPAUIInterruptSync@@XZ 00013bd2 f   common.obj
- 0004:000010c0       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00013be0 f   common.obj
- 0004:000010cc       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00013bec f   common.obj
- 0004:000010fc       ?InitHDAController@CAdapterCommon@@QAGJXZ 00013c1c f   common.obj
- 0004:0000158a       ?InitializeCodec@CAdapterCommon@@QAGJE@Z 000140aa f   common.obj
- 0004:000019c8       ?hda_initialize_audio_function_group@CAdapterCommon@@QAGJKK@Z 000144e8 f   common.obj
- 0004:00002242       ?hda_get_node_type@CAdapterCommon@@QAGEKK@Z 00014d62 f   common.obj
- 0004:00002264       ?hda_get_node_connection_entries@CAdapterCommon@@QAGKKKK@Z 00014d84 f   common.obj
- 0004:000022ea       ?hda_enable_pin_output@CAdapterCommon@@QAGXKK@Z 00014e0a f   common.obj
- 0004:0000231c       ?hda_disable_pin_output@CAdapterCommon@@QAGXKK@Z 00014e3c f   common.obj
- 0004:0000234e       ?hda_is_headphone_connected@CAdapterCommon@@QAGEXZ 00014e6e f   common.obj
- 0004:00002388       ?hda_initialize_output_pin@CAdapterCommon@@QAGXK@Z 00014ea8 f   common.obj
- 0004:000024fe       ?hda_initialize_audio_output@CAdapterCommon@@QAGXK@Z 0001501e f   common.obj
- 0004:0000262c       ?hda_initialize_audio_mixer@CAdapterCommon@@QAGXK@Z 0001514c f   common.obj
- 0004:00002726       ?hda_initialize_audio_selector@CAdapterCommon@@QAGXK@Z 00015246 f   common.obj
- 0004:0000284a       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001536a f   mintopo.obj
- 0004:000028aa       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 000153ca f   mintopo.obj
- 0004:000028ce       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 000153ee f   mintopo.obj
- 0004:0000297c       ??1CMiniportTopologyHDA@@UAE@XZ 0001549c f   mintopo.obj
- 0004:000029c0       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 000154e0 f   mintopo.obj
- 0004:00002a22       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00015542 f   mintopo.obj
- 0004:00003246       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015d66 f   minwave.obj
- 0004:000032a6       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015dc6 f   minwave.obj
- 0004:0000334c       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 00015e6c f   minwave.obj
- 0004:00003428       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00015f48 f   minwave.obj
- 0004:000034d6       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00015ff6 f   minwave.obj
- 0004:0000352a       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 0001604a f   minwave.obj
- 0004:000035d2       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 000160f2 f   minwave.obj
- 0004:000035e2       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00016102 f   minwave.obj
- 0004:00003838       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 00016358 f   minwave.obj
- 0004:00003978       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 00016498 f   minwave.obj
- 0004:00003a00       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00016520 f   minwave.obj
- 0004:00003a6a       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 0001658a f   minwave.obj
- 0004:00003af0       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00016610 f   minwave.obj
- 0004:00003b30       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00016650 f   minwave.obj
- 0004:00003bbc       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 000166dc f   minwave.obj
- 0005:00000000       _DriverEntry@8             00016740 f   adapter.obj
- 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00016758     ntoskrnl:ntoskrnl.exe
- 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    0001676c     hal:HAL.dll
- 0005:00000040       __IMPORT_DESCRIPTOR_portcls 00016780     portcls:portcls.sys
- 0005:00000054       __NULL_IMPORT_DESCRIPTOR   00016794     ntoskrnl:ntoskrnl.exe
+ 0002:000001c8       ??_C@_1BE@DCLA@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAC?$AAD?$AA?$AA@ 000119c8     common.obj
+ 0002:000001dc       ??_C@_1BM@HKPL@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAL?$AAi?$AAn?$AAe?$AAI?$AAn?$AA?$AA@ 000119dc     common.obj
+ 0002:000001f8       ??_C@_1BG@OEIB@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAM?$AAi?$AAc?$AA?$AA@ 000119f8     common.obj
+ 0002:00000210       ??_C@_1BK@PFJA@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAM?$AAi?$AAc?$AAI?$AAn?$AA?$AA@ 00011a10     common.obj
+ 0002:0000022c       ??_C@_1BO@PIPO@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAM?$AAo?$AAn?$AAo?$AAO?$AAu?$AAt?$AA?$AA@ 00011a2c     common.obj
+ 0002:0000024c       ??_C@_1CC@CCGC@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAH?$AAe?$AAa?$AAd?$AAp?$AAh?$AAo?$AAn?$AAe?$AA?$AA@ 00011a4c     common.obj
+ 0002:00000270       ??_C@_1BG@KIAL@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAA?$AAU?$AAX?$AA?$AA@ 00011a70     common.obj
+ 0002:00000288       ??_C@_1BK@CIGJ@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAV?$AAi?$AAd?$AAe?$AAo?$AA?$AA@ 00011a88     common.obj
+ 0002:000002a4       ??_C@_1BI@JAOF@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAM?$AAi?$AAc?$AA2?$AA?$AA@ 00011aa4     common.obj
+ 0002:000002bc       ??_C@_1BK@EHMP@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAP?$AAh?$AAo?$AAn?$AAe?$AA?$AA@ 00011abc     common.obj
+ 0002:000002d8       ??_C@_1BM@PILN@?$AAD?$AAi?$AAs?$AAa?$AAb?$AAl?$AAe?$AAP?$AAC?$AAB?$AAe?$AAe?$AAp?$AA?$AA@ 00011ad8     common.obj
+ 0002:000002f4       ??_C@_1BE@ENEK@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAB?$AAa?$AAs?$AAs?$AA?$AA@ 00011af4     common.obj
+ 0002:00000308       ??_C@_1BC@JMJO@?$AAL?$AAe?$AAf?$AAt?$AAB?$AAa?$AAs?$AAs?$AA?$AA@ 00011b08     common.obj
+ 0002:0000031c       ??_C@_1BI@KGAJ@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAT?$AAr?$AAe?$AAb?$AAl?$AAe?$AA?$AA@ 00011b1c     common.obj
+ 0002:00000334       ??_C@_1BG@BGGD@?$AAL?$AAe?$AAf?$AAt?$AAT?$AAr?$AAe?$AAb?$AAl?$AAe?$AA?$AA@ 00011b34     common.obj
+ 0002:0000034c       ??_C@_1O@IECC@?$AAM?$AAi?$AAc?$AAA?$AAG?$AAC?$AA?$AA@ 00011b4c     common.obj
+ 0002:0000035c       ??_C@_1CA@EJHI@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011b5c     common.obj
+ 0002:0000037c       ??_C@_1BO@PPLI@?$AAL?$AAe?$AAf?$AAt?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011b7c     common.obj
+ 0002:0000039c       ??_C@_1BO@PMCJ@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011b9c     common.obj
+ 0002:000003bc       ??_C@_1BM@CFEM@?$AAL?$AAe?$AAf?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAG?$AAa?$AAi?$AAn?$AA?$AA@ 00011bbc     common.obj
+ 0002:000003d8       ??_C@_1CA@CIKM@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011bd8     common.obj
+ 0002:000003f8       ??_C@_1BO@JOGM@?$AAL?$AAe?$AAf?$AAt?$AAI?$AAn?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011bf8     common.obj
+ 0002:00000418       ??_C@_1BI@BMOJ@?$AAO?$AAu?$AAt?$AAp?$AAu?$AAt?$AAM?$AAi?$AAx?$AAe?$AAr?$AA?$AA@ 00011c18     common.obj
+ 0002:00000430       ??_C@_1BE@GLOL@?$AAP?$AAc?$AAS?$AAp?$AAk?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011c30     common.obj
+ 0002:00000444       ??_C@_1O@MNBB@?$AAM?$AAi?$AAc?$AAV?$AAo?$AAl?$AA?$AA@ 00011c44     common.obj
+ 0002:00000454       ??_C@_1BO@HCKE@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAL?$AAi?$AAn?$AAe?$AAI?$AAn?$AAV?$AAo?$AAl?$AA?$AA@ 00011c54     common.obj
+ 0002:00000474       ??_C@_1BM@KLMB@?$AAL?$AAe?$AAf?$AAt?$AAL?$AAi?$AAn?$AAe?$AAI?$AAn?$AAV?$AAo?$AAl?$AA?$AA@ 00011c74     common.obj
+ 0002:00000490       ??_C@_1BG@COJL@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAC?$AAD?$AAV?$AAo?$AAl?$AA?$AA@ 00011c90     common.obj
+ 0002:000004a8       ??_C@_1BE@KMKA@?$AAL?$AAe?$AAf?$AAt?$AAC?$AAD?$AAV?$AAo?$AAl?$AA?$AA@ 00011ca8     common.obj
+ 0002:000004bc       ??_C@_1BK@JCIM@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAM?$AAi?$AAd?$AAi?$AAV?$AAo?$AAl?$AA?$AA@ 00011cbc     common.obj
+ 0002:000004d8       ??_C@_1BI@KBIJ@?$AAL?$AAe?$AAf?$AAt?$AAM?$AAi?$AAd?$AAi?$AAV?$AAo?$AAl?$AA?$AA@ 00011cd8     common.obj
+ 0002:000004f0       ??_C@_1BK@MFCG@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAW?$AAa?$AAv?$AAe?$AAV?$AAo?$AAl?$AA?$AA@ 00011cf0     common.obj
+ 0002:0000050c       ??_C@_1BI@PGCD@?$AAL?$AAe?$AAf?$AAt?$AAW?$AAa?$AAv?$AAe?$AAV?$AAo?$AAl?$AA?$AA@ 00011d0c     common.obj
+ 0002:00000524       ??_C@_1BO@NHA@?$AAR?$AAi?$AAg?$AAh?$AAt?$AAM?$AAa?$AAs?$AAt?$AAe?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011d24     common.obj
+ 0002:00000544       ??_C@_1BM@NEBF@?$AAL?$AAe?$AAf?$AAt?$AAM?$AAa?$AAs?$AAt?$AAe?$AAr?$AAV?$AAo?$AAl?$AA?$AA@ 00011d44     common.obj
+ 0002:00000560       ??_7CAdapterCommon@@6BIAdapterPowerManagement@@@ 00011d60     common.obj
+ 0002:00000578       ??_7CAdapterCommon@@6BIAdapterCommon@@@ 00011d78     common.obj
+ 0002:000005d0       ??_7CAdapterCommon@@6BCUnknown@@@ 00011dd0     common.obj
+ 0002:000006a8       ??_7CMiniportTopologyHDA@@6BIMiniportTopology@@@ 00011ea8     mintopo.obj
+ 0002:000006c0       ??_7CMiniportTopologyHDA@@6BCUnknown@@@ 00011ec0     mintopo.obj
+ 0002:000006d0       ??_7CMiniportWaveCyclicHDA@@6BIMiniportWaveCyclic@@@ 00011ed0     minwave.obj
+ 0002:000006ec       ??_7CMiniportWaveCyclicHDA@@6BCUnknown@@@ 00011eec     minwave.obj
+ 0002:000006fc       ??_7CMiniportWaveCyclicStreamHDA@@6BIMiniportWaveCyclicStream@@@ 00011efc     minwave.obj
+ 0002:00000720       ??_7CMiniportWaveCyclicStreamHDA@@6BCUnknown@@@ 00011f20     minwave.obj
+ 0002:00000730       ??_7CUnknown@@6B@          00011f30     stdunk:stdunk.obj
+ 0003:00000000       __GUID_b7902fe9_fb0a_11d1_81b0_0060083316c1 00011f40     adapter.obj
+ 0003:00000010       __GUID_d3f0ce1c_fffc_11d1_81b0_0060083316c1 00011f50     adapter.obj
+ 0003:00000020       __GUID_c096df9c_fb09_11d1_81b0_0060083316c1 00011f60     adapter.obj
+ 0003:000000f8       ?m_stHardwareConfig@CAdapterCommon@@0UtHardwareConfig@@A 00012038     common.obj
+ 0003:0000018c       ?audBufSize@@3KA           000120cc     common.obj
+ 0003:00000190       ?BdlSize@@3KA              000120d0     common.obj
+ 0003:00000890       __GUID_185fedf6_9905_11d1_95a9_00c04fb925d3 000127d0     mintopo.obj
+ 0003:000008a0       __GUID_185fedef_9905_11d1_95a9_00c04fb925d3 000127e0     mintopo.obj
+ 0003:000008b0       __GUID_185fede1_9905_11d1_95a9_00c04fb925d3 000127f0     mintopo.obj
+ 0003:000008c0       __GUID_185fede0_9905_11d1_95a9_00c04fb925d3 00012800     mintopo.obj
+ 0003:000008d0       __GUID_7607e580_c557_11d0_8a2b_00a0c9255ac1 00012810     mintopo.obj
+ 0003:000008e0       __GUID_185fede3_9905_11d1_95a9_00c04fb925d3 00012820     mintopo.obj
+ 0003:000008f0       __GUID_da441a60_c556_11d0_8a2b_00a0c9255ac1 00012830     mintopo.obj
+ 0003:00000900       __GUID_185fedee_9905_11d1_95a9_00c04fb925d3 00012840     mintopo.obj
+ 0003:00000910       __GUID_02b223c0_c557_11d0_8a2b_00a0c9255ac1 00012850     mintopo.obj
+ 0003:00000920       __GUID_185feded_9905_11d1_95a9_00c04fb925d3 00012860     mintopo.obj
+ 0003:00000930       __GUID_e88c9ba0_c557_11d0_8a2b_00a0c9255ac1 00012870     mintopo.obj
+ 0003:00000940       __GUID_185fedec_9905_11d1_95a9_00c04fb925d3 00012880     mintopo.obj
+ 0003:00000950       __GUID_185fedeb_9905_11d1_95a9_00c04fb925d3 00012890     mintopo.obj
+ 0003:00000960       __GUID_185fedea_9905_11d1_95a9_00c04fb925d3 000128a0     mintopo.obj
+ 0003:00000970       __GUID_185fede9_9905_11d1_95a9_00c04fb925d3 000128b0     mintopo.obj
+ 0003:00000980       __GUID_185fede8_9905_11d1_95a9_00c04fb925d3 000128c0     mintopo.obj
+ 0003:00000990       __GUID_e573adc0_c555_11d0_8a2b_00a0c9255ac1 000128d0     mintopo.obj
+ 0003:000009a0       __GUID_185fede7_9905_11d1_95a9_00c04fb925d3 000128e0     mintopo.obj
+ 0003:000009b0       __GUID_185fede5_9905_11d1_95a9_00c04fb925d3 000128f0     mintopo.obj
+ 0003:000009c0       __GUID_3a5acc00_c557_11d0_8a2b_00a0c9255ac1 00012900     mintopo.obj
+ 0003:000009d0       __GUID_45ffaaa0_6e1b_11d0_bcf2_444553540000 00012910     mintopo.obj
+ 0003:000009e0       __GUID_6994ad04_93ef_11d0_a3cc_00a0c9223196 00012920     mintopo.obj
+ 0003:000009f0       __GUID_185fedf7_9905_11d1_95a9_00c04fb925d3 00012930     mintopo.obj
+ 0003:00000a00       __GUID_dff21ce1_f70f_11d0_b917_00a0c9223196 00012940     mintopo.obj
+ 0003:00000a10       __GUID_dff21be1_f70f_11d0_b917_00a0c9223196 00012950     mintopo.obj
+ 0003:00000a20       __GUID_185fedf9_9905_11d1_95a9_00c04fb925d3 00012960     mintopo.obj
+ 0003:00000a30       __GUID_dff21fe3_f70f_11d0_b917_00a0c9223196 00012970     mintopo.obj
+ 0003:00000a40       __GUID_185fedfb_9905_11d1_95a9_00c04fb925d3 00012980     mintopo.obj
+ 0003:00000a50       __GUID_dff220e3_f70f_11d0_b917_00a0c9223196 00012990     mintopo.obj
+ 0003:00000a60       __GUID_185fedf8_9905_11d1_95a9_00c04fb925d3 000129a0     mintopo.obj
+ 0003:00000a70       __GUID_dff220f3_f70f_11d0_b917_00a0c9223196 000129b0     mintopo.obj
+ 0003:00000a80       __GUID_dff21fe4_f70f_11d0_b917_00a0c9223196 000129c0     mintopo.obj
+ 0003:00000a90       __GUID_97e99ba0_bdea_11cf_a5d6_28db04c10000 000129d0     mintopo.obj
+ 0003:00000cd8       __GUID_507ae360_c554_11d0_8a2b_00a0c9255ac1 00012c18     minwave.obj
+ 0003:00000ce8       __GUID_4d837fe0_c555_11d0_8a2b_00a0c9255ac1 00012c28     minwave.obj
+ 0003:00000cf8       __GUID_185fedfa_9905_11d1_95a9_00c04fb925d3 00012c38     minwave.obj
+ 0003:00000d08       __GUID_fb6c4281_0353_11d1_905f_0000c0cc16ba 00012c48     minwave.obj
+ 0003:00000d18       __GUID_05589f81_c356_11ce_bf01_00aa0055595a 00012c58     minwave.obj
+ 0003:00000d28       __GUID_00000001_0000_0010_8000_00aa00389b71 00012c68     minwave.obj
+ 0003:00000d38       __GUID_73647561_0000_0010_8000_00aa00389b71 00012c78     minwave.obj
+ 0003:00000d48       __GUID_0f6417d6_c318_11d0_a43f_00a0c9223196 00012c88     minwave.obj
+ 0003:00000d58       __GUID_518590a2_a184_11d0_8522_00c04fd9baf3 00012c98     minwave.obj
+ 0003:00000d68       __GUID_00000000_0000_0000_0000_000000000000 00012ca8     adapter.obj
+ 0004:00000000       _AddDevice@8               00012cc0 f   adapter.obj
+ 0004:0000001a       ?InstallSubdevice@@YGJPAU_DEVICE_OBJECT@@PAU_IRP@@PAGABU_GUID@@3P6GJPAPAUIUnknown@@3PAU4@W4_POOL_TYPE@@@Z5PAUIResourceList@@344@Z 00012cda f   adapter.obj
+ 0004:00000120       ?StartDevice@@YGJPAU_DEVICE_OBJECT@@PAU_IRP@@PAUIResourceList@@@Z 00012de0 f   adapter.obj
+ 0004:0000036e       ?AssignResources@@YGJPAUIResourceList@@PAPAU1@11111@Z 0001302e f   adapter.obj
+ 0004:000004fe       ?NewAdapterCommon@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 000131be f   common.obj
+ 0004:0000076f       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 0001342f f   common.obj
+ 0004:00000e92       ??1CAdapterCommon@@UAE@XZ  00013b52 f   common.obj
+ 0004:00000fe6       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00013ca6 f   common.obj
+ 0004:000010a6       ?WavePortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00013d66 f   common.obj
+ 0004:000010b2       ?GetInterruptSync@CAdapterCommon@@UAGPAUIInterruptSync@@XZ 00013d72 f   common.obj
+ 0004:000010c0       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00013d80 f   common.obj
+ 0004:000010cc       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00013d8c f   common.obj
+ 0004:000010fc       ?InitHDAController@CAdapterCommon@@QAGJXZ 00013dbc f   common.obj
+ 0004:0000158a       ?InitializeCodec@CAdapterCommon@@QAGJE@Z 0001424a f   common.obj
+ 0004:000019e0       ?hda_initialize_audio_function_group@CAdapterCommon@@QAGJKK@Z 000146a0 f   common.obj
+ 0004:00002240       ?hda_get_node_type@CAdapterCommon@@QAGEKK@Z 00014f00 f   common.obj
+ 0004:00002262       ?hda_get_node_connection_entries@CAdapterCommon@@QAGKKKK@Z 00014f22 f   common.obj
+ 0004:000022e8       ?hda_enable_pin_output@CAdapterCommon@@QAGXKK@Z 00014fa8 f   common.obj
+ 0004:0000231a       ?hda_disable_pin_output@CAdapterCommon@@QAGXKK@Z 00014fda f   common.obj
+ 0004:0000234c       ?hda_is_headphone_connected@CAdapterCommon@@QAGEXZ 0001500c f   common.obj
+ 0004:00002386       ?hda_initialize_output_pin@CAdapterCommon@@QAGXK@Z 00015046 f   common.obj
+ 0004:000024fc       ?hda_initialize_audio_output@CAdapterCommon@@QAGXK@Z 000151bc f   common.obj
+ 0004:0000262a       ?hda_initialize_audio_mixer@CAdapterCommon@@QAGXK@Z 000152ea f   common.obj
+ 0004:00002724       ?hda_initialize_audio_selector@CAdapterCommon@@QAGXK@Z 000153e4 f   common.obj
+ 0004:00002848       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015508 f   mintopo.obj
+ 0004:000028a8       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 00015568 f   mintopo.obj
+ 0004:000028cc       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 0001558c f   mintopo.obj
+ 0004:0000297a       ??1CMiniportTopologyHDA@@UAE@XZ 0001563a f   mintopo.obj
+ 0004:000029be       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 0001567e f   mintopo.obj
+ 0004:00002a20       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 000156e0 f   mintopo.obj
+ 0004:00003244       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015f04 f   minwave.obj
+ 0004:000032a4       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015f64 f   minwave.obj
+ 0004:0000334a       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 0001600a f   minwave.obj
+ 0004:00003426       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 000160e6 f   minwave.obj
+ 0004:000034d4       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00016194 f   minwave.obj
+ 0004:00003528       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 000161e8 f   minwave.obj
+ 0004:000035d0       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00016290 f   minwave.obj
+ 0004:000035e0       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 000162a0 f   minwave.obj
+ 0004:00003836       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 000164f6 f   minwave.obj
+ 0004:00003976       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 00016636 f   minwave.obj
+ 0004:000039fe       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 000166be f   minwave.obj
+ 0004:00003a68       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 00016728 f   minwave.obj
+ 0004:00003aee       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 000167ae f   minwave.obj
+ 0004:00003b2e       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 000167ee f   minwave.obj
+ 0004:00003bba       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 0001687a f   minwave.obj
+ 0005:00000000       _DriverEntry@8             000168e0 f   adapter.obj
+ 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 000168f8     ntoskrnl:ntoskrnl.exe
+ 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    0001690c     hal:HAL.dll
+ 0005:00000040       __IMPORT_DESCRIPTOR_portcls 00016920     portcls:portcls.sys
+ 0005:00000054       __NULL_IMPORT_DESCRIPTOR   00016934     ntoskrnl:ntoskrnl.exe
 
  entry point at        0005:00000000
 
  Static symbols
 
- 0004:00002a32       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015552 f   mintopo.obj
- 0004:00002bd0       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000156f0 f   mintopo.obj
- 0004:00002daa       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000158ca f   mintopo.obj
- 0004:000030c6       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015be6 f   mintopo.obj
- 0001:00000e40       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00011120 f   mintopo.obj
- 0004:00003152       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015c72 f   mintopo.obj
+ 0004:00002a30       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000156f0 f   mintopo.obj
+ 0004:00002bce       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 0001588e f   mintopo.obj
+ 0004:00002da8       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015a68 f   mintopo.obj
+ 0004:000030c4       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015d84 f   mintopo.obj
+ 0001:00000e50       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00011130 f   mintopo.obj
+ 0004:00003150       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015e10 f   mintopo.obj
 
  115 bytes saved through ICF
 

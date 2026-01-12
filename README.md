@@ -31,4 +31,8 @@ used under MIT license.
 
 See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com/archive/p/cmediadrivers/).
 
-for build instructions see Build Instructions.txt
+For build instructions, see the file Build Instructions.txt
+
+##AI Disclaimer:
+
+Generative AI (Large Language Models) have been used for research and debugging help. However, all code currently in the project is written by humans and any bugs or inaccuracies are the fault of said humans. 

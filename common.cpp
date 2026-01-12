@@ -379,7 +379,7 @@ NewAdapterCommon
 }   
 	//100ms of 2ch 16 bit audio 4410 * 2 * 2
 	ULONG audBufSize = MAXLEN_DMA_BUFFER; 
-	ULONG BdlSize = 256 * 16 * 2; //256 entries, 16 bytes, x2 for shadow bdl;
+	ULONG BdlSize = 256 * 16; //256 entries, 16 bytes each
 
 /*****************************************************************************
  * CAdapterCommon::Init()
@@ -691,7 +691,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= BdlSize + 8192;
+	pDeviceDescription -> MaximumLength		= BdlSize + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -3352,13 +3352,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 		BdlMemVirt[i+2] = audBufSize / entries;
 		BdlMemVirt[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
 	}
-	
-	//zero rest of BDL
-	
-	for(i = (entries * 4); i < ((int)BdlSize); ++i){
-		BdlMemVirt[i] = 0;
-	}
-	
 	
 	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
 	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?

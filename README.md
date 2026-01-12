@@ -33,6 +33,6 @@ See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com
 
 For build instructions, see the file Build Instructions.txt
 
-##AI Disclaimer:
+## AI Disclaimer:
 
-Generative AI (Large Language Models) have been used for research and debugging help. However, all code currently in the project is written by humans and any bugs or inaccuracies are the fault of said humans. 
+Generative AI (Large Language Models) have been used for research and debugging help in the course of this project. However, all code currently in the project has been written by humans and any bugs or inaccuracies are the fault of said humans. See the LICENSE file about lack of warranty 

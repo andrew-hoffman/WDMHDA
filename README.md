@@ -35,4 +35,4 @@ For build instructions, see the file Build Instructions.txt
 
 ## AI Disclaimer:
 
-Generative AI (Large Language Models) have been used for research and debugging help in the course of this project. However, all code currently in the project has been written by humans and any bugs or inaccuracies are the fault of said humans. See the LICENSE file about lack of warranty 
+Generative AI (Large Language Models) have been used for research and debugging help in the course of this project. However, all code currently in the project has been written by humans and any bugs or inaccuracies are the fault of said humans. Pull requests written by a LLM tool will not be accepted. See the LICENSE file about lack of warranty 

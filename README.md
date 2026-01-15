@@ -20,7 +20,7 @@ For best results, go to the Multimedia control panel, Click the Advanced Propert
 
 ## Current Limitations:
 
-- Only supports 8000-48000hz 16-bit sample rate (up to 192khz 24-bit and 32-bit could technically be added but what's the point for 9x?)
+- Only supports 8000-48000hz 16-bit sample rate (up to 96khz 32-bit could technically be added but what's the point for 9x?)
 - Output only, recording not supported
 - Single audio stream, no hardware mixing
 - Volume control is only implemented for the main mix output

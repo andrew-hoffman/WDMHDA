@@ -74,6 +74,7 @@ private:
 
 	volatile PULONG DmaPosVirt;
 	PHYSICAL_ADDRESS DmaPosPhys;
+	ULONG bad_dpos_count;
 
     // Output buffer information
     PULONG OutputBufferList;
@@ -320,6 +321,7 @@ static BOOLEAN skipCodecReset = false;
 static BOOLEAN useAltOut = false;
 static BOOLEAN useSPDIF = true;
 static BOOLEAN useDisabledPins = false;
+static BOOLEAN useDmaPos = true;
 //
 // This is the hardware configuration information.  The first struct is for 
 // nodes, which we default to FALSE.  The second struct is for Pins, which 
@@ -704,7 +706,8 @@ Init
 	DOUT(DBG_SYSINFO, ("Map Registers = %d", nMapRegisters));
 
 	//now we call the AllocateCommonBuffer function pointer in that struct
-
+	
+	//Allocate RIRB
 	PVOID RirbVirtualAddress = NULL;
 	PPHYSICAL_ADDRESS pRirbLogicalAddress = NULL;	
 	
@@ -736,8 +739,7 @@ Init
 	//check 128-byte alignment of what we received
 	ASSERT( (RirbMemPhys.LowPart & 0x7F) == 0);
 
-	//same for CORB
-
+	//allocate CORB
 	PVOID CorbVirtualAddress = NULL;
 	PPHYSICAL_ADDRESS pCorbLogicalAddress = NULL;	
 	
@@ -769,8 +771,7 @@ Init
 	//check 128-byte alignment of what we received
 	ASSERT( (CorbMemPhys.LowPart & 0x7F) == 0);
 
-	//same for BDL
-
+	//allocate BDL
 	PVOID BdlVirtualAddress = NULL;
 	PPHYSICAL_ADDRESS pBdlLogicalAddress = NULL;
 	
@@ -797,8 +798,7 @@ Init
 		ASSERT(BdlMemPhys.HighPart == 0);
 	}
 
-	//same for DMA Position buffer
-
+	//allocate DMA Position Buffer
 	PVOID DmaVirtualAddress = NULL;
 	PPHYSICAL_ADDRESS pDmaLogicalAddress = NULL;
 	
@@ -1182,7 +1182,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//turn ON WAKEEN interrupts so we can see if any codecs ever respond to reset
 	//writeUSHORT(0x0C, 0x7FFF);
 
-	//turn off dma position transfer, TODO may need this on for VIA
+	// clear dma position buffer address
 	writeULONG (0x70, 0);
 	writeULONG (0x74, 0);
  
@@ -1307,6 +1307,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	}
 	else {
 		writeULONG (0x74, 0);
+	}
+
+	if(useDmaPos){
+		// turn on dma position transfer
+		writeULONG (0x70, DmaPosPhys.LowPart | 0x1);
 	}
 
 
@@ -2419,7 +2424,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 				return response;
 			}
 		}
-  
+
 		//there was no response after 6 ms
 		//unlock
 		KeReleaseSpinLock(&QLock, oldirql);
@@ -3113,8 +3118,10 @@ NTSTATUS InterruptServiceRoutine
 
 	//
     // ACK the ISR. note we don't have any direct access to CAdapterCommon, gotta use the pointer
+	// todo: how do we handle being called if the AdapterCommon object isn't inited yet?
+	// todo: call from a DPC fallback if the IRQ does not appear to be firing properly
+
     // get out of here immediately if it's not our IRQ
-	//
 	HDA_INTERRUPT_TYPE irqType = that->AcknowledgeIRQ();
 	if(irqType == HDAINT_NONE) {
 		return STATUS_UNSUCCESSFUL;
@@ -3218,7 +3225,34 @@ STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
 
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
-	return readULONG(OutputStreamBase + 0x04);
+		USHORT stream_id = 1;		
+		if (useDmaPos){
+			ULONG dpos = *(DmaPosVirt + stream_id - 1); //stream 1 pos is at offset 0, and so on
+			ULONG lpos = readULONG(OutputStreamBase + 0x04);
+			DOUT (DBG_PRINT, ("dpos %d %d %d %d %d, %d", 
+				*(DmaPosVirt), *(DmaPosVirt+1), *(DmaPosVirt+2), *(DmaPosVirt+3), *(DmaPosVirt+4), lpos));
+
+			//check if DMA position buffer is moving or if it's stuck at 0
+			//TODO: dpos ever updating from 0 is not sufficient to confirm it works all the time
+			// but IS sufficient to detect emulators with no support for dpos
+			if(dpos != 0) {
+				bad_dpos_count = 0;
+				return dpos;
+			} else if((dpos == 0) && (lpos != 0)){
+				//LPIB is moving but DMA isn't
+				if(++bad_dpos_count > 5){
+					DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
+					useDmaPos = FALSE;
+					return lpos;
+				}
+				return dpos;
+			} else {
+				return 0;
+			}
+		} else{
+			//using LPIB
+			return readULONG(OutputStreamBase + 0x04);
+		}
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {

@@ -224,7 +224,7 @@ ValidateFormat
 
             )
         &&  (   (waveFormat->nSamplesPerSec >= 8000)
-            &&  (waveFormat->nSamplesPerSec <= 48000)
+            &&  (waveFormat->nSamplesPerSec <= 96000)
             )
         )
     {
@@ -438,7 +438,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
         8000,   // Minimum rate. 
-        48000   // Maximum rate.
+        96000   // Maximum rate.
     }
 };
 

@@ -38,7 +38,7 @@
 //
 // DSP/DMA constants
 // 
-#define MAXLEN_DMA_BUFFER       0x20000 //128k
+#define MAXLEN_DMA_BUFFER       0x40000 //256k
 
 #define DSP_REG_CMSD0           0x00
 #define DSP_REG_CMSR0           0x01

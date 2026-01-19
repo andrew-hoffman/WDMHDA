@@ -48,6 +48,8 @@ private:
 	USHORT pci_ven;
 	USHORT pci_dev;
 	PUCHAR pConfigMem;
+	USHORT codec_ven;
+	USHORT codec_dev;
 
 	// MMIO registers
 	volatile PUCHAR m_pHDARegisters;     
@@ -447,7 +449,7 @@ Init
 		//VID and PID are first 2 words of configspace
 		pci_ven = (USHORT)pConfigMemS[0];
 		pci_dev = (USHORT)pConfigMemS[1];
-		DbgPrint( "\nHDA Device Ven 0x%X Dev 0x%X : ", pci_ven, pci_dev);
+		DbgPrint( "\nHDA Controller: VID:0x%04X PID:0x%04X : ", pci_ven, pci_dev);
 	}
 
 	USHORT tmp;
@@ -1473,11 +1475,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitializeCodec (UCHAR codec_number)
 		return STATUS_NOT_FOUND;
 	}
 	codecNumber = codec_number;
+	codec_ven = (USHORT)(codec_id >> 16);
+	codec_dev = (USHORT)(codec_id & 0xFFFF);
 
 	//log basic codec info
-	DOUT (DBG_SYSINFO, ("Codec %d ", codec_number ) );
-	DOUT (DBG_SYSINFO, ("VID: %04x", (codec_id>>16) ));
-	DOUT (DBG_SYSINFO, ("PID: %04x", (codec_id & 0xFFFF) ));
+	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
+	codec_number, codec_ven, codec_dev);
 
 	//find Audio Function Groups
 	ULONG response = hda_send_verb(codec_number, 0, 0xF00, 0x04);
@@ -1582,7 +1585,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 			ULONG pin_sequence			= pin_config & 0xF;
 
 			if ((pin_connectivity == 0x1) ){
-				DbgPrint( ("No Connect\n") );
+				DbgPrint( ("No Connect ") );
 				if (!useDisabledPins) 
 					continue;
 			} else if (pin_connectivity == 0x0){
@@ -1835,7 +1838,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 
 		//if codec has also headphone output, initialize it
 		if (pin_headphone_node_number != 0) {
-			DbgPrint("\n\nHeadphone output ");
+			DbgPrint("\nHeadphone output ");
 			hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
 			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
 
@@ -1903,7 +1906,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_initialize_audio_function_group(ULON
 	DbgPrint("\n%d Output paths found", out_paths.count);
 	if(out_paths.count == 0) {
 		//no usable output paths have been found
-		DbgPrint("\nCodec does not have any usable output PINs");
+		DbgPrint("\nAFG does not have any usable output PINs.");
 		return STATUS_UNSUCCESSFUL;
 	}
 	return STATUS_SUCCESS;
@@ -2161,6 +2164,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_initialize_audio_selector(ULONG audio_se
 /*****************************************************************************
  * CAdapterCommon::DisableHDAPin
  *****************************************************************************
+ * Reads settings from Registry
  * Returns TRUE when the HW vendor wants to disable the pin. A disabled pin is
  * not shown to the user (means it is not included in the topology). The
  * reason for doing this could be that some of the input lines like Aux or
@@ -2302,16 +2306,31 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 	ULONG sample_rates[11] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000};
 	USHORT mask=0x0000001;
+
+	ULONG caps = 0x7ff; //i don't think win98 will actually ask for anything > 96khz though
+	
+	//find the union of capabilities of all connected output paths
+	for (ULONG i = 0; i < out_paths.count; ++i){
+		//DOUT(DBG_ERROR, ("caps %X", out_paths.paths[i].audio_output_node_sample_capabilities));
+		caps &= out_paths.paths[i].audio_output_node_sample_capabilities;
+	}
+
+	if (caps == 0){
+		//fallback: 48khz is always (supposed to be) supported
+		DOUT(DBG_ERROR, ("Using fallback 48khz sample rate"));
+		caps |= (1<<6);
+	}
+		
  
 	//get bit of requested sample rate in capabilities
-	for(int i=0; i<11; i++) {
-		if(sample_rates[i]==sample_rate) {
+	for (ULONG j = 0; i < 11; j++) {
+		if (sample_rates[j] == sample_rate) {
 			break;
 		}
 		mask <<= 1;
 	}
  
-	if((audio_output_node_sample_capabilities & mask)==mask) {
+	if ((caps & mask) == mask) {
 		return TRUE;
 	}
 	else {
@@ -2944,9 +2963,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
     // Check what sample rates we support based on
 	// afg_node_sample_capabilities & audio_output_node_sample_capabilities
     //
-	// if either is zero, give up as nothing has been inited yet
-	if((!afg_node_sample_capabilities) || (!audio_output_node_sample_capabilities)){
-		    DOUT (DBG_ERROR, ("Invalid sample rate register!"));
+	// if either is zero, give up as nothing has been inited yet?
+	// TODO: at least one real codec is getting a 0 here
+	if (!afg_node_sample_capabilities){
+		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported!"));
+            return STATUS_UNSUCCESSFUL;
+	}
+	if (out_paths.count == 0){
+			DOUT (DBG_ERROR, ("No output paths inited yet!"));
             return STATUS_UNSUCCESSFUL;
 	}
 
@@ -3259,7 +3283,14 @@ STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {
 
 	//go through list of output paths and set same volume on all of them
 	for( ULONG i = 0; i < out_paths.count; ++i){
-		hda_set_node_gain(codecNumber, out_paths.paths[i].output_amp_node_number, HDA_OUTPUT_NODE, out_paths.paths[i].output_amp_node_capabilities, volume, ch);
+		hda_set_node_gain(
+			codecNumber, 
+			out_paths.paths[i].output_amp_node_number, 
+			HDA_OUTPUT_NODE, 
+			out_paths.paths[i].output_amp_node_capabilities, 
+			volume, 
+			ch
+			);
 	}
 
 	//hda_set_node_gain(codecNumber, output_amp_node_number, HDA_OUTPUT_NODE, output_amp_node_capabilities, volume, ch);

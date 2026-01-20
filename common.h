@@ -534,6 +534,11 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN  DWORD           dwSampleRate
     )   PURE;
 
+	STDMETHOD_(UCHAR,hda_is_supported_sample_rate)
+    (   THIS_
+		IN  ULONG           sample_rate
+    )   PURE;
+
 	STDMETHOD_(void,hda_start_sound)
     (   THIS
     )   PURE;

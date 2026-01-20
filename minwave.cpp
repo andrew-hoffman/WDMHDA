@@ -231,8 +231,15 @@ ValidateFormat
         )
     {
         ntStatus = STATUS_SUCCESS;
+
+		if (AdapterCommon->hda_is_supported_sample_rate(waveFormat->nSamplesPerSec) == TRUE){
+			ntStatus = STATUS_SUCCESS;
+		} else {
+			ntStatus = STATUS_UNSUCCESSFUL;
+		}
+
 		//try programming the given sample rate and see if it works
-		ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec);
+		//ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec);
     }
     else
     {

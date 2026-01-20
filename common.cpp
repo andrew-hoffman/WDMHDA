@@ -24,7 +24,7 @@ typedef struct _BDLE {
     ULONG   Flags;
 } BDLE;
 
-#define CHUNK_SIZE 1792 //100ms of 44khz 16bit stereo
+#define CHUNK_SIZE 1792 //100ms of 44khz 16bit stereo rounded up to nearest 128b
 
 /*****************************************************************************
  * CAdapterCommon
@@ -2281,8 +2281,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) 
 	}
 }
 
-//todo: capabilities are set by the LAST path we init and that may not be correct if the last path is SPDIF
-
+//currently unused as we only support 16-bit stereo (can't do 20-24 bit packing on 9x)
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};
 	ULONG mask=0x00010000;
@@ -2304,8 +2303,9 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
 }
 
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
+	//sample rate bits in order of spec
 	ULONG sample_rates[11] = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200, 96000, 176400, 192000};
-	USHORT mask=0x0000001;
+	ULONG mask=0x0000001;
 
 	ULONG caps = 0x7ff; //i don't think win98 will actually ask for anything > 96khz though
 	
@@ -2319,11 +2319,10 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_r
 		//fallback: 48khz is always (supposed to be) supported
 		DOUT(DBG_ERROR, ("Using fallback 48khz sample rate"));
 		caps |= (1<<6);
-	}
-		
+	}		
  
 	//get bit of requested sample rate in capabilities
-	for (ULONG j = 0; i < 11; j++) {
+	for (ULONG j = 0; j < 11; j++) {
 		if (sample_rates[j] == sample_rate) {
 			break;
 		}
@@ -2582,6 +2581,7 @@ MixerRegWrite
 			//and dump the codec config to the console
 			//when the Master Volume, then Treble sliders are moved in Audio Properties
 			//(in that order)
+			out_paths.count = 0;
 			InitializeCodec(codecNumber);
 		}
 #endif
@@ -2940,22 +2940,20 @@ SaveMixerSettingsToRegistry
 /*****************************************************************************
  * CAdapterCommon::ProgramSampleRate
  *****************************************************************************
- * Programs the sample rate. If the rate cannot be programmed, the routine
- * restores the register and returns STATUS_UNSUCCESSFUL.
+ * Programs the sample rate for all outputs. 
+ * If the rate cannot be programmed, the routine returns STATUS_UNSUCCESSFUL.
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 (
     IN  DWORD           dwSampleRate
-	//TODO: channels, bit depth here too
+	//Currently always stereo 16-bit, the KMixer can upconvert mono/8bit
 )
 {
     PAGED_CODE ();
 
     WORD     wOldRateReg, wCodecReg;
-    NTSTATUS ntStatus;
-
-	//TODO: use reg param to select between
-	//primary or secondary audio output or capture input
+	ULONG status = 0;
+	ULONG successes = 0;
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
 
@@ -2967,6 +2965,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 	// TODO: at least one real codec is getting a 0 here
 	if (!afg_node_sample_capabilities){
 		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported!"));
+			//i can't, it's a :VIA:!
             return STATUS_UNSUCCESSFUL;
 	}
 	if (out_paths.count == 0){
@@ -2976,23 +2975,36 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 
 	if (!hda_is_supported_sample_rate(dwSampleRate)) {
 		// Not a supported sample rate
-		DOUT (DBG_VSR, ("Samplerate %d not supported", dwSampleRate));
+		DOUT (DBG_VSR, ("Sample rate %d not supported by HDA", dwSampleRate));
 		return STATUS_NOT_SUPPORTED;
 	}
 
 	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
 	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
 
+	//set Audio Output nodes data format for all paths
+	for (ULONG i = 0; i < out_paths.count; ++i){
+		status = hda_send_verb(codecNumber, out_paths.paths[i].audio_output_node_number, 0x200, format);
+		if (status == 0xFFFFFFFF) {
+			DOUT (DBG_ERROR, ("Path %d Node %d rejected audio format 0x%X", i, out_paths.paths[i].audio_output_node_number, format));
+		}
+		//read it back to confirm
+		status = hda_send_verb(codecNumber, out_paths.paths[i].audio_output_node_number, 0xA00, 0x0);
+		if(status == format){
+			++successes;		
+		} else{
+			DOUT (DBG_ERROR, ("Path %d Node %d set format 0x%X expected 0x%X", i, out_paths.paths[i].audio_output_node_number, status, format));
+		}
+	}
+	if(successes == 0){
+		DOUT (DBG_ERROR, ("No codec paths accepted that sample rate"));
+		return STATUS_UNSUCCESSFUL;
+	}
 	//set stream data format
 	writeUSHORT(OutputStreamBase + 0x12, format);
 
-	//set Audio Output nodes data format
-	hda_send_verb(codecNumber, audio_output_node_number, 0x200, format);
-	if(second_audio_output_node_number != 0) {
-		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, format);
-	}
-	//check response?
-	//todo: adjust size of BDL chunks based on samplerate. this gets crunchy with 22khz wavs
+	// todo: adjust size of BDL chunks based on samplerate.
+	// output gets crunchy if rate is set too low for the irq frequency
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
     return STATUS_SUCCESS;
@@ -3515,9 +3527,6 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
   data_format |= ((0x0)<<8);
  }
  //24000 is supported as a stream rate but NOT a codec format
- //else if(sample_rate==24000) {
- // data_format |= ((0x1)<<8);
- //}
  else if(sample_rate==16000) {
   data_format |= ((0x2)<<8);
  }

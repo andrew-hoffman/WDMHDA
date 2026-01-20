@@ -2991,7 +2991,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 	if(second_audio_output_node_number != 0) {
 		hda_send_verb(codecNumber, second_audio_output_node_number, 0x200, format);
 	}
-	//response?
+	//check response?
+	//todo: adjust size of BDL chunks based on samplerate. this gets crunchy with 22khz wavs
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
     return STATUS_SUCCESS;
@@ -3510,32 +3511,36 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
  }
 
  //sample rate
- if(sample_rate==48000) {
+ if (sample_rate == 48000) {
   data_format |= ((0x0)<<8);
  }
- else if(sample_rate==44100) {
-  data_format |= ((0x40)<<8);
- }
- else if(sample_rate==32000) {
-  data_format |= ((0xA)<<8);
- }
- else if(sample_rate==22050) {
-  data_format |= ((0x41)<<8);
- }
+ //24000 is supported as a stream rate but NOT a codec format
+ //else if(sample_rate==24000) {
+ // data_format |= ((0x1)<<8);
+ //}
  else if(sample_rate==16000) {
   data_format |= ((0x2)<<8);
- }
- else if(sample_rate==11025) {
-  data_format |= ((0x43)<<8);
  }
  else if(sample_rate==8000) {
   data_format |= ((0x5)<<8);
  }
- else if(sample_rate==88200) {
-  data_format |= ((0x48)<<8);
+ else if(sample_rate==44100) {
+  data_format |= ((0x40)<<8);
+ }
+ else if(sample_rate==22050) {
+  data_format |= ((0x41)<<8);
+ }
+ else if(sample_rate==11025) {
+  data_format |= ((0x43)<<8);
  }
  else if(sample_rate==96000) {
   data_format |= ((0x8)<<8);
+ }
+ else if(sample_rate==32000) {
+  data_format |= ((0xA)<<8);
+ }
+ else if(sample_rate==88200) {
+  data_format |= ((0x48)<<8);
  }
  else if(sample_rate==176400) {
   data_format |= ((0x58)<<8);
@@ -3543,7 +3548,6 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_
  else if(sample_rate==192000) {
   data_format |= ((0x18)<<8);
  }
-
  return data_format;
 }
 

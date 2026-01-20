@@ -38,58 +38,8 @@
 //
 // DSP/DMA constants
 // 
-#define MAXLEN_DMA_BUFFER       0x40000 //256k
+#define MAXLEN_DMA_BUFFER       0x20000 //128k
 
-#define DSP_REG_CMSD0           0x00
-#define DSP_REG_CMSR0           0x01
-#define DSP_REG_CMSD1           0x02
-#define DSP_REG_CMSR1           0x03
-#define DSP_REG_MIXREG          0x04
-#define DSP_REG_MIXDATA         0x05
-#define DSP_REG_RESET           0x06
-#define DSP_REG_FMD0            0x08
-#define DSP_REG_FMR0            0x09
-#define DSP_REG_READ            0x0A
-#define DSP_REG_WRITE           0x0C
-#define DSP_REG_DATAAVAIL       0x0E
-
-#define DSP_REG_ACK8BIT         0x0E
-#define DSP_REG_ACK16BIT        0x0F
-
-//
-// controller commands
-//
-#define DSP_CMD_WAVEWRPIO       0x10  // wave output (programmed I/O)
-#define DSP_CMD_WAVEWR          0x14  // interrupt-driven 8 bit linear wave output
-#define DSP_CMD_WAVEWRA         0x1C  // auto mode 8 bit out
-#define DSP_CMD_WAVERD          0x24  // interrupt-driven 8 bit linear wave input
-#define DSP_CMD_WAVERDA         0x2C  // auto mode 8 bit in
-#define DSP_CMD_WAVEWRHS        0x90  // high speed mode write
-#define DSP_CMD_WAVERDHS        0x98  // high speed mode read
-#define DSP_CMD_SETSAMPRATE     0x40  // set sample rate
-#define DSP_CMD_SETBLCKSIZE     0x48  // set block size
-#define DSP_CMD_SPKRON          0xD1  // speaker on
-#define DSP_CMD_SPKROFF         0xD3  // speaker off
-#define DSP_CMD_SPKRSTATUS      0xD8  // speaker status (0=off, FF=on)
-#define DSP_CMD_PAUSEDMA        0xD0  // pause DMA
-#define DSP_CMD_CONTDMA         0xD4  // continue DMA
-#define DSP_CMD_HALTAUTODMA     0xDA  // stop DMA autoinit mode
-#define DSP_CMD_INVERTER        0xE0  // byte inverter
-#define DSP_CMD_GETDSPVER       0xE1  // get dsp version
-#define DSP_CMD_GENERATEINT     0xF2  // cause sndblst to generate an interrupt.
-
-//
-// SB-16 support
-//
-#define DSP_CMD_SETDACRATE      0x41  // set SBPro-16 DAC rate
-#define DSP_CMD_SETADCRATE      0x42  // set SBPro-16 ADC rate
-#define DSP_CMD_STARTDAC16      0xB6  // start 16-bit DAC
-#define DSP_CMD_STARTADC16      0xBE  // start 16-bit ADC
-#define DSP_CMD_STARTDAC8       0xC6  // start 8-bit DAC
-#define DSP_CMD_STARTADC8       0xCE  // start 8-bit ADC
-#define DSP_CMD_PAUSEDMA16      0xD5  // pause 16-bit DMA
-#define DSP_CMD_CONTDMA16       0xD6  // continue 16-bit DMA
-#define DSP_CMD_HALTAUTODMA16   0xD9  // halt 16-bit DMA
 
 //
 // Indexed mixer registers

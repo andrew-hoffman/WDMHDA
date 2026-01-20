@@ -208,6 +208,9 @@ ValidateFormat
     // type of specifier used to indicate format specifics.  We are only
     // supporting PCM audio formats that use WAVEFORMATEX.
     //
+	// Limiting this to 22050-48000 because Windows's kernel mixer will
+	// try to resample anything lower to the highest supported multiple
+	// and native 8-11khz if even supported by the codec causes problems with buffering
     if  (   (Format->FormatSize >= sizeof(KSDATAFORMAT_WAVEFORMATEX))
         &&  IsEqualGUIDAligned(Format->MajorFormat,KSDATAFORMAT_TYPE_AUDIO)
         &&  IsEqualGUIDAligned(Format->SubFormat,KSDATAFORMAT_SUBTYPE_PCM)
@@ -218,13 +221,12 @@ ValidateFormat
             )
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
         &&  (   (waveFormat->wBitsPerSample == 16)
-            ||  (waveFormat->wBitsPerSample == 16)
             )
         &&  (   (waveFormat->nChannels == 2)
 
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 8000)
-            &&  (waveFormat->nSamplesPerSec <= 96000)
+        &&  (   (waveFormat->nSamplesPerSec >= 22050)
+            &&  (waveFormat->nSamplesPerSec <= 48000)
             )
         )
     {
@@ -437,8 +439,8 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
-        8000,   // Minimum rate. 
-        96000   // Maximum rate.
+        22050,   // Minimum rate. 
+        48000   // Maximum rate.
     }
 };
 

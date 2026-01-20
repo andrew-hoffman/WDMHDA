@@ -1,6 +1,6 @@
  HDA
 
- Timestamp is 696eb008 (Mon Jan 19 14:28:24 2026)
+ Timestamp is 696ed448 (Mon Jan 19 17:03:04 2026)
 
  Preferred load address is 00010000
 
@@ -10,7 +10,7 @@
  0002:000000b8 000006b0H .rdata                  DATA
  0003:00000000 00000d70H .data                   DATA
  0003:00000d70 00000014H .bss                    DATA
- 0004:00000000 0000bfd0H PAGE                    CODE
+ 0004:00000000 0000bfc0H PAGE                    CODE
  0005:00000000 000000a9H INIT                    CODE
  0005:000000ac 0000003cH .idata$2                CODE
  0005:000000e8 00000014H .idata$3                CODE
@@ -309,23 +309,23 @@
  0004:00009918       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001ee78 f   minwave.obj
  0004:00009be6       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 0001f146 f   minwave.obj
  0004:0000a052       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 0001f5b2 f   minwave.obj
- 0004:0000a27e       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 0001f7de f   minwave.obj
- 0004:0000a432       ??1CMiniportWaveCyclicHDA@@UAE@XZ 0001f992 f   minwave.obj
- 0004:0000a636       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 0001fb96 f   minwave.obj
- 0004:0000a8ce       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001fe2e f   minwave.obj
- 0004:0000aaba       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0002001a f   minwave.obj
- 0004:0000b0ba       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 0002061a f   minwave.obj
- 0004:0000b452       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000209b2 f   minwave.obj
- 0004:0000b5fe       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00020b5e f   minwave.obj
- 0004:0000b870       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 00020dd0 f   minwave.obj
- 0004:0000bae2       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00021042 f   minwave.obj
- 0004:0000bc76       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 000211d6 f   minwave.obj
- 0004:0000bebe       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 0002141e f   minwave.obj
- 0005:0000003e       _DriverEntry@8             0002157e f   adapter.obj
- 0005:000000ac       __IMPORT_DESCRIPTOR_ntoskrnl 000215ec     ntoskrnl:ntoskrnl.exe
- 0005:000000c0       __IMPORT_DESCRIPTOR_HAL    00021600     hal:HAL.dll
- 0005:000000d4       __IMPORT_DESCRIPTOR_portcls 00021614     portcls:portcls.sys
- 0005:000000e8       __NULL_IMPORT_DESCRIPTOR   00021628     ntoskrnl:ntoskrnl.exe
+ 0004:0000a26e       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 0001f7ce f   minwave.obj
+ 0004:0000a422       ??1CMiniportWaveCyclicHDA@@UAE@XZ 0001f982 f   minwave.obj
+ 0004:0000a626       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 0001fb86 f   minwave.obj
+ 0004:0000a8be       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001fe1e f   minwave.obj
+ 0004:0000aaaa       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0002000a f   minwave.obj
+ 0004:0000b0aa       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 0002060a f   minwave.obj
+ 0004:0000b442       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000209a2 f   minwave.obj
+ 0004:0000b5ee       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00020b4e f   minwave.obj
+ 0004:0000b860       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 00020dc0 f   minwave.obj
+ 0004:0000bad2       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00021032 f   minwave.obj
+ 0004:0000bc66       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 000211c6 f   minwave.obj
+ 0004:0000beae       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 0002140e f   minwave.obj
+ 0005:0000003e       _DriverEntry@8             0002155e f   adapter.obj
+ 0005:000000ac       __IMPORT_DESCRIPTOR_ntoskrnl 000215cc     ntoskrnl:ntoskrnl.exe
+ 0005:000000c0       __IMPORT_DESCRIPTOR_HAL    000215e0     hal:HAL.dll
+ 0005:000000d4       __IMPORT_DESCRIPTOR_portcls 000215f4     portcls:portcls.sys
+ 0005:000000e8       __NULL_IMPORT_DESCRIPTOR   00021608     ntoskrnl:ntoskrnl.exe
 
  entry point at        0005:0000003e
 

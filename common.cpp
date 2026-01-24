@@ -122,7 +122,6 @@ private:
     ULONG pin_headphone_node_number;
 
 	ULONG debug_kludge;
-	static tHardwareConfig m_stHardwareConfig;      // The hardware configuration.
 
 
     BOOLEAN m_bDMAInitialized;   // DMA initialized flag
@@ -156,7 +155,10 @@ private:
     );
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte);
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord);
-	BOOL DisableHDAPin (IN  TopoPinConfig);
+	STDMETHODIMP_(BOOLEAN) ReadRegistryBoolean(
+    IN  PCWSTR   ValueName,
+    IN  BOOLEAN  DefaultValue
+	);
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -318,38 +320,22 @@ MIXERSETTING DefaultMixerSettings[] =
 };
 
 //driver settings via registry keys
-static BOOLEAN skipControllerReset = false;
-static BOOLEAN skipCodecReset = false;
-static BOOLEAN useAltOut = false;
-static BOOLEAN useSPDIF = true;
-static BOOLEAN useDisabledPins = false;
-static BOOLEAN useDmaPos = true;
-//
-// This is the hardware configuration information.  The first struct is for 
-// nodes, which we default to FALSE.  The second struct is for Pins, which 
-// contains the configuration (FALSE) and the registry string which is the
-// reason for making a static struct so we can just fill in the name.
-//
-tHardwareConfig CAdapterCommon::m_stHardwareConfig =
+static BOOLEAN skipControllerReset;
+static BOOLEAN skipCodecReset;
+static BOOLEAN useAltOut;
+static BOOLEAN useSPDIF;
+static BOOLEAN useDisabledPins;
+static BOOLEAN useDmaPos;
+
+static REG_BOOL_SETTING g_BooleanSettings[] =
 {
-    // Nodes
-    {{FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE},
-     {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}, {FALSE}},
-    // Pins
-    {{FALSE, L"DisablePCBeep"},     // PINC_PCBEEP_PRESENT
-     {FALSE, L"DisablePhone"},      // PINC_PHONE_PRESENT
-     {FALSE, L"DisableMic2"},       // PINC_MIC2_PRESENT
-     {FALSE, L"DisableVideo"},      // PINC_VIDEO_PRESENT
-     {FALSE, L"DisableAUX"},        // PINC_AUX_PRESENT
-     {FALSE, L"DisableHeadphone"},  // PINC_HPOUT_PRESENT
-     {FALSE, L"DisableMonoOut"},    // PINC_MONOOUT_PRESENT
-     {FALSE, L"DisableMicIn"},      // PINC_MICIN_PRESENT
-     {FALSE, L"DisableMic"},        // PINC_MIC_PRESENT
-     {FALSE, L"DisableLineIn"},     // PINC_LINEIN_PRESENT
-     {FALSE, L"DisableCD"}}         // PINC_CD_PRESENT
+    { L"SkipControllerReset", &skipControllerReset, FALSE },
+    { L"SkipCodecReset",      &skipCodecReset,      FALSE },
+    { L"UseAltOut",           &useAltOut,           FALSE },
+    { L"UseSPDIF",            &useSPDIF,            TRUE  },
+    { L"UseDisabledPins",     &useDisabledPins,     FALSE },
+    { L"UseDmaPos",           &useDmaPos,           TRUE  },
 };
-
-
 
 
 #pragma code_seg("PAGE")
@@ -425,8 +411,13 @@ Init
 
 	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
-
 	
+	//Read settings from registry
+	for (ULONG i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
+		*g_BooleanSettings[i].Variable =
+            ReadRegistryBoolean(g_BooleanSettings[i].ValueName, 
+			g_BooleanSettings[i].DefaultValue);
+    }
 
 	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
@@ -588,7 +579,7 @@ Init
 
 	DOUT(DBG_SYSINFO, ("%d Resources in List", ResourceList->NumberOfEntries() ));
 
-    for (ULONG i = 0; i < ResourceList->NumberOfEntries(); i++) {
+    for (i = 0; i < ResourceList->NumberOfEntries(); i++) {
         PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, i);
         if (desc) {
 			if (!memLength) {
@@ -2161,106 +2152,82 @@ STDMETHODIMP_(void) CAdapterCommon::hda_initialize_audio_selector(ULONG audio_se
 	}
 }
 
-/*****************************************************************************
- * CAdapterCommon::DisableHDAPin
- *****************************************************************************
- * Reads settings from Registry
- * Returns TRUE when the HW vendor wants to disable the pin. A disabled pin is
- * not shown to the user (means it is not included in the topology). The
- * reason for doing this could be that some of the input lines like Aux or
- * Video are not available to the user (to plug in something) but the codec
- * can handle those lines.
- * TODO: reworking this into general registry setting reader
- * but i do need to be able to disable pins as well. 
- */
-BOOL CAdapterCommon::DisableHDAPin
-(
-    IN  TopoPinConfig pin
-)
+// Reads any Boolean value from the Registry Settings key.
+// If nonexistent, returns DefaultValue
+STDMETHODIMP_(BOOLEAN)
+CAdapterCommon::ReadRegistryBoolean(
+    IN  PCWSTR   ValueName,
+    IN  BOOLEAN  DefaultValue
+	)
 {
-    PAGED_CODE ();
+    PAGED_CODE();
 
-    PREGISTRYKEY    DriverKey;
-    PREGISTRYKEY    SettingsKey;
-    UNICODE_STRING  sKeyName;
-    ULONG           ulDisposition;
-    ULONG           ulResultLength;
-    PVOID           KeyInfo = NULL;
-    BOOL            bDisable = FALSE;
+    PREGISTRYKEY   DriverKey   = NULL;
+    PREGISTRYKEY   SettingsKey = NULL;
+    UNICODE_STRING KeyName;
+    ULONG          Disposition;
+    NTSTATUS       Status;
+    BOOLEAN        Result = DefaultValue;
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::DisableHDAPin]"));
-    
-    // open the driver registry key
-    NTSTATUS ntStatus = PcNewRegistryKey (&DriverKey,        // IRegistryKey
-                                          NULL,              // OuterUnknown
-                                          DriverRegistryKey, // Registry key type
-                                          KEY_ALL_ACCESS,    // Access flags
-                                          m_pDeviceObject,   // Device object
-                                          NULL,              // Subdevice
-                                          NULL,              // ObjectAttributes
-                                          0,                 // Create options
-                                          NULL);             // Disposition
-    if (NT_SUCCESS (ntStatus))
+	const ULONG AllocSize =
+    sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(DWORD);
+
+    PKEY_VALUE_PARTIAL_INFORMATION Info =
+        (PKEY_VALUE_PARTIAL_INFORMATION)
+            ExAllocatePool(PagedPool, AllocSize);
+
+	Status = PcNewRegistryKey( &DriverKey,               // IRegistryKey
+                               NULL,                     // OuterUnknown
+                               DriverRegistryKey,        // Registry key type
+                               KEY_READ,				 // Access flags
+                               m_pDeviceObject,          // Device object
+                               NULL,                     // Subdevice
+                               NULL,                     // ObjectAttributes
+                               0,                        // Create options
+                               NULL );                   // Disposition
+
+    if (!NT_SUCCESS(Status))
+        goto Exit;
+
+    RtlInitUnicodeString(&KeyName, L"Settings");
+
+    Status = DriverKey->NewSubKey(
+        &SettingsKey,
+        NULL,
+        KEY_READ,
+        &KeyName,
+        REG_OPTION_NON_VOLATILE,
+        &Disposition
+    );
+    if (!NT_SUCCESS(Status))
+        goto Exit;
+
+    if (!Info)
+        goto Exit;
+
+    RtlInitUnicodeString(&KeyName, ValueName);
+
+    Status = SettingsKey->QueryValueKey(
+        &KeyName,
+        KeyValuePartialInformation,
+        Info,
+        AllocSize,
+        &Disposition
+    );
+
+    if (NT_SUCCESS(Status) &&
+        Info->DataLength >= sizeof(BYTE))
     {
-        // make a unicode string for the subkey name
-        RtlInitUnicodeString (&sKeyName, L"Settings");
-
-        // open the settings subkey
-        ntStatus = DriverKey->NewSubKey (&SettingsKey,            // Subkey
-                                         NULL,                    // OuterUnknown
-                                         KEY_ALL_ACCESS,          // Access flags
-                                         &sKeyName,               // Subkey name
-                                         REG_OPTION_NON_VOLATILE, // Create options
-                                         &ulDisposition);
-
-        if (NT_SUCCESS (ntStatus))
-        {
-            // allocate data to hold key info
-            KeyInfo = ExAllocatePool (PagedPool,
-                                      sizeof(KEY_VALUE_PARTIAL_INFORMATION) +
-                                      sizeof(BYTE));
-            if (NULL != KeyInfo)
-            {
-                // init key name
-                RtlInitUnicodeString (&sKeyName, m_stHardwareConfig.
-                                            Pins[pin].sRegistryName);
-    
-                // query the value key
-                ntStatus = SettingsKey->QueryValueKey (&sKeyName,
-                                   KeyValuePartialInformation,
-                                   KeyInfo,
-                                   sizeof(KEY_VALUE_PARTIAL_INFORMATION) +
-                                        sizeof(BYTE),
-                                   &ulResultLength );
-                if (NT_SUCCESS (ntStatus))
-                {
-                    PKEY_VALUE_PARTIAL_INFORMATION PartialInfo =
-                                (PKEY_VALUE_PARTIAL_INFORMATION)KeyInfo;
-
-                    if (PartialInfo->DataLength == sizeof(BYTE))
-                    {
-                        // store the value
-                        if (*(PBYTE)PartialInfo->Data)
-                            bDisable = TRUE;
-                        else
-                            bDisable = FALSE;
-                    }
-                }
-
-                // free the key info
-                ExFreePool (KeyInfo);
-            }
-
-            // release the settings key
-            SettingsKey->Release ();
-        }
-
-        // release the driver key
-        DriverKey->Release ();
+        Result = (*(PBYTE)Info->Data) ? TRUE : FALSE;
     }
 
-    // if one of the stuff above fails we return the default, which is FALSE.
-    return bDisable;
+    ExFreePool(Info);
+
+Exit:
+    if (SettingsKey) SettingsKey->Release();
+    if (DriverKey)   DriverKey->Release();
+
+    return Result;
 }
 
 
@@ -2269,7 +2236,7 @@ BOOL CAdapterCommon::DisableHDAPin
 #pragma code_seg() 
 
 STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) {
-	//TODO: schedule as a periodic task 
+	//TODO: schedule as a periodic task DPC
 	//and make sure to clean up correctly on driver unload!
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
 		hda_disable_pin_output(codecNumber, pin_output_node_number);

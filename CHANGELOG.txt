@@ -1,3 +1,28 @@
+## WDMHDA Alpha-015 2026-01-23
+
+Note: You must install this version of the driver again with the .inf file!
+
+- Add Registry key reader for driver settings. Change settings in the [AddReg] section of HDA.inf
+- Add support for DMA Position Buffer (untested, will check on real hardware)
+- restrict available sample rates to 22050-48000 because Windows will try the native sample rate of the WAV first and then the highest rate possible. Supporting 96khz means that Windows will use it ALL THE TIME. Supporting rates below 22050 makes buffer interrupt handling more complicated and Windows can just upsample it anyway. 
+
+
+## WDMHDA Alpha-014 2026-01-12
+
+- Better debugging information
+- Ignores outputs which are listed as Not Connected in the BIOS pin configuration. If this loads and displays a speaker icon in the Taskbar but you get no sound at all, try version Alpha-012 instead. I will add a Registry key to enable / disable this but haven't done it yet.
+
+edit 2026-01-12: fixed page fault crash bug. Please redownload
+
+
+## WDMHDA Alpha-013 2026-01-09
+
+- Now tries to connect all Line Out paths in codec (up to 8 total output paths).
+- Rearranged a lot of the codec init to improve compatibility as much as possible
+- Headphone connection detection is still not working.
+- Can now produce some audio on a system with an ALC887 but it is garbled. I think this is an interrupt sharing issue, maybe with the SoftGPU video driver. The problem system puts everything on IRQ 11.
+
+
 ## WDMHDA Alpha-012 2026-01-02
 
 - tries to init the codecs listed in STATESTS before resorting to probing blindly

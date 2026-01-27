@@ -524,8 +524,8 @@ Init
 
 					DbgPrint( "Intel PCH/SCH\n");
 					//disable no-snoop transaction feature (clear bit 11) if it is set
-					tmp = *((PUSHORT)(pConfigMem[INTEL_SCH_HDA_DEVC]));
-					if(tmp & INTEL_SCH_HDA_DEVC_NOSNOOP){
+					tmp = *((PUSHORT)(pConfigMem + INTEL_SCH_HDA_DEVC));
+					if((tmp & INTEL_SCH_HDA_DEVC_NOSNOOP) != 0){
 						DbgPrint( "0x%X - disabling nosnoop transactions\n", tmp);
 						ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC, ~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
 					} else {
@@ -604,7 +604,7 @@ Init
         return STATUS_INSUFFICIENT_RESOURCES;
 	} 
 
-	//Map the device memory into kernel space
+	//Map the HDA controller PCI registers into kernel memory 
     m_pHDARegisters = (PUCHAR) MmMapIoSpace(physAddr, memLength, MmNonCached);
 
     if (!m_pHDARegisters) {
@@ -3229,12 +3229,14 @@ STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
 
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
-		USHORT stream_id = 1;		
+		USHORT stream_id = FirstOutputStream; // stream 4 for most chipsets		
 		if (useDmaPos){
-			ULONG dpos = *(DmaPosVirt + stream_id - 1); //stream 1 pos is at offset 0, and so on
+			ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosVirt) + (stream_id * 8));
 			ULONG lpos = readULONG(OutputStreamBase + 0x04);
-			DOUT (DBG_PRINT, ("dpos %d %d %d %d %d, %d", 
-				*(DmaPosVirt), *(DmaPosVirt+1), *(DmaPosVirt+2), *(DmaPosVirt+3), *(DmaPosVirt+4), lpos));
+			DOUT (DBG_PRINT, ("dpos %x %x %x %x %x %x %x %x %x, %d", 
+				*(DmaPosVirt), *(DmaPosVirt+1), *(DmaPosVirt+2), *(DmaPosVirt+3), *(DmaPosVirt+4),
+				*(DmaPosVirt+5), *(DmaPosVirt+6), *(DmaPosVirt+7), *(DmaPosVirt+8),
+				lpos));
 
 			//check if DMA position buffer is moving or if it's stuck at 0
 			//TODO: dpos ever updating from 0 is not sufficient to confirm it works all the time

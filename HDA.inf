@@ -11,12 +11,12 @@ Signature="$CHICAGO$"
 Class=MEDIA
 ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
 provider=%MSFT%
-DriverVer=1/23/2026,5.00.2195.15
+DriverVer=1/28/2026,5.00.2195.16
 
 ;You must specify which platform is supported by each SourceDisksNames section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
 [SourceDisksNames.x86]
-222=%DiskDescription%,,,
+222=%DiskDescription%,,,\
 
 ;You must also specify which platform is supported by each SourceDisksFiles section
 ;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
@@ -153,7 +153,7 @@ HKR,Settings,SkipCodecReset,0x00010001,0
 HKR,Settings,UseAltOut,0x00010001,0
 HKR,Settings,UseSPDIF,0x00010001,1
 HKR,Settings,UseDisabledPins,0x00010001,0
-HKR,Settings,UseDmaPos,0x00010001,1
+HKR,Settings,UseDmaPos,0x00010001,0
 
 [DestinationDirs]
 HDA.CopyList      = 10,system32\drivers ; %SystemRoot%\system32\drivers
@@ -315,8 +315,8 @@ ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
 ServiceBinary  = %10%\system32\drivers\HDA.sys
 
 [Strings]
-MSFT="Microsoft"
-CLMfgName="Sirius Cybernetics Corp."
+MSFT="Drew Hoffman, VOGONS"
+CLMfgName="Sirius Cybernetics"
 DiskDescription="HD Audio WDM Sample Driver Disk"
 *WDMPNPB003.DeviceDesc="HD Audio Controller (WDM)"
 *WDM_HDA.DeviceDesc="HD Audio Controller (WDM)"

@@ -334,7 +334,7 @@ static REG_BOOL_SETTING g_BooleanSettings[] =
     { L"UseAltOut",           &useAltOut,           FALSE },
     { L"UseSPDIF",            &useSPDIF,            TRUE  },
     { L"UseDisabledPins",     &useDisabledPins,     FALSE },
-    { L"UseDmaPos",           &useDmaPos,           TRUE  },
+    { L"UseDmaPos",           &useDmaPos,           FALSE },
 };
 
 
@@ -450,13 +450,16 @@ Init
 		case 0x1002: //ATI
 			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
 				DbgPrint( "ATI SB450/600\n");
-				ntStatus = WriteConfigSpaceByte(0x42, 0xf8, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
+				ntStatus = WriteConfigSpaceByte(0x42,
+					~ATI_SB450_HDAUDIO_ENABLE_SNOOP, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
+				//should read back & confirm it was set.
 			}
 			break;
 		case 0x10de: //nvidia
 			if((pci_dev == 0x026c) || (pci_dev == 0x0371)){
 				DbgPrint( "Nforce 510/550\n");			 
-				ntStatus = WriteConfigSpaceByte(0x4e, 0xf0, NVIDIA_HDA_ENABLE_COHBITS);
+				ntStatus = WriteConfigSpaceByte(0x4e,
+					~NVIDIA_HDA_ENABLE_COHBITS, NVIDIA_HDA_ENABLE_COHBITS);
 			}
 			break;
 		case 0x8086: //Intel
@@ -464,7 +467,8 @@ Init
 				case 0x2668://ICH6
 				case 0x27D8://ICH7
 					DbgPrint( "Intel ICH6/7\n");
-					//need to set device 27 function 0 configspace offset 40h bit 0 to 1 to enable HDA link mode (if it isnt already)
+					//set device 27 function 0 configspace offset 40h bit 0 to 1
+					//to enable HDA link mode (if it isnt already)
 					ntStatus = WriteConfigSpaceByte(0x40, 0xfe, 0x01);
 					break;
 				//PCH
@@ -527,7 +531,8 @@ Init
 					tmp = *((PUSHORT)(pConfigMem + INTEL_SCH_HDA_DEVC));
 					if((tmp & INTEL_SCH_HDA_DEVC_NOSNOOP) != 0){
 						DbgPrint( "0x%X - disabling nosnoop transactions\n", tmp);
-						ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC, ~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
+						ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC,
+							~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
 					} else {
 						DbgPrint( "0x%X - snoop already ok\n", tmp);
 					}
@@ -558,21 +563,19 @@ Init
 	}
 
 	if (!NT_SUCCESS (ntStatus)){
-		DbgPrint( "\nPCI Configspace Write Failed! 0x%X\n", ntStatus);
-        return ntStatus; //is failure fatal?
+		DbgPrint( "\nPCI Config Space Write Failed! 0x%X\n", ntStatus);
+        //return ntStatus; //is failure fatal? i dont think so
 	}
 
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
 	//but it should be one driver object per HDA controller.
-	//which may access multiple codecs but for now only sending 1 audio stream to all
-	//hardware mixing may come, MUCH later.
+	//which may access multiple codecs
+	//for now only sending 1 output audio stream to all
 
     //
     //Get the memory base address for the HDA controller registers. 
-    //
-
-    // Get memory resource - note we only want the first BAR
+    // note we only want the first BAR
 	// on Skylake and newer mobile chipsets,
 	// there is a DSP interface at BAR2 for Intel Smart Sound Technology
 	// TODO: fix adapter.cpp to check for this better
@@ -3229,36 +3232,33 @@ STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
 
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
-		USHORT stream_id = FirstOutputStream; // stream 4 for most chipsets		
-		if (useDmaPos){
-			ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosVirt) + (stream_id * 8));
-			ULONG lpos = readULONG(OutputStreamBase + 0x04);
-			DOUT (DBG_PRINT, ("dpos %x %x %x %x %x %x %x %x %x, %d", 
-				*(DmaPosVirt), *(DmaPosVirt+1), *(DmaPosVirt+2), *(DmaPosVirt+3), *(DmaPosVirt+4),
-				*(DmaPosVirt+5), *(DmaPosVirt+6), *(DmaPosVirt+7), *(DmaPosVirt+8),
-				lpos));
+	//todo: support multiple streams
+	USHORT stream_id = FirstOutputStream; // stream 4 for most chipsets		
+	if (useDmaPos){
+		ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosVirt) + (stream_id * 8));
+		ULONG lpos = readULONG(OutputStreamBase + 0x04);
 
-			//check if DMA position buffer is moving or if it's stuck at 0
-			//TODO: dpos ever updating from 0 is not sufficient to confirm it works all the time
-			// but IS sufficient to detect emulators with no support for dpos
-			if(dpos != 0) {
-				bad_dpos_count = 0;
-				return dpos;
-			} else if((dpos == 0) && (lpos != 0)){
-				//LPIB is moving but DMA isn't
-				if(++bad_dpos_count > 5){
-					DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
-					useDmaPos = FALSE;
-					return lpos;
-				}
-				return dpos;
-			} else {
-				return 0;
+		//check if DMA position buffer is moving or if it's stuck at 0
+		//TODO: dpos ever updating from 0 is not sufficient to confirm it works all the time
+		// but IS sufficient to detect emulators with no support for dpos
+		if (dpos != 0) {
+			bad_dpos_count = 0;
+			return dpos;
+		} else if ((dpos == 0) && (lpos != 0)){
+			//LPIB is moving but DMA isn't
+			if (++bad_dpos_count > 9){
+				DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
+				useDmaPos = FALSE;
+				return lpos;
 			}
-		} else{
-			//using LPIB
-			return readULONG(OutputStreamBase + 0x04);
+			return dpos;
+		} else {
+			return 0;
 		}
+	} else {
+		//using LPIB
+		return readULONG(OutputStreamBase + 0x04);
+	}
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {

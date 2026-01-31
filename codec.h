@@ -16,6 +16,11 @@
 class CAdapterCommon;
 
 /*****************************************************************************
+ * Typedefs
+ */
+typedef ULONG (*HDA_SEND_VERB_FUNC)(CAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
+
+/*****************************************************************************
  * HDA_Codec
  *****************************************************************************
  * HD Audio Codec object for managing individual codec instances on the link.
@@ -27,6 +32,10 @@ private:
     CAdapterCommon* pAdapter;           // Reference to parent adapter
     UCHAR codec_address;                // Codec address on the link (0-15)
     ULONG codec_id;                     // Codec vendor ID and device ID
+    
+    HDA_SEND_VERB_FUNC hda_send_verb_fp; // Function pointer to send verb
+    BOOLEAN useSpdif;                   // Use SPDIF flag
+    BOOLEAN useAltOut;                  // Use alternate output flag
     
     ULONG is_initialized_useful_output;
     ULONG selected_output_node;
@@ -44,12 +53,11 @@ private:
     ULONG pin_headphone_node_number;
 
 public:
-    HDA_Codec(CAdapterCommon* adapter, UCHAR num);
+    HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, CAdapterCommon* adapter);
     ~HDA_Codec();
 
 	NTSTATUS InitializeCodec();
 
-	STDMETHODIMP_(ULONG) hda_send_verb(ULONG node, ULONG verb, ULONG command);
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
 	STDMETHODIMP_(ULONG) hda_get_node_connection_entries(ULONG node, ULONG connection_entries_number);

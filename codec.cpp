@@ -17,9 +17,12 @@
  *****************************************************************************
  * Constructor - Initializes a codec object
  */
-HDA_Codec::HDA_Codec(CAdapterCommon* adapter, UCHAR address)
+HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, CAdapterCommon* adapter)
     : pAdapter(adapter),
       codec_address(address),
+      hda_send_verb_fp(&CAdapterCommon::SendVerb),
+      useSpdif(spdif),
+      useAltOut(altOut),
       codec_id(0),
       is_initialized_useful_output(0),
       selected_output_node(0),
@@ -59,7 +62,7 @@ NTSTATUS HDA_Codec::InitializeCodec()
 	RtlZeroMemory(&out_paths, sizeof(HDA_OUTPUT_LIST));
 
 	//test if this codec exists
-	ULONG codec_id = hda_send_verb(0, 0xF00, 0);
+	ULONG codec_id = hda_send_verb_fp(pAdapter, codec_address, 0, 0xF00, 0);
 	if(codec_id == 0x00000000) {
 		return STATUS_NOT_FOUND;
 	}
@@ -70,14 +73,14 @@ NTSTATUS HDA_Codec::InitializeCodec()
 	DOUT (DBG_SYSINFO, ("PID: %04x", (codec_id & 0xFFFF) ));
 
 	//find Audio Function Groups
-	ULONG response = hda_send_verb(0, 0xF00, 0x04);
+	ULONG response = hda_send_verb_fp(pAdapter, codec_address, 0, 0xF00, 0x04);
 
 	DOUT (DBG_SYSINFO, ( "First Group node: %d Number of Groups: %d", 
 	 (response >> 16) & 0xFF, response & 0xFF 
 	 ));
 	ULONG node = (response >> 16) & 0xFF;
 	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
-		if((hda_send_verb(node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
+		if((hda_send_verb_fp(pAdapter, codec_address, node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
 			//initialize (first) Audio Function Group
 			return hda_initialize_audio_function_group(node); 
 			//todo: handle multiple AFGs?
@@ -97,19 +100,19 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	HDA_NODE_PATH path;
 
 	//reset AFG
-	hda_send_verb(afg_node_number, 0x7FF, 0x00);
+	hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0x7FF, 0x00);
 
 	//disable unsolicited responses
-	hda_send_verb(afg_node_number, 0x708, 0x00);
+	hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0x708, 0x00);
 
 	//enable power for AFG
-	hda_send_verb(afg_node_number, 0x705, 0x00);
+	hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0x705, 0x00);
 
 	//read available info
-	afg_node_sample_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x0A);
-	afg_node_stream_format_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x0B);
-	afg_node_input_amp_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x0D);
-	afg_node_output_amp_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x12);
+	afg_node_sample_capabilities = hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0xF00, 0x0A);
+	afg_node_stream_format_capabilities = hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0xF00, 0x0B);
+	afg_node_input_amp_capabilities = hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0xF00, 0x0D);
+	afg_node_output_amp_capabilities = hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0xF00, 0x12);
 
 	//log AFG info
 	DOUT (DBG_SYSINFO, ("\nAudio Function Group node %d", afg_node_number));
@@ -120,7 +123,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	//log all AFG nodes and find useful PINs
 	DbgPrint( ("\n\nLIST OF ALL NODES IN AFG:"));
-	ULONG subordinate_node_count_reponse = hda_send_verb(afg_node_number, 0xF00, 0x04);
+	ULONG subordinate_node_count_reponse = hda_send_verb_fp(pAdapter, codec_address, afg_node_number, 0xF00, 0x04);
 	ULONG pin_alternative_output_node_number = 0, pin_speaker_default_node_number = 0; 
 	ULONG pin_speaker_node_number = 0, pin_headphone_node_number = 0, pin_spdif_node_number = 0;
 
@@ -143,7 +146,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			DbgPrint( ("Audio Output"));
 
 			//disable every audio output by connecting it to stream 0
-			hda_send_verb(node, 0x706, 0x00);
+			hda_send_verb_fp(pAdapter, codec_address, node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
 			DbgPrint( ("Audio Input"));
@@ -158,7 +161,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			DbgPrint( ("Pin Complex "));
 
 			//read type of PIN
-			type_of_node = ((hda_send_verb(node, 0xF1C, 0x00) >> 20) & 0xF);
+			type_of_node = ((hda_send_verb_fp(pAdapter, codec_address, node, 0xF1C, 0x00) >> 20) & 0xF);
 
 			if(type_of_node == HDA_PIN_LINE_OUT) {
 				DbgPrint( ("Line Out"));
@@ -174,11 +177,11 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				}
 
 				//find if there is device connected to this PIN
-				if((hda_send_verb(node, 0xF00, 0x09) & 0x4) == 0x4) {
+				if((hda_send_verb_fp(pAdapter, codec_address, node, 0xF00, 0x09) & 0x4) == 0x4) {
 					//find if it is jack or fixed device
-					if((hda_send_verb(node, 0xF1C, 0x00) >> 30) != 0x1) {
+					if((hda_send_verb_fp(pAdapter, codec_address, node, 0xF1C, 0x00) >> 30) != 0x1) {
 						//find if is device output capable
-						if((hda_send_verb(node, 0xF00, 0x0C) & 0x10) == 0x10) {
+						if((hda_send_verb_fp(pAdapter, codec_address, node, 0xF00, 0x0C) & 0x10) == 0x10) {
 							//there is connected device
 							DbgPrint( ("connected output device"));
 							//we will use first pin with connected device, so save node number only for first PIN
@@ -214,7 +217,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				DbgPrint( ("SPDIF Out"));
 	
 				//save this node, this variable contain number of last alternative output
-				if (pAdapter->useSPDIF){
+				if (useSpdif){
 					pin_spdif_node_number = node;
 					DbgPrint( (" used"));
 				} else {
@@ -406,13 +409,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 STDMETHODIMP_(UCHAR) HDA_Codec::hda_get_node_type (ULONG node){
 	PAGED_CODE ();
-	return (UCHAR) ((hda_send_verb(node, 0xF00, 0x09) >> 20) & 0xF);
+	return (UCHAR) ((hda_send_verb_fp(pAdapter, codec_address, node, 0xF00, 0x09) >> 20) & 0xF);
 }
 
 STDMETHODIMP_(ULONG) HDA_Codec::hda_get_node_connection_entries (ULONG node, ULONG connection_entries_number) {
 	PAGED_CODE ();
 	//read connection capabilities
-	ULONG connection_list_capabilities = hda_send_verb(node, 0xF00, 0x0E);
+	ULONG connection_list_capabilities = hda_send_verb_fp(pAdapter, codec_address, node, 0xF00, 0x0E);
 	
 	//test if this connection even exists
 	if(connection_entries_number >= (connection_list_capabilities & 0x7F)) {
@@ -421,15 +424,15 @@ STDMETHODIMP_(ULONG) HDA_Codec::hda_get_node_connection_entries (ULONG node, ULO
 
 	//return number of connected node
 	if((connection_list_capabilities & 0x80) == 0x00) { //short form
-		return ((hda_send_verb(node, 0xF02, ((connection_entries_number/4)*4)) >> ((connection_entries_number%4)*8)) & 0xFF);
+		return ((hda_send_verb_fp(pAdapter, codec_address, node, 0xF02, ((connection_entries_number/4)*4)) >> ((connection_entries_number%4)*8)) & 0xFF);
 	}
 	else { //long form
-		return ((hda_send_verb(node, 0xF02, ((connection_entries_number/2)*2)) >> ((connection_entries_number%2)*16)) & 0xFFFF);
+		return ((hda_send_verb_fp(pAdapter, codec_address, node, 0xF02, ((connection_entries_number/2)*2)) >> ((connection_entries_number%2)*16)) & 0xFFFF);
 	}
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node) {
-	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) | 0x40));
+	hda_send_verb_fp(pAdapter, codec_address, pin_node, 0x707, (hda_send_verb_fp(pAdapter, codec_address, pin_node, 0xF07, 0x00) | 0x40));
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
@@ -438,7 +441,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	if (pin_headphone_node_number != 0
-    && (hda_send_verb(pin_headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+    && (hda_send_verb_fp(pAdapter, codec_address, pin_headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
 		return TRUE;
 	}
 	else {

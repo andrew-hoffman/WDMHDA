@@ -204,6 +204,7 @@ public:
 	STDMETHODIMP_(NTSTATUS) InitHDAController (void);
 
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
+	static ULONG SendVerb(CAdapterCommon* pAdapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 	STDMETHODIMP_(PULONG)	get_bdl_mem(void);
 	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(void);
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
@@ -1335,7 +1336,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		if((codec_id != 0x0) && (codec_id != 0xFFFFFFFF) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
 			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(this, codec_number);
+			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
 			if (pCodec) {
 				pCodecs[codecCount++] = pCodec;
 				ntStatus = pCodec->InitializeCodec();
@@ -1393,7 +1394,7 @@ blind_probe:
 			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
 
 			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(this, codec_number);
+			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
 			if (pCodec) {
 				pCodecs[codecCount++] = pCodec;
 				ntStatus = pCodec->InitializeCodec();
@@ -1444,7 +1445,7 @@ hda_use_pio_interface:
 		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
 			DOUT (DBG_SYSINFO, ("HDA:  Codec %d PIO communication interface", codec_id));
 			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(this, codec_number);
+			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
 			if (pCodec) {
 				pCodecs[codecCount++] = pCodec;
 				ntStatus = pCodec->InitializeCodec();
@@ -1810,6 +1811,10 @@ ReadController
 	*/
 
     return returnValue;
+}
+
+ULONG CAdapterCommon::SendVerb(CAdapterCommon* pAdapter, ULONG codec, ULONG node, ULONG verb, ULONG command) {
+    return pAdapter->hda_send_verb(codec, node, verb, command);
 }
 
 /*****************************************************************************

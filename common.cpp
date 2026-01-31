@@ -202,7 +202,6 @@ public:
 
 
 	STDMETHODIMP_(NTSTATUS) InitHDAController (void);
-	STDMETHODIMP_(NTSTATUS) InitializeCodec (UCHAR num);
 
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
 	STDMETHODIMP_(PULONG)	get_bdl_mem(void);
@@ -365,17 +364,12 @@ Init
 	PHYSICAL_ADDRESS physAddr = {0};
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::Init]"));
+	ULONG i;
         
     //
     // Save the device object
     //
     m_pDeviceObject = DeviceObject;
-
-	// Initialize codec array
-	codecCount = 0;
-	for (UCHAR i = 0; i < 16; i++) {
-		pCodecs[i] = NULL;
-	}
 
 	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
     DOUT(DBG_SYSINFO, ("Initial PDO align was %d", 
@@ -391,11 +385,17 @@ Init
 	KeInitializeSpinLock(&QLock);
 	
 	//Read settings from registry
-	for (ULONG i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
+	for (i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
 		*g_BooleanSettings[i].Variable =
             ReadRegistryBoolean(g_BooleanSettings[i].ValueName, 
 			g_BooleanSettings[i].DefaultValue);
     }
+
+	// Initialize codec array
+	codecCount = 0;
+	for (i = 0; i < 16; i++) {
+		pCodecs[i] = NULL;
+	}
 
 	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
@@ -1465,46 +1465,6 @@ hda_use_pio_interface:
     return ntStatus;
 }
 
-/*****************************************************************************
- * CAdapterCommon::InitializeCodec
- *****************************************************************************
- */
-
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitializeCodec (UCHAR codec_number)
-{
-    PAGED_CODE ();
-
-	//test if this codec exists
-	ULONG codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-	if(codec_id == 0x00000000) {
-		return STATUS_NOT_FOUND;
-	}
-	codecNumber = codec_number;
-	codec_ven = (USHORT)(codec_id >> 16);
-	codec_dev = (USHORT)(codec_id & 0xFFFF);
-
-	//log basic codec info
-	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
-	codec_number, codec_ven, codec_dev);
-
-	//find Audio Function Groups
-	ULONG response = hda_send_verb(codec_number, 0, 0xF00, 0x04);
-
-	DOUT (DBG_SYSINFO, ( "First Group node: %d Number of Groups: %d", 
-	 (response >> 16) & 0xFF, response & 0xFF 
-	 ));
-	ULONG node = (response >> 16) & 0xFF;
-	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
-		if((hda_send_verb(codec_number, node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
-			//initialize first Audio Function Group
-			if ( NT_SUCCESS( hda_initialize_audio_function_group(codec_number, node) )){
-				return STATUS_SUCCESS;
-			}
-		}
-	}
-	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
-	return STATUS_NOT_FOUND;	
-}
 
 /*****************************************************************************
  * Note: hda_initialize_audio_function_group, hda_initialize_output_pin,
@@ -1512,414 +1472,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitializeCodec (UCHAR codec_number)
  * hda_initialize_audio_selector have been moved to HDA_Codec class
  *****************************************************************************/
 
-/*****************************************************************************
- * CAdapterCommon::hda_get_node_type
- *****************************************************************************
- */
-	PAGED_CODE ();
-	HDA_NODE_PATH path;
-
-	//reset AFG
-	hda_send_verb(codec_number, afg_node_number, 0x7FF, 0x00);
-
-	//disable unsolicited responses
-	hda_send_verb(codec_number, afg_node_number, 0x708, 0x00);
-
-	//enable power for AFG
-	hda_send_verb(codec_number, afg_node_number, 0x705, 0x00);
-
-	//read available info
-	afg_node_sample_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0A);
-	afg_node_stream_format_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0B);
-	afg_node_input_amp_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x0D);
-	afg_node_output_amp_capabilities = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x12);
-
-	//log AFG info
-	DOUT (DBG_SYSINFO, ("\nAudio Function Group node %d", afg_node_number));
-	DOUT (DBG_SYSINFO, ("\nAFG sample capabilities: 0x%x", afg_node_sample_capabilities));
-	DOUT (DBG_SYSINFO, ("\nAFG stream format capabilities: 0x%x", afg_node_stream_format_capabilities));
-	DOUT (DBG_SYSINFO, ("\nAFG input amp capabilities: 0x%x", afg_node_input_amp_capabilities));
-	DOUT (DBG_SYSINFO, ("\nAFG output amp capabilities: 0x%x", afg_node_output_amp_capabilities));
-
-	//log all AFG nodes and find useful PINs
-	DbgPrint( ("\n\nLIST OF ALL NODES IN AFG:"));
-	ULONG subordinate_node_count_reponse = hda_send_verb(codec_number, afg_node_number, 0xF00, 0x04);
-	ULONG pin_alternative_output_node_number = 0, pin_speaker_default_node_number = 0; 
-	ULONG pin_speaker_node_number = 0, pin_headphone_node_number = 0, pin_spdif_node_number = 0;
-
-	pin_output_node_number = 0;
-	pin_headphone_node_number = 0;
-
-	//For all nodes in this AFG
-	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
-		type_of_node = 0; node < last_node; node++) {
-
-		//log number of node
-		DbgPrint("\n%d ", node);
-  
-		//get type of node
-		type_of_node = hda_get_node_type(codec_number, node);
-
-		//process node
-		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
-			DbgPrint( ("Output Converter"));
-
-			//disable every audio output by connecting it to stream 0
-			hda_send_verb(codec_number, node, 0x706, 0x00);
-		}
-		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
-			DbgPrint( ("Input Converter"));
-		}
-		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
-			DbgPrint( ("Audio Mixer"));
-		}
-		else if(type_of_node == HDA_WIDGET_AUDIO_SELECTOR) {
-			DbgPrint( ("Audio Selector"));
-		}
-		else if(type_of_node == HDA_WIDGET_PIN_COMPLEX) {
-			DbgPrint( ("Pin Complex "));
-
-			//read pin_config register
-			ULONG pin_config = hda_send_verb(codec_number, node, 0xF1C, 0x00);
-
-			//break out all pin config fields
-			ULONG pin_connectivity		= (pin_config >> 30) & 0x3;
-			ULONG pin_loaction_fr		= (pin_config >> 28) & 0x3;
-			ULONG pin_location_geo		= (pin_config >> 24) & 0xf;
-			ULONG pin_node_type			= (pin_config >> 20) & 0xF;
-			ULONG pin_connection_type	= (pin_config >> 16) & 0xF;
-			ULONG pin_color				= (pin_config >> 12) & 0xF;
-			ULONG pin_misc				= (pin_config >> 8) & 0xF;
-			ULONG pin_association		= (pin_config >> 4) & 0xF;
-			ULONG pin_sequence			= pin_config & 0xF;
-
-			if ((pin_connectivity == 0x1) ){
-				DbgPrint( ("No Connect ") );
-				if (!useDisabledPins) 
-					continue;
-			} else if (pin_connectivity == 0x0){
-				DbgPrint( ("Port ") );
-			} else if (pin_connectivity == 0x2){
-				DbgPrint( ("Internal ") );
-			} else if (pin_connectivity == 0x3){
-				DbgPrint( ("Int+Ext ") );
-			}
-
-			switch(pin_color){
-			case 0:
-				//DbgPrint( ("??? ") );
-				break;
-			case 1:
-				DbgPrint( ("Blk ") );
-				break;
-			case 2:
-				DbgPrint( ("Gry ") );
-				break;
-			case 3:
-				DbgPrint( ("Blu ") );
-				break;
-			case 4:
-				DbgPrint( ("Grn ") );
-				break;
-			case 5:
-				DbgPrint( ("Red ") );
-				break;
-			case 6:
-				DbgPrint( ("Ora ") );
-				break;
-			case 7:
-				DbgPrint( ("Yel ") );
-				break;
-			case 8:
-				DbgPrint( ("Pur ") );
-				break;
-			case 9:
-				DbgPrint( ("Pnk ") );
-				break;
-			case 0xE:
-				DbgPrint( ("Wht ") );
-				break;
-			}
-			
-			if(pin_node_type == HDA_PIN_LINE_OUT) {
-				DbgPrint( ("Line Out "));
-	
-				//try to init ALL line-outs now, not worrying about jack detect yet
-				hda_initialize_output_pin(node); //initialize line out
-				pin_output_node_number = node; //save output node number
-
-				//add path to paths list
-				path.audio_output_node_number = audio_output_node_number;
-				path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-				path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-				path.output_amp_node_number = output_amp_node_number;
-				path.output_amp_node_capabilities = output_amp_node_capabilities;
-				if (out_paths.count < MAX_OUTPUT_PATHS) {
-					out_paths.paths[out_paths.count++] = path;
-				}
-
-			} else if(pin_node_type == HDA_PIN_SPEAKER) {
-				DbgPrint( ("Speaker "));
-
-				//first speaker node is default speaker
-				if(pin_speaker_default_node_number==0) {
-					pin_speaker_default_node_number = node;
-				}
-
-				//find if there is device connected to this PIN
-				if((hda_send_verb(codec_number, node, 0xF00, 0x09) & 0x4) == 0x4) {
-					//find if it is jack or fixed device
-					if((hda_send_verb(codec_number, node, 0xF1C, 0x00) >> 30) != 0x1) {
-						//find if is device output capable
-						if((hda_send_verb(codec_number, node, 0xF00, 0x0C) & 0x10) == 0x10) {
-							//there is connected device
-							DbgPrint( ("connected output device"));
-							//we will use first pin with connected device, so save node number only for first PIN
-							if(pin_speaker_node_number==0) {
-								pin_speaker_node_number = node;
-							}
-						} else {
-							DbgPrint( ("not output capable"));
-						}
-					} else {
-						DbgPrint( ("not jack or fixed device"));
-					}
-				} else {
-					DbgPrint( ("no output device"));
-				}
-			} else if(pin_node_type == HDA_PIN_HEADPHONE_OUT) {
-				DbgPrint( ("Headphone Out"));
-
-				//save node number
-				//TODO: handle if there are multiple HP nodes
-				pin_headphone_node_number = node;
-			} else if(pin_node_type == HDA_PIN_CD) {
-				DbgPrint( ("CD"));
-	
-				//save this node, this variable contain number of last alternative output
-				if (useAltOut){
-					pin_alternative_output_node_number = node;
-					DbgPrint( (" used"));
-				} else {
-					DbgPrint( (" not considered"));
-				}
-			} else if(pin_node_type == HDA_PIN_SPDIF_OUT) {
-				DbgPrint( ("SPDIF Out"));
-	
-				//save this node, this variable contain number of last alternative output
-				if (useSPDIF){
-					pin_spdif_node_number = node;
-					DbgPrint( (" used"));
-				} else {
-					DbgPrint( (" not considered"));
-				}
-			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_OUT) {
-				DbgPrint( ("Digital Other Out"));
-				//save this node, this variable contain number of last alternative output
-				if (useAltOut){
-					pin_alternative_output_node_number = node;
-					DbgPrint( (" used"));
-				} else {
-					DbgPrint( (" not considered"));
-				}
-			} else if(pin_node_type == HDA_PIN_MODEM_LINE_SIDE) {
-				DbgPrint( ("Modem Line Side"));
-
-				//save this node, this variable contain number of last alternative output
-				if (useAltOut){
-					pin_alternative_output_node_number = node;
-					DbgPrint( (" used"));
-				} else {
-					DbgPrint( (" not considered"));
-				}
-			} else if(pin_node_type == HDA_PIN_MODEM_HANDSET_SIDE) {
-				DbgPrint( ("Modem Handset Side"));
-	
-				//save this node, this variable contain number of last alternative output
-				if (useAltOut){
-					pin_alternative_output_node_number = node;
-					DbgPrint( (" used"));
-				} else {
-					DbgPrint( (" not considered"));
-				}
-			} else if(pin_node_type == HDA_PIN_LINE_IN) {
-				DbgPrint( ("Line In"));
-			} else if(pin_node_type == HDA_PIN_AUX) {
-				DbgPrint( ("AUX"));
-			} else if(pin_node_type == HDA_PIN_MIC_IN) {
-				DbgPrint( ("Mic In"));
-			} else if(pin_node_type == HDA_PIN_TELEPHONY) {
-				DbgPrint( ("Telephony"));
-			} else if(pin_node_type == HDA_PIN_SPDIF_IN) {
-				DbgPrint( ("SPDIF In"));
-			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_IN) {
-				DbgPrint( ("Digital Other In"));
-			} else if(pin_node_type == HDA_PIN_RESERVED) {
-				DbgPrint( ("Reserved"));
-			} else if(pin_node_type == HDA_PIN_OTHER) {
-				DbgPrint( ("Other"));
-			}
-		}
-		//if it's not a PIN then what other type of node is it?
-		else if(type_of_node == HDA_WIDGET_POWER_WIDGET) {
-			DbgPrint( ("Power Widget"));
-		} else if(type_of_node == HDA_WIDGET_VOLUME_KNOB) {
-			DbgPrint( ("Volume Knob"));
-		} else if(type_of_node == HDA_WIDGET_BEEP_GENERATOR) {
-			DbgPrint( ("Beep Generator"));
-		} else if(type_of_node == HDA_WIDGET_VENDOR_DEFINED) {
-			DbgPrint( ("Vendor defined"));
-		} else {
-			DbgPrint( ("Reserved type"));
-		}
-
-		//log all connected nodes
-		DbgPrint( (" "));
-		UCHAR connection_entries_number = 0;
-		ULONG connection_entries_node = hda_get_node_connection_entries(codec_number, node, 0);
-		while (connection_entries_node != 0x0000) {
-			DbgPrint( "%d ", connection_entries_node);
-			connection_entries_number++;
-			connection_entries_node = hda_get_node_connection_entries(codec_number, node, connection_entries_number);
-		}
-	}
-	
-	//reset variables of second path
-	second_audio_output_node_number = 0;
-	second_audio_output_node_sample_capabilities = 0;
-	second_audio_output_node_stream_format_capabilities = 0;
-	second_output_amp_node_number = 0;
-	second_output_amp_node_capabilities = 0;
-
-	//initialize output PINs
-	//TODO: get rid of globals 
-	DbgPrint( ("\n Init these output PINs: \n"));
-
-	//initialize spdif output first
-	//because i want any other output format support list to override spdif's
-	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
-		DbgPrint("\nSPDIF output ");
-		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_spdif_node_number); //initialize SPDIF output
-		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
-
-		//add path to paths list
-		path.audio_output_node_number = audio_output_node_number;
-		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-		path.output_amp_node_number = output_amp_node_number;
-		path.output_amp_node_capabilities = output_amp_node_capabilities;
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
-	}
-
-	if (pin_speaker_default_node_number != 0) {
-		//initialize speaker
-		is_initialized_useful_output = TRUE;
-		if (pin_speaker_node_number != 0) {
-			DbgPrint("\nSpeaker output ");
-			hda_initialize_output_pin(pin_speaker_node_number); //initialize speaker with connected output device
-			pin_output_node_number = pin_speaker_node_number; //save speaker node number
-		}	
-		else {
-			DbgPrint("\nDefault speaker output ");
-			hda_initialize_output_pin(pin_speaker_default_node_number); //initialize default speaker
-			pin_output_node_number = pin_speaker_default_node_number; //save speaker node number
-		}
-
-		//save speaker path
-		second_audio_output_node_number = audio_output_node_number;
-		second_audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-		second_audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-		second_output_amp_node_number = output_amp_node_number;
-		second_output_amp_node_capabilities = output_amp_node_capabilities;
-
-		//add path to paths list
-		path.audio_output_node_number = audio_output_node_number;
-		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-		path.output_amp_node_number = output_amp_node_number;
-		path.output_amp_node_capabilities = output_amp_node_capabilities;
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
-
-		//if codec has also headphone output, initialize it
-		if (pin_headphone_node_number != 0) {
-			DbgPrint("\nHeadphone output ");
-			hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
-			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
-
-			//if first path and second path share nodes, left only info for first path
-			if(audio_output_node_number == second_audio_output_node_number) {
-				second_audio_output_node_number = 0;
-			}
-			if(output_amp_node_number == second_output_amp_node_number) {
-				second_output_amp_node_number = 0;
-			}
-
-			//find headphone connection status
-			if(hda_is_headphone_connected() == TRUE) {
-				hda_disable_pin_output(codec_number, pin_output_node_number);
-				selected_output_node = pin_headphone_node_number;
-			} else {
-				selected_output_node = pin_output_node_number;
-			}
-
-			//check once for now
-			hda_check_headphone_connection_change();
-
-			//TODO: add task for checking headphone connection
-			// this will have to be a DPC
-			//or do with unsolicited responses
-
-			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
-
-			//add path to paths list
-			path.audio_output_node_number = audio_output_node_number;
-			path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-			path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-			path.output_amp_node_number = output_amp_node_number;
-			path.output_amp_node_capabilities = output_amp_node_capabilities;
-			if (out_paths.count < MAX_OUTPUT_PATHS) {
-				out_paths.paths[out_paths.count++] = path;
-			}
-		}
-	}
-	else if(pin_headphone_node_number != 0) { //codec do not have speaker, but only headphone output
-		DbgPrint("\nHeadphone output selected ");
-		is_initialized_useful_output = TRUE;
-		hda_initialize_output_pin(pin_headphone_node_number); //initialize headphone output
-		pin_output_node_number = pin_headphone_node_number; //save headphone node number
-	}
-
-	if (pin_alternative_output_node_number != 0) { //codec has alternative output
-		DbgPrint("\nAlternative output selected ");
-		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_alternative_output_node_number); //initialize alternative output
-		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
-
-		//add path to paths list
-		path.audio_output_node_number = audio_output_node_number;
-		path.audio_output_node_sample_capabilities = audio_output_node_sample_capabilities;
-		path.audio_output_node_stream_format_capabilities = audio_output_node_stream_format_capabilities;
-		path.output_amp_node_number = output_amp_node_number;
-		path.output_amp_node_capabilities = output_amp_node_capabilities;
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
-	}
-
-
-	DbgPrint("\n%d Output paths found", out_paths.count);
-	if(out_paths.count == 0) {
-		//no usable output paths have been found
-		DbgPrint("\nAFG does not have any usable output PINs.");
-		return STATUS_UNSUCCESSFUL;
-	}
-	return STATUS_SUCCESS;
-}
 
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_get_node_type (ULONG codec, ULONG node){
 	PAGED_CODE ();
@@ -2218,6 +1770,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
  * CAdapterCommon::ReadController()
  *****************************************************************************
  * Read a byte from the controller.
+ * TODO: delete these entirely, nothing else uses them
  */
 STDMETHODIMP_(BYTE)
 CAdapterCommon::
@@ -2339,8 +1892,8 @@ MixerRegWrite
 			//and dump the codec config to the console
 			//when the Master Volume, then Treble sliders are moved in Audio Properties
 			//(in that order)
-			out_paths.count = 0;
-			InitializeCodec(codecNumber);
+			InitHDAController();
+
 		}
 #endif
     }
@@ -2491,7 +2044,7 @@ ResetController(void)
 
 	ntStatus = hda_stop_stream();
 
-	//ntStatus = InitHDAController();
+	ntStatus = InitHDAController();
 
     return ntStatus;
 }
@@ -2709,62 +2262,27 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 {
     PAGED_CODE ();
 
-    WORD     wOldRateReg, wCodecReg;
 	ULONG status = 0;
-	ULONG successes = 0;
+
+	//set sample rate on all codecs
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
-
-    //
-    // Check what sample rates we support based on
-	// afg_node_sample_capabilities & audio_output_node_sample_capabilities
-    //
-	// if either is zero, give up as nothing has been inited yet?
-	// TODO: at least one real codec is getting a 0 here
-	if (!afg_node_sample_capabilities){
-		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported!"));
-			//i can't, it's a :VIA:!
-            return STATUS_UNSUCCESSFUL;
-	}
-	if (out_paths.count == 0){
-			DOUT (DBG_ERROR, ("No output paths inited yet!"));
-            return STATUS_UNSUCCESSFUL;
-	}
-
-	if (!hda_is_supported_sample_rate(dwSampleRate)) {
-		// Not a supported sample rate
-		DOUT (DBG_VSR, ("Sample rate %d not supported by HDA", dwSampleRate));
-		return STATUS_NOT_SUPPORTED;
-	}
-
-	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
-	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
-
-	//set Audio Output nodes data format for all paths
-	for (ULONG i = 0; i < out_paths.count; ++i){
-		status = hda_send_verb(codecNumber, out_paths.paths[i].audio_output_node_number, 0x200, format);
-		if (status == 0xFFFFFFFF) {
-			DOUT (DBG_ERROR, ("Path %d Node %d rejected audio format 0x%X", i, out_paths.paths[i].audio_output_node_number, format));
-		}
-		//read it back to confirm
-		status = hda_send_verb(codecNumber, out_paths.paths[i].audio_output_node_number, 0xA00, 0x0);
-		if(status == format){
-			++successes;		
-		} else{
-			DOUT (DBG_ERROR, ("Path %d Node %d set format 0x%X expected 0x%X", i, out_paths.paths[i].audio_output_node_number, status, format));
+	for (int i = 0; i < codecCount; i++) {
+		if (pCodecs[i] != NULL) {
+			status = pCodecs[i]->ProgramSampleRate(dwSampleRate);
+			if(!NT_SUCCESS(status))
+				return status;
 		}
 	}
-	if(successes == 0){
-		DOUT (DBG_ERROR, ("No codec paths accepted that sample rate"));
-		return STATUS_UNSUCCESSFUL;
-	}
-	//set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, format);
+	// if that's ok, set stream data format
+	writeUSHORT(OutputStreamBase + 0x12, 
+		hda_return_sound_data_format(dwSampleRate, 2, 16));
 
 	// todo: adjust size of BDL chunks based on samplerate.
 	// output gets crunchy if rate is set too low for the irq frequency
     
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
+
     return STATUS_SUCCESS;
 }
 

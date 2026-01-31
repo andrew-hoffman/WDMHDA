@@ -1,5 +1,5 @@
 /*****************************************************************************
- * codec.h - Codec object header.
+ * codec.h - Audio Codec object.
  *****************************************************************************
  * Copyright (c) 2026 Drew Hoffman
  * Released under MIT License
@@ -49,34 +49,30 @@ public:
 
 	NTSTATUS InitializeCodec();
 
-	ULONG hda_send_verb(ULONG node, ULONG verb, ULONG command);
-	PULONG get_bdl_mem(void);
-	NTSTATUS hda_initialize_audio_function_group(ULONG afg_node_number); 
-	ULONG hda_get_actual_stream_position(void);
-	UCHAR hda_get_node_type(ULONG node);
-	ULONG hda_get_node_connection_entries(ULONG node, ULONG connection_entries_number);
-	void hda_initialize_output_pin(ULONG pin_node_number, HDA_NODE_PATH& path);
-	void hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path);
-	void hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
-	void hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
-	BOOLEAN hda_is_headphone_connected(void);
-	void hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
-	void hda_set_volume(ULONG volume, UCHAR ch);
-	void hda_start_sound(void);
-	void hda_stop_sound(void);
+	STDMETHODIMP_(ULONG) hda_send_verb(ULONG node, ULONG verb, ULONG command);
+	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
+	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
+	STDMETHODIMP_(ULONG) hda_get_node_connection_entries(ULONG node, ULONG connection_entries_number);
+	STDMETHODIMP_(void) hda_initialize_output_pin(ULONG pin_node_number, HDA_NODE_PATH& path);
+	STDMETHODIMP_(void) hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path);
+	STDMETHODIMP_(void) hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
+	STDMETHODIMP_(void) hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
+	STDMETHODIMP_(BOOLEAN) hda_is_headphone_connected(void);
+	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch);
+	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
 
-	void hda_check_headphone_connection_change(void);
-	UCHAR hda_is_supported_channel_size(UCHAR size);
-	UCHAR hda_is_supported_sample_rate(ULONG sample_rate);
-	void hda_enable_pin_output(ULONG pin_node);
-	void hda_disable_pin_output(ULONG pin_node);
-	USHORT hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
-	NTSTATUS hda_stop_stream(void);
+	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
+	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size);
+	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
+	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node);
+	STDMETHODIMP_(void) hda_disable_pin_output(ULONG pin_node);
+	STDMETHODIMP_(USHORT) hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
+	STDMETHODIMP_(NTSTATUS) ProgramSampleRate(DWORD dwSampleRate);
     
     // Accessors
     UCHAR GetCodecAddress() const { return codec_address; }
     ULONG GetCodecId() const { return codec_id; }
-    BOOLEAN IsInitialized() const { return is_initialized_useful_output; }
+    BOOLEAN IsInitialized() const { return (BOOLEAN)is_initialized_useful_output; }
 };
 
 typedef HDA_Codec *PHDACODEC;

@@ -1,10 +1,10 @@
-;Drew Does what Intel idn't
+;Drew Does what Intel isn't
 ;
 ; Module Name:
 ;    HDA.INF
 ;
 ; Abstract:
-;    INF file for installing HDA Sample Driver
+;    INF file for installing HDA Controller Driver
 
 [Version]
 Signature="$CHICAGO$"
@@ -13,14 +13,10 @@ ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
 provider=%MSFT%
 DriverVer=1/28/2026,5.00.2195.16
 
-;You must specify which platform is supported by each SourceDisksNames section
-;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
-[SourceDisksNames.x86]
-222=%DiskDescription%,,,\
+[SourceDisksNames]
+222=%DiskDescription%,,,
 
-;You must also specify which platform is supported by each SourceDisksFiles section
-;Valid platform identifiers include .x86, .ia64, .alpha, .axp64
-[SourceDisksFiles.x86]
+[SourceDisksFiles]
 HDA.sys=222
 
 [Manufacturer]

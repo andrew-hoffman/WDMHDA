@@ -114,7 +114,7 @@ ProcessResources
 	//
     // Create the DMA Channel object.
     //
-    ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OutDmaChannel
+    ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OUT DmaChannel
                                           NULL,             // OuterUnknown (opt)
                                           NULL,             // ResourceList (opt)
 										  MAXLEN_DMA_BUFFER,// MaxLength
@@ -225,7 +225,7 @@ ValidateFormat
         &&  (   (waveFormat->nChannels == 2)
 
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 22050)
+        &&  (   (waveFormat->nSamplesPerSec >= 8000)
             &&  (waveFormat->nSamplesPerSec <= 48000)
             )
         )
@@ -446,7 +446,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
-        22050,   // Minimum rate. 
+        8000,   // Minimum rate. 
         48000   // Maximum rate.
     }
 };

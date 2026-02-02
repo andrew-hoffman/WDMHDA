@@ -714,7 +714,6 @@ Init
 		FALSE ); //CacheEnabled is probably ignored
 	RirbMemPhys = *pRirbLogicalAddress;
 	RirbMemVirt = (PULONG) RirbVirtualAddress;
-	//mdl = IoAllocateMdl(VirtualAddress, 8192, FALSE, FALSE, NULL);
 
 	DOUT(DBG_SYSINFO, ("RIRB Virt Addr = 0x%X,", RirbMemVirt));
 	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbMemPhys));
@@ -793,6 +792,7 @@ Init
 	if (is64OK == FALSE) {
 		ASSERT(BdlMemPhys.HighPart == 0);
 	}
+	mdl = IoAllocateMdl(BdlVirtualAddress, 8192, FALSE, FALSE, NULL);
 
 	//allocate DMA Position Buffer
 	PVOID DmaVirtualAddress = NULL;
@@ -3440,8 +3440,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));
 
-	KeFlushIoBuffers(mdl, FALSE, TRUE); 
+
 	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
+	KeFlushIoBuffers(mdl, FALSE, TRUE); 
 
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);

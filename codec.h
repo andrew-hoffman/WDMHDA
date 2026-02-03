@@ -13,12 +13,12 @@
 /*****************************************************************************
  * Forward declarations
  */
-class CAdapterCommon;
+struct IAdapterCommon;
 
 /*****************************************************************************
  * Typedefs
  */
-typedef ULONG (*HDA_SEND_VERB_FUNC)(CAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
+typedef ULONG (*HDA_SEND_VERB_FUNC)(IAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 
 /*****************************************************************************
  * HDA_Codec
@@ -29,11 +29,10 @@ typedef ULONG (*HDA_SEND_VERB_FUNC)(CAdapterCommon* adapter, ULONG codec, ULONG 
 class HDA_Codec
 {
 private:
-    CAdapterCommon* pAdapter;           // Reference to parent adapter
+    IAdapterCommon* pAdapter;           // Reference to parent adapter
     UCHAR codec_address;                // Codec address on the link (0-15)
     ULONG codec_id;                     // Codec vendor ID and device ID
     
-    HDA_SEND_VERB_FUNC hda_send_verb_fp; // Function pointer to send verb
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag
     
@@ -52,11 +51,18 @@ private:
     ULONG pin_output_node_number;
     ULONG pin_headphone_node_number;
 
+
+
 public:
-    HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, CAdapterCommon* adapter);
+    explicit HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, IAdapterCommon* adapter);
     ~HDA_Codec();
 
-	NTSTATUS InitializeCodec();
+	STDMETHODIMP_(NTSTATUS) InitializeCodec();
+	STDMETHODIMP_(NTSTATUS) hda_send_verb(
+        ULONG Node,
+        ULONG Verb,
+        ULONG Payload
+    );
 
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
@@ -70,7 +76,6 @@ public:
 	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
 
 	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
-	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node);
 	STDMETHODIMP_(void) hda_disable_pin_output(ULONG pin_node);

@@ -321,6 +321,14 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     STDMETHOD(SaveMixerSettingsToRegistry)
     (   THIS
     )   PURE;
+
+	STDMETHOD_(ULONG,hda_send_verb)
+	(   THIS_
+        IN      ULONG    codec,
+		IN      ULONG    node,
+		IN      ULONG    verb,
+		IN      ULONG    command
+    )   PURE;
 };
 
 typedef IAdapterCommon *PADAPTERCOMMON;

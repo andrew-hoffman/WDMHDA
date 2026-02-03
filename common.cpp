@@ -216,7 +216,6 @@ public:
 	STDMETHODIMP_(void)		hda_stop_sound (void);
 
 	STDMETHODIMP_(void)		hda_check_headphone_connection_change(void);
-	STDMETHODIMP_(UCHAR)	hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
@@ -1619,20 +1618,6 @@ STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) 
 	}
 }
 
-//currently unused as we only support 16-bit stereo (can't do 20-24 bit packing on 9x)
-// Note: This function has been moved to HDA_Codec class
-// For backward compatibility, check all codecs - only return TRUE if ALL support it
-STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_channel_size(UCHAR size) {
-	if (codecCount == 0) {
-		return FALSE;
-	}
-	for (int i = 0; i < codecCount; i++) {
-		if (pCodecs[i] == NULL || !pCodecs[i]->hda_is_supported_channel_size(size)) {
-			return FALSE;
-		}
-	}
-	return TRUE;
-}
 
 // Note: This function has been moved to HDA_Codec class
 // For backward compatibility, check all codecs - only return TRUE if ALL support it

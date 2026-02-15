@@ -2,15 +2,15 @@
 HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97. 
-Designed for all versions of Windows with WDM support, aka Windows 98SE and ME (and possibly 98FE and 2000/XP as well, but not tested there yet.) 
+Designed for all versions of Windows with WDM support, aka Windows 98SE and ME. Windows 98 First Edition may work with issues but is not supported because Microsoft doesn't recommend WDM audio drivers for this version. Windows 2000/XP have the oficial KB888111 HDA Bus driver update and don't need this project (may function but it is not tested and not a priority).
 
 Current status of this driver is a Proof of Concept that functions in VMware and VirtualBox, and on many Intel & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware.
 
 This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. Nvidia and AMD chipsets are not well supported yet.
 
-If you want to use this in some kind of business critical production application, I would highly recommend using a Sound Blaster Live, CMI8738 or any $2 USB Audio dongle instead. (Seriously, almost all of the cheapest USB dongles work perfectly in 98se/Me. If you're using QuickInstall 0.9.6 you will need to add the wdma_usb.inf file back to C:\Windows\Inf though)
+If you want to use this in some kind of business critical production application, I would highly recommend using a Sound Blaster Live, CMI8738 or any $2 USB Audio dongle instead. (Seriously, almost all of the cheapest USB Audio 1.0 class adapters work perfectly in 98se/Me.)
 
-Windows 9x may need to be patched to function at all on modern hardware and > 512mb of RAM even when virtualized. For Intel 12th gen and newer this is Mandatory. See [JHRobotics' Patcher9x project](https://github.com/JHRobotics/patcher9x) which now includes [Sweetlow's patch for memory resource conflict issues](https://msfn.org/board/topic/186768-bug-fix-vmmvxd-on-handling-4gib-addresses-and-description-of-problems-with-resource-manager-on-newer-bioses/). 
+Windows 9x may need to be patched to function at all on modern hardware and > 512mb of RAM even when virtualized. For Intel 12th gen and newer this is Mandatory. See [JHRobotics' Patcher9x project](https://github.com/JHRobotics/patcher9x) which now includes [Sweetlow's patch for memory resource conflict issues](https://msfn.org/board/topic/186768-bug-fix-vmmvxd-on-handling-4gib-addresses-and-description-of-problems-with-resource-manager-on-newer-bioses/). Or for a prepatched solution, try [Windows 98 QuickInstall from Oerg866](https://github.com/oerg866/win98-quickinstall/releases).
 
 ## Installation:
 

@@ -2,11 +2,12 @@
 HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97. 
-Designed for all versions of Windows with WDM support, aka Windows 98SE and ME. Windows 98 First Edition may work with issues but is not supported because Microsoft doesn't recommend WDM audio drivers for this version. Windows 2000/XP have the oficial KB888111 HDA Bus driver update and don't need this project (may function but it is not tested and not a priority).
+It is designed for all versions of Windows with Windows Driver Model (WDM) support, but only Windows 98 SE and ME are officially supported currently.
+Windows 98 First Edition may work with issues around sample rate conversion, and it is not supported because Microsoft doesn't recommend WDM audio drivers for this version. Windows 2000/XP have the oficial KB888111 HDA Bus driver update and don't need this project (may function but it is not tested and not a priority).
 
-Current status of this driver is a Proof of Concept that functions in VMware and VirtualBox, and on many Intel & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware.
+Current status of this driver is an Alpha that functions in VMware and VirtualBox, and on many Intel & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia and AMD chipsets are not well supported yet.
 
-This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. Nvidia and AMD chipsets are not well supported yet.
+This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
 
 If you want to use this in some kind of business critical production application, I would highly recommend using a Sound Blaster Live, CMI8738 or any $2 USB Audio dongle instead. (Seriously, almost all of the cheapest USB Audio 1.0 class adapters work perfectly in 98se/Me.)
 

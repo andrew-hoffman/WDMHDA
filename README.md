@@ -5,7 +5,7 @@ This project is a High Definition Audio aka Azalia codec and controller driver. 
 It is designed for all versions of Windows with Windows Driver Model (WDM) support, but only Windows 98 SE and ME are officially supported currently.
 Windows 98 First Edition may work with issues around sample rate conversion, and it is not supported because Microsoft doesn't recommend WDM audio drivers for this version. Windows 2000/XP have the oficial KB888111 HDA Bus driver update and don't need this project (may function but it is not tested and not a priority).
 
-Current status of this driver is an Alpha that functions in VMware and VirtualBox, and on many Intel & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia and AMD chipsets are not well supported yet.
+Current status of this driver is an Alpha that functions in VMware and VirtualBox, and on many Intel & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia and AMD chipsets, and IDT and VIA codecs, are not well supported yet.
 
 This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
 

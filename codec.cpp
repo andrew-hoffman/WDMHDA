@@ -31,10 +31,9 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
       pin_output_node_number(0),
-      pin_headphone_node_number(0)
+      headphone_node_number(0)
 {
-	// Initialize output paths
-//	RtlZeroMemory(&out_paths, sizeof(HDA_OUTPUT_LIST));
+
 }
 
 /*****************************************************************************
@@ -66,10 +65,15 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 		return STATUS_NOT_FOUND;
 	}
 
+	codec_ven = (USHORT)(codec_id >> 16);
+	codec_dev = (USHORT)(codec_id & 0xFFFF);
+
 	//log basic codec info
-	DOUT (DBG_SYSINFO, ("Codec %d ", codec_address ) );
-	DOUT (DBG_SYSINFO, ("VID: %04x", (codec_id>>16) ));
-	DOUT (DBG_SYSINFO, ("PID: %04x", (codec_id & 0xFFFF) ));
+	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
+	codec_address, codec_ven, codec_dev);
+
+	//Realtek ALC280 may need a delay here?
+	KeStallExecutionProcessor(100);
 
 	//find Audio Function Groups
 	ULONG response = hda_send_verb(0, 0xF00, 0x04);
@@ -80,9 +84,14 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	ULONG node = (response >> 16) & 0xFF;
 	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
 		if((hda_send_verb(node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
-			//initialize (first) Audio Function Group
-			return hda_initialize_audio_function_group(node); 
-			//todo: handle multiple AFGs?
+			//initialize first Audio Function Group, if it doesn't work keep trying
+			DOUT (DBG_SYSINFO, ("Init AFG %d", node));
+			if ( NT_SUCCESS( hda_initialize_audio_function_group(node) )){
+				DOUT (DBG_SYSINFO, ("Success"));
+				return STATUS_SUCCESS;
+			} else {
+				DOUT (DBG_SYSINFO, ("Failed!"));
+			}
 		}
 	}
 	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
@@ -97,6 +106,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg_node_number) {
 	PAGED_CODE ();
 	HDA_NODE_PATH path;
+
+	RtlZeroMemory(&path, sizeof(HDA_NODE_PATH));
 
 	//reset AFG
 	hda_send_verb(afg_node_number, 0x7FF, 0x00);
@@ -129,8 +140,12 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
 
-	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
+	//For all nodes in this AFG
+	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), 
+		last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
 		type_of_node = 0; node < last_node; node++) {
+
+		RtlZeroMemory(&path,sizeof(HDA_NODE_PATH));
 
 		//log number of node
 		DbgPrint("\n%d ", node);
@@ -139,16 +154,14 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		type_of_node = hda_get_node_type(node);
 
 		//process node
-		//TODO: can i express this more compactly as a switch statement?
-
 		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
-			DbgPrint( ("Audio Output"));
+			DbgPrint( ("Output Converter"));
 
 			//disable every audio output by connecting it to stream 0
 			hda_send_verb(node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
-			DbgPrint( ("Audio Input"));
+			DbgPrint( ("Input Converter"));
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
 			DbgPrint( ("Audio Mixer"));
@@ -159,15 +172,81 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		else if(type_of_node == HDA_WIDGET_PIN_COMPLEX) {
 			DbgPrint( ("Pin Complex "));
 
-			//read type of PIN
-			type_of_node = ((hda_send_verb(node, 0xF1C, 0x00) >> 20) & 0xF);
+			//read pin_config register
+			ULONG pin_config = hda_send_verb(node, 0xF1C, 0x00);
 
-			if(type_of_node == HDA_PIN_LINE_OUT) {
+			//break out all pin config fields
+			ULONG pin_connectivity		= (pin_config >> 30) & 0x3;
+			ULONG pin_loaction_fr		= (pin_config >> 28) & 0x3;
+			ULONG pin_location_geo		= (pin_config >> 24) & 0xf;
+			ULONG pin_node_type			= (pin_config >> 20) & 0xF;
+			ULONG pin_connection_type	= (pin_config >> 16) & 0xF;
+			ULONG pin_color				= (pin_config >> 12) & 0xF;
+			ULONG pin_misc				= (pin_config >> 8) & 0xF;
+			ULONG pin_association		= (pin_config >> 4) & 0xF;
+			ULONG pin_sequence			= pin_config & 0xF;
+
+			if ((pin_connectivity == 0x1) ){
+				DbgPrint( ("No Connect ") );
+				//if (!useDisabledPins) 
+					continue;
+			} else if (pin_connectivity == 0x0){
+				DbgPrint( ("Port ") );
+			} else if (pin_connectivity == 0x2){
+				DbgPrint( ("Internal ") );
+			} else if (pin_connectivity == 0x3){
+				DbgPrint( ("Int+Ext ") );
+			}
+
+			switch(pin_color){
+			case 0:
+				//DbgPrint( ("??? ") );
+				break;
+			case 1:
+				DbgPrint( ("Blk ") );
+				break;
+			case 2:
+				DbgPrint( ("Gry ") );
+				break;
+			case 3:
+				DbgPrint( ("Blu ") );
+				break;
+			case 4:
+				DbgPrint( ("Grn ") );
+				break;
+			case 5:
+				DbgPrint( ("Red ") );
+				break;
+			case 6:
+				DbgPrint( ("Ora ") );
+				break;
+			case 7:
+				DbgPrint( ("Yel ") );
+				break;
+			case 8:
+				DbgPrint( ("Pur ") );
+				break;
+			case 9:
+				DbgPrint( ("Pnk ") );
+				break;
+			case 0xE:
+				DbgPrint( ("Wht ") );
+				break;
+			}
+
+			if(pin_node_type == HDA_PIN_LINE_OUT) {
 				DbgPrint( ("Line Out"));
 	
-				//save this node, this variable contain number of last alternative output
-				pin_alternative_output_node_number = node;
-			} else if(type_of_node == HDA_PIN_SPEAKER) {
+				//try to init ALL line-outs now, not worrying about jack detect yet
+				hda_initialize_output_pin(node, path); //initialize line out
+				pin_output_node_number = node; //save output node number
+
+				//add path to paths list
+				if (out_paths.count < MAX_OUTPUT_PATHS) {
+					out_paths.paths[out_paths.count++] = path;
+				}
+
+			} else if(pin_node_type == HDA_PIN_SPEAKER) {
 				DbgPrint( ("Speaker "));
 
 				//first speaker node is default speaker
@@ -292,19 +371,24 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			connection_entries_node = hda_get_node_connection_entries(node, connection_entries_number);
 		}
 	}
-	
-	//reset variables of second path
-	/*
-	second_audio_output_node_number = 0;
-	second_audio_output_node_sample_capabilities = 0;
-	second_audio_output_node_stream_format_capabilities = 0;
-	second_output_amp_node_number = 0;
-	second_output_amp_node_capabilities = 0;
-	*/
 
-	//initialize output PINs
-	// TODO: turn else-ifs to ifs and save more than 2 paths
-	DbgPrint( ("\n"));
+	//initialize output PINs 
+	DbgPrint( ("\n Init these output PINs: \n"));
+
+	//initialize spdif output first
+	//because i want any other output format support list to override spdif's
+	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
+		DbgPrint("\nSPDIF output ");
+		//is_initialized_useful_output = FALSE;
+		hda_initialize_output_pin(pin_spdif_node_number, path); //initialize SPDIF output
+		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
+
+		//add path to paths list
+		if (out_paths.count < MAX_OUTPUT_PATHS) {
+			out_paths.paths[out_paths.count++] = path;
+		}
+	}
+
 	if (pin_speaker_default_node_number != 0) {
 		//initialize speaker
 		is_initialized_useful_output = TRUE;
@@ -319,15 +403,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			pin_output_node_number = pin_speaker_default_node_number; //save speaker node number
 		}
 
-		//save speaker path
-		/*
-		second_audio_output_node_number = path.audio_output_node_number;
-		second_audio_output_node_sample_capabilities = path.audio_output_node_sample_capabilities;
-		second_audio_output_node_stream_format_capabilities = path.audio_output_node_stream_format_capabilities;
-		second_output_amp_node_number = path.output_amp_node_number;
-		second_output_amp_node_capabilities = path.output_amp_node_capabilities;
-		*/
-
 		//add path to paths list
 		if (out_paths.count < MAX_OUTPUT_PATHS) {
 			out_paths.paths[out_paths.count++] = path;
@@ -337,17 +412,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		if (pin_headphone_node_number != 0) {
 			DbgPrint("\n\nHeadphone output ");
 			hda_initialize_output_pin(pin_headphone_node_number, path); //initialize headphone output
-			pin_headphone_node_number = pin_headphone_node_number; //save headphone node number
-
-			//if first path and second path share nodes, left only info for first path
-			/*
-			if(path.audio_output_node_number == second_audio_output_node_number) {
-				second_audio_output_node_number = 0;
-			}
-			if(path.output_amp_node_number == second_output_amp_node_number) {
-				second_output_amp_node_number = 0;
-			}
-			*/
+			headphone_node_number = pin_headphone_node_number; //save headphone node number
 
 			//find headphone connection status
 			if(hda_is_headphone_connected() == TRUE) {
@@ -389,16 +454,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		}
 	}
 
-	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
-		DbgPrint("\nSPDIF output selected ");
-		//is_initialized_useful_output = FALSE;
-		hda_initialize_output_pin(pin_spdif_node_number, path); //initialize SPDIF output
-		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
-		//add path to paths list
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
-	}
+
 	DbgPrint("\n%d Output paths found", out_paths.count);
 	if(out_paths.count == 0) {
 		//no usable output paths have been found
@@ -441,8 +497,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
 }
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
-	if (pin_headphone_node_number != 0
-    && (hda_send_verb(pin_headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+	if (headphone_node_number != 0
+    && (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
 		return TRUE;
 	}
 	else {
@@ -489,7 +545,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 		path.output_amp_node_capabilities = pin_output_amp_capabilities;
 	}
 
-	//start enabling path of nodes
+	//start enabling path of nodes backwards from the output pin
 	length_of_node_path = 0;
 	hda_send_verb(pin_node_number, 0x701, 0x00); //select first node
 	ULONG first_connected_node_number = hda_get_node_connection_entries(pin_node_number, 0); //get first node number
@@ -608,6 +664,54 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 	}
 }
 
+STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path) {
+	PAGED_CODE ();
+	if(length_of_node_path>=10) {
+		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
+	return;
+	}
+	DOUT (DBG_PRINT,("Initializing Audio Selector %d", audio_selector_node_number));
+
+	//set 16-bit stereo format before turning on power so it sticks
+	hda_send_verb(audio_selector_node_number, 0x200, 0x11);
+
+	//turn on power for Audio Selector
+	hda_send_verb(audio_selector_node_number, 0x705, 0x00);
+
+	//disable unsolicited responses
+	hda_send_verb(audio_selector_node_number, 0x708, 0x00);
+
+	//disable any processing
+	hda_send_verb(audio_selector_node_number, 0x703, 0x00);
+
+	//set maximum volume for Audio Selector
+	ULONG audio_selector_amp_capabilities = hda_send_verb(audio_selector_node_number, 0xF00, 0x12);
+	hda_set_node_gain(audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250, 3);
+	if(audio_selector_amp_capabilities != 0) {
+		//we will control volume by Audio Selector node
+		path.output_amp_node_number = audio_selector_node_number;
+		path.output_amp_node_capabilities = audio_selector_amp_capabilities;
+	}
+	
+	//continue in path
+	length_of_node_path++;
+	hda_send_verb(audio_selector_node_number, 0x701, 0x00); //select first node
+	ULONG first_connected_node_number = hda_get_node_connection_entries(audio_selector_node_number, 0); //get first node number
+	ULONG type_of_first_connected_node = hda_get_node_type(first_connected_node_number); //get type of first node
+	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
+		hda_initialize_audio_output(first_connected_node_number, path);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
+		hda_initialize_audio_mixer(first_connected_node_number, path);
+	}
+	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
+		hda_initialize_audio_selector(first_connected_node_number, path);
+	}
+	else {
+		DOUT (DBG_PRINT,("HDA ERROR: Selector bad connection %d", first_connected_node_number));
+	}
+}
+
 /*****************************************************************************
  * HDA_Codec::ProgramSampleRate
  *****************************************************************************
@@ -617,7 +721,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 (
     IN  DWORD           dwSampleRate
-	//Currently always stereo 16-bit, the KMixer can upconvert mono/8bit
+	//Currently always stereo 16-bit, the KMixer can generally upconvert mono/8bit
+	//TODO: maybe not on Win98 Gold though?
 )
 {
     PAGED_CODE ();
@@ -627,8 +732,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 	ULONG successes = 0;
 
     DOUT (DBG_PRINT, ("[HDA_Codec::ProgramSampleRate]"));
-
-	
 
     //
     // Check what sample rates we support based on
@@ -676,54 +779,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
     return STATUS_SUCCESS;
 }
 
-STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path) {
-	PAGED_CODE ();
-	if(length_of_node_path>=10) {
-		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
-	return;
-	}
-	DOUT (DBG_PRINT,("Initializing Audio Selector %d", audio_selector_node_number));
-
-	//set 16-bit stereo format before turning on power so it sticks
-	hda_send_verb(audio_selector_node_number, 0x200, 0x11);
-
-	//turn on power for Audio Selector
-	hda_send_verb(audio_selector_node_number, 0x705, 0x00);
-
-	//disable unsolicited responses
-	hda_send_verb(audio_selector_node_number, 0x708, 0x00);
-
-	//disable any processing
-	hda_send_verb(audio_selector_node_number, 0x703, 0x00);
-
-	//set maximal volume for Audio Selector
-	ULONG audio_selector_amp_capabilities = hda_send_verb(audio_selector_node_number, 0xF00, 0x12);
-	hda_set_node_gain(audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250, 3);
-	if(audio_selector_amp_capabilities != 0) {
-		//we will control volume by Audio Selector node
-		path.output_amp_node_number = audio_selector_node_number;
-		path.output_amp_node_capabilities = audio_selector_amp_capabilities;
-	}
-	
-	//continue in path
-	length_of_node_path++;
-	hda_send_verb(audio_selector_node_number, 0x701, 0x00); //select first node
-	ULONG first_connected_node_number = hda_get_node_connection_entries(audio_selector_node_number, 0); //get first node number
-	ULONG type_of_first_connected_node = hda_get_node_type(first_connected_node_number); //get type of first node
-	if(type_of_first_connected_node == HDA_WIDGET_AUDIO_OUTPUT) {
-		hda_initialize_audio_output(first_connected_node_number, path);
-	}
-	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_MIXER) {
-		hda_initialize_audio_mixer(first_connected_node_number, path);
-	}
-	else if(type_of_first_connected_node == HDA_WIDGET_AUDIO_SELECTOR) {
-		hda_initialize_audio_selector(first_connected_node_number, path);
-	}
-	else {
-		DOUT (DBG_PRINT,("HDA ERROR: Selector have connection %d", first_connected_node_number));
-	}
-}
-
 //***End of pageable code!***
 //everything above this must have PAGED_CODE ();
 #pragma code_seg() 
@@ -733,15 +788,15 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//and make sure to clean up correctly on driver unload!
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
 		hda_disable_pin_output(pin_output_node_number);
-		selected_output_node = pin_headphone_node_number;
+		selected_output_node = headphone_node_number;
 	}
-	else if(selected_output_node == pin_headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+	else if(selected_output_node == headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
 		hda_enable_pin_output(pin_output_node_number);
 		selected_output_node = pin_output_node_number;
 	}
 }
 
-
+//only using 16 bit stereo channels so this is unnecessary
 /*
 STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};
@@ -811,7 +866,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch) {
 			out_paths.paths[i].output_amp_node_capabilities, 
 			volume, 
 			ch
-			);
+		);
 	}
 }
 
@@ -853,60 +908,60 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG c
 
 
 STDMETHODIMP_(USHORT) HDA_Codec::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
- USHORT data_format = 0;
+	USHORT data_format = 0;
 
- //channels
- data_format = (USHORT)((channels-1) & 0xf);
+	//channels
+	data_format = (USHORT)((channels-1) & 0xf);
 
- //bits per sample
- if(bits_per_sample==16) {
-  data_format |= ((0x1)<<4);
- }
- else if(bits_per_sample==20) {
-  data_format |= ((0x2)<<4);
- }
- else if(bits_per_sample==24) {
-  data_format |= ((0x3)<<4);
- }
- else if(bits_per_sample==32) {
-  data_format |= ((0x4)<<4);
- }
+	//bits per sample
+	if(bits_per_sample==16) {
+		data_format |= ((0x1)<<4);
+	}
+	else if(bits_per_sample==20) {
+		data_format |= ((0x2)<<4);
+	}
+	else if(bits_per_sample==24) {
+		data_format |= ((0x3)<<4);
+	}
+	else if(bits_per_sample==32) {
+		data_format |= ((0x4)<<4);
+	}
 
- //sample rate
- if (sample_rate == 48000) {
-  data_format |= ((0x0)<<8);
- }
- //24000 is supported as a stream rate but NOT a codec format
- else if(sample_rate==16000) {
-  data_format |= ((0x2)<<8);
- }
- else if(sample_rate==8000) {
-  data_format |= ((0x5)<<8);
- }
- else if(sample_rate==44100) {
-  data_format |= ((0x40)<<8);
- }
- else if(sample_rate==22050) {
-  data_format |= ((0x41)<<8);
- }
- else if(sample_rate==11025) {
-  data_format |= ((0x43)<<8);
- }
- else if(sample_rate==96000) {
-  data_format |= ((0x8)<<8);
- }
- else if(sample_rate==32000) {
-  data_format |= ((0xA)<<8);
- }
- else if(sample_rate==88200) {
-  data_format |= ((0x48)<<8);
- }
- else if(sample_rate==176400) {
-  data_format |= ((0x58)<<8);
- }
- else if(sample_rate==192000) {
-  data_format |= ((0x18)<<8);
- }
- return data_format;
+	//sample rate
+	if (sample_rate == 48000) {
+		data_format |= ((0x0)<<8);
+	}
+	//24000 is supported as a stream rate but NOT a codec format
+	else if(sample_rate==16000) {
+		data_format |= ((0x2)<<8);
+	}
+	else if(sample_rate==8000) {
+		data_format |= ((0x5)<<8);
+	}
+	else if(sample_rate==44100) {
+		data_format |= ((0x40)<<8);
+	}
+	else if(sample_rate==22050) {
+		data_format |= ((0x41)<<8);
+	}
+	else if(sample_rate==11025) {
+		data_format |= ((0x43)<<8);
+	}
+	else if(sample_rate==96000) {
+		data_format |= ((0x8)<<8);
+	}
+	else if(sample_rate==32000) {
+		data_format |= ((0xA)<<8);
+	}
+	else if(sample_rate==88200) {
+		data_format |= ((0x48)<<8);
+	}
+	else if(sample_rate==176400) {
+		data_format |= ((0x58)<<8);
+	}
+	else if(sample_rate==192000) {
+		data_format |= ((0x18)<<8);
+	}
+	return data_format;
 }
 

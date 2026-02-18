@@ -32,6 +32,8 @@ private:
     IAdapterCommon* pAdapter;           // Reference to parent adapter
     UCHAR codec_address;                // Codec address on the link (0-15)
     ULONG codec_id;                     // Codec vendor ID and device ID
+	USHORT codec_ven;
+	USHORT codec_dev;
     
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag
@@ -49,7 +51,7 @@ private:
 	HDA_OUTPUT_LIST out_paths;
 
     ULONG pin_output_node_number;
-    ULONG pin_headphone_node_number;
+    ULONG headphone_node_number;
 
 
 

@@ -1472,51 +1472,6 @@ hda_use_pio_interface:
  * hda_initialize_audio_selector have been moved to HDA_Codec class
  *****************************************************************************/
 
-
-STDMETHODIMP_(UCHAR) CAdapterCommon::hda_get_node_type (ULONG codec, ULONG node){
-	PAGED_CODE ();
-	return (UCHAR) ((hda_send_verb(codec, node, 0xF00, 0x09) >> 20) & 0xF);
-}
-
-STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_node_connection_entries (ULONG codec, ULONG node, ULONG connection_entries_number) {
-	PAGED_CODE ();
-	//read connection capabilities
-	ULONG connection_list_capabilities = hda_send_verb(codec, node, 0xF00, 0x0E);
-	
-	//test if this connection even exists
-	if(connection_entries_number >= (connection_list_capabilities & 0x7F)) {
-		return 0x0000;
-	}
-
-	//return number of connected node
-	if((connection_list_capabilities & 0x80) == 0x00) { //short form
-		return ((hda_send_verb(codec, node, 0xF02, ((connection_entries_number/4)*4)) >> ((connection_entries_number%4)*8)) & 0xFF);
-	}
-	else { //long form
-		return ((hda_send_verb(codec, node, 0xF02, ((connection_entries_number/2)*2)) >> ((connection_entries_number%2)*16)) & 0xFFFF);
-	}
-}
-
-STDMETHODIMP_(void) CAdapterCommon::hda_enable_pin_output(ULONG codec, ULONG pin_node) {
-	hda_send_verb(codec, pin_node, 0x707, (hda_send_verb(codec, pin_node, 0xF07, 0x00) | 0x40));
-}
-
-STDMETHODIMP_(void) CAdapterCommon::hda_disable_pin_output(ULONG codec, ULONG pin_node) {
-	hda_send_verb(codec, pin_node, 0x707, (hda_send_verb(codec, pin_node, 0xF07, 0x00) & ~0x40));
-}
-
-// Note: hda_is_headphone_connected has been moved to HDA_Codec class
-// For backward compatibility, check all codecs
-STDMETHODIMP_(BOOLEAN) CAdapterCommon::hda_is_headphone_connected ( void ) {
-	for (int i = 0; i < codecCount; i++) {
-		if (pCodecs[i] != NULL && pCodecs[i]->hda_is_headphone_connected()) {
-			return TRUE;
-		}
-	}
-	return FALSE;
-}
-
-
 /*****************************************************************************
  * Note: hda_initialize_output_pin, hda_initialize_audio_output,
  * hda_initialize_audio_mixer, and hda_initialize_audio_selector 
@@ -1766,46 +1721,16 @@ ReadController
 {
 	DOUT (DBG_PRINT, ("[CAdapterCommon::ReadController]"));
     BYTE returnValue = BYTE(-1);
-	/*
-
-    ASSERT(m_pWaveBase);
-
-    ULONGLONG m_startTime = PcGetTimeInterval(0);
-
-    do
-    {
-        if
-        (   READ_PORT_UCHAR
-            (
-                m_pWaveBase + DSP_REG_DATAAVAIL
-            )
-        &   0x80
-        )
-        {
-            returnValue =
-                READ_PORT_UCHAR
-                (
-                    m_pWaveBase + DSP_REG_READ
-                );
-        }
-    } while ((PcGetTimeInterval(m_startTime) < GTI_MILLISECONDS(20)) &&
-             (BYTE(-1) == returnValue));
-
-
-    ASSERT((BYTE(-1) != returnValue) || !"ReadController timeout!");
-	*/
 
     return returnValue;
 }
 
-ULONG CAdapterCommon::SendVerb(CAdapterCommon* pAdapter, ULONG codec, ULONG node, ULONG verb, ULONG command) {
-    return pAdapter->hda_send_verb(codec, node, verb, command);
-}
 
 /*****************************************************************************
  * CAdapterCommon::WriteController()
  *****************************************************************************
  * Write a byte to the controller.
+ * TODO: remove from interface
  */
 STDMETHODIMP_(BOOLEAN)
 CAdapterCommon::
@@ -1818,37 +1743,6 @@ WriteController
 	DOUT (DBG_PRINT, ("trying to write %d", Value));
 
 	BYTE returnValue = BYTE(-1);
-	/*
-    ASSERT(m_pWaveBase);
-
-    BOOLEAN     returnValue = FALSE;
-    ULONGLONG   m_startTime   = PcGetTimeInterval(0);
-
-    do
-    {
-
-        BYTE status =
-            READ_PORT_UCHAR
-            (
-                m_pWaveBase + DSP_REG_WRITE
-            );
-
-        if ((status & 0x80) == 0)
-        {
-            WRITE_PORT_UCHAR
-            (
-                m_pWaveBase + DSP_REG_WRITE,
-                Value
-            );
-
-            returnValue = TRUE;
-        }
-    } while ((PcGetTimeInterval(m_startTime) < GTI_MILLISECONDS(20)) &&
-              ! returnValue);
-
-
-    ASSERT(returnValue || !"WriteController timeout");
-	*/
 
     return returnValue;
 }

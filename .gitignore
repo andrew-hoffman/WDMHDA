@@ -1,0 +1,5 @@
+buildchk.*
+buildfre.*
+/obj/**
+/objchk/**
+/objfre/**

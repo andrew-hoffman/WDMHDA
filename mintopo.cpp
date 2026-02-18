@@ -67,28 +67,8 @@ ProcessResources
     NTSTATUS    ntStatus    = STATUS_SUCCESS;
 
 
-	/* HACK - let me stay running long enough to make a noise please!!
-    //
-    // Make sure we have the expected number of resources.
-    //
-    if  (   (countIO != 1)
-        ||  (countIRQ != 0)
-        ||  (countDMA != 0)
-        )
-    {
-        _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
-        ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-    }
+	// ignore resources list
 
-    if (NT_SUCCESS(ntStatus))
-    {
-        //
-        // Get the port address.
-        //
-        PortBase =
-            PUCHAR(ResourceList->FindTranslatedPort(0)->u.Port.Start.LowPart);
-    }
-	*/
     return ntStatus;
 }
 

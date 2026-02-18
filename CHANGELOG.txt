@@ -1,3 +1,12 @@
+## WDMHDA Alpha-016 2026-01-28
+
+Note: You must install this version of the driver again with the .inf file!
+
+- Fixed PCIe No-Snoop flag which was causing garbled audio on Intel PCH and newer
+- May be fixed for AMD SB450/600 as well, need to test
+- Fixed DMA Position Buffer but disabled it by default again
+
+
 ## WDMHDA Alpha-015 2026-01-23
 
 Note: You must install this version of the driver again with the .inf file!

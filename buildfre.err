@@ -1,34 +1,84 @@
-codec.h(16) : error C2220: warning treated as error - no object file generated
-codec.h(16) : error C4099: 'IAdapterCommon' : type name first seen using 'struct' now seen using 'class'
-common.h(233) : error see declaration of 'IAdapterCommon'
-codec.h(47) : error C2629: unexpected 'class HDA_Codec ('
-codec.h(47) : error C2238: unexpected token(s) preceding ';'
-common.cpp(1338) : error C2661: 'HDA_Codec::HDA_Codec' : no overloaded function takes 2 parameters
-common.cpp(1396) : error C2661: 'HDA_Codec::HDA_Codec' : no overloaded function takes 2 parameters
-common.cpp(1447) : error C2661: 'HDA_Codec::HDA_Codec' : no overloaded function takes 2 parameters
-codec.h(16) : error C2220: warning treated as error - no object file generated
-codec.h(16) : error C4099: 'IAdapterCommon' : type name first seen using 'struct' now seen using 'class'
-common.h(233) : error see declaration of 'IAdapterCommon'
-codec.h(47) : error C2629: unexpected 'class HDA_Codec ('
-codec.h(47) : error C2238: unexpected token(s) preceding ';'
-codec.cpp(20) : error C2065: 'CAdapterCommon' : undeclared identifier
-codec.cpp(20) : error C2065: 'adapter' : undeclared identifier
-codec.cpp(20) : error C2275: 'UCHAR' : illegal use of this type as an expression
-c:\ntddk\inc\ntdef.h(360) : error see declaration of 'UCHAR'
-codec.cpp(20) : error C2146: syntax error : missing ')' before identifier 'address'
-codec.cpp(20) : error C2350: 'HDA_Codec::HDA_Codec::HDA_Codec' is not a static member
-codec.cpp(20) : error C2078: too many initializers
-codec.cpp(20) : error C2275: 'UCHAR' : illegal use of this type as an expression
-c:\ntddk\inc\ntdef.h(360) : error see declaration of 'UCHAR'
-codec.cpp(20) : error C2059: syntax error : ')'
-codec.cpp(21) : error C2501: 'pAdapter' : missing storage-class or type specifiers
-codec.cpp(22) : error C2065: 'address' : undeclared identifier
-codec.cpp(22) : error C2501: 'codec_address' : missing storage-class or type specifiers
-codec.cpp(23) : error C2501: 'codec_id' : missing storage-class or type specifiers
-codec.cpp(24) : error C2501: 'is_initialized_useful_output' : missing storage-class or type specifiers
-codec.cpp(25) : error C2501: 'selected_output_node' : missing storage-class or type specifiers
-codec.cpp(26) : error C2501: 'length_of_node_path' : missing storage-class or type specifiers
-codec.cpp(27) : error C2501: 'afg_node_sample_capabilities' : missing storage-class or type specifiers
-codec.cpp(28) : error C2501: 'afg_node_stream_format_capabilities' : missing storage-class or type specifiers
-codec.cpp(29) : error C2501: 'afg_node_input_amp_capabilities' : missing storage-class or type specifiers
-codec.cpp(30) : error C2501: 'afg_node_output_amp_capabilities' : missing storage-class or type specifiers
+common.cpp(448) : error C2181: illegal else without matching if
+common.cpp(451) : error C2043: illegal break
+common.cpp(452) : error C2046: illegal case
+common.cpp(471) : error C2043: illegal break
+common.cpp(472) : error C2046: illegal case
+common.cpp(559) : error C2043: illegal break
+common.cpp(560) : error C2046: illegal case
+common.cpp(569) : error C2043: illegal break
+common.cpp(570) : error C2047: illegal default
+common.cpp(572) : error C2043: illegal break
+common.cpp(577) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(577) : error C2143: syntax error : missing ';' before '{'
+common.cpp(577) : error C2447: missing function header (old-style formal list?)
+common.cpp(581) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(581) : error C2143: syntax error : missing ';' before '{'
+common.cpp(581) : error C2447: missing function header (old-style formal list?)
+common.cpp(601) : error C2143: syntax error : missing ';' before 'for'
+common.cpp(601) : error C2143: syntax error : missing ')' before ';'
+common.cpp(601) : error C2143: syntax error : missing ';' before '<'
+common.cpp(601) : error C2501: 'i' : missing storage-class or type specifiers
+common.cpp(601) : error C2143: syntax error : missing ';' before '<'
+common.cpp(601) : error C2143: syntax error : missing ';' before '++'
+common.cpp(601) : error C2501: 'i' : missing storage-class or type specifiers
+common.cpp(601) : error C2086: 'i' : redefinition
+common.cpp(601) : error C2143: syntax error : missing ';' before '++'
+common.cpp(601) : error C2059: syntax error : ')'
+common.cpp(601) : error C2143: syntax error : missing ';' before '{'
+common.cpp(601) : error C2447: missing function header (old-style formal list?)
+common.cpp(621) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(621) : error C2143: syntax error : missing ';' before '{'
+common.cpp(621) : error C2447: missing function header (old-style formal list?)
+common.cpp(627) : error C2501: 'm_pHDARegisters' : missing storage-class or type specifiers
+common.cpp(627) : error C2065: 'physAddr' : undeclared identifier
+common.cpp(627) : error C2065: 'memLength' : undeclared identifier
+common.cpp(629) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(629) : error C2143: syntax error : missing ';' before '{'
+common.cpp(629) : error C2447: missing function header (old-style formal list?)
+common.cpp(632) : error C2143: syntax error : missing ';' before 'else'
+common.cpp(632) : error C2143: syntax error : missing ';' before '{'
+common.cpp(632) : error C2447: missing function header (old-style formal list?)
+common.cpp(635) : error C2143: syntax error : missing ';' before 'else'
+common.cpp(635) : error C2143: syntax error : missing ';' before '{'
+common.cpp(635) : error C2447: missing function header (old-style formal list?)
+common.cpp(638) : error C2501: 'Base' : missing storage-class or type specifiers
+common.cpp(638) : error C2440: 'initializing' : cannot convert from 'unsigned char *' to 'int'
+common.cpp(647) : error C2065: 'readUSHORT' : undeclared identifier
+common.cpp(647) : error C4242: 'initializing' : conversion from 'int' to 'unsigned short', possible loss of data
+common.cpp(650) : error C2501: 'is64OK' : missing storage-class or type specifiers
+common.cpp(657) : error C2501: 'InputStreamBase' : missing storage-class or type specifiers
+common.cpp(660) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(660) : error C2143: syntax error : missing ';' before '{'
+common.cpp(660) : error C2447: missing function header (old-style formal list?)
+common.cpp(664) : error C2143: syntax error : missing ';' before 'else'
+common.cpp(664) : error C2143: syntax error : missing ';' before '{'
+common.cpp(664) : error C2447: missing function header (old-style formal list?)
+common.cpp(668) : error C2501: 'OutputStreamBase' : missing storage-class or type specifiers
+common.cpp(668) : error C2065: 'FirstOutputStream' : undeclared identifier
+common.cpp(669) : error C2143: syntax error : missing ';' before 'switch'
+common.cpp(669) : error C2143: syntax error : missing ';' before '{'
+common.cpp(669) : error C2447: missing function header (old-style formal list?)
+common.cpp(697) : error C2501: 'pDeviceDescription' : missing storage-class or type specifiers
+common.cpp(698) : error C2440: 'initializing' : cannot convert from 'struct _DEVICE_DESCRIPTION *' to 'int'
+common.cpp(699) : error C2143: syntax error : missing ';' before 'if'
+common.cpp(699) : error C2143: syntax error : missing ';' before '{'
+common.cpp(699) : error C2447: missing function header (old-style formal list?)
+common.cpp(704) : error C2501: 'memset' : missing storage-class or type specifiers
+common.cpp(704) : error C2373: 'memset' : redefinition; different type modifiers
+c:\ntddk\inc\string.h(95) : error see declaration of 'memset'
+common.cpp(704) : error C2078: too many initializers
+common.cpp(706) : error C2143: syntax error : missing ';' before '->'
+common.cpp(706) : error C2501: 'pDeviceDescription' : missing storage-class or type specifiers
+common.cpp(706) : error C2086: 'pDeviceDescription' : redefinition
+common.cpp(706) : error C2143: syntax error : missing ';' before '->'
+common.cpp(707) : error C2143: syntax error : missing ';' before '->'
+common.cpp(707) : error C2501: 'pDeviceDescription' : missing storage-class or type specifiers
+common.cpp(707) : error C2086: 'pDeviceDescription' : redefinition
+common.cpp(707) : error C2143: syntax error : missing ';' before '->'
+common.cpp(708) : error C2143: syntax error : missing ';' before '->'
+common.cpp(708) : error C2501: 'pDeviceDescription' : missing storage-class or type specifiers
+common.cpp(708) : error C2086: 'pDeviceDescription' : redefinition
+common.cpp(708) : error C2143: syntax error : missing ';' before '->'
+common.cpp(709) : error C2143: syntax error : missing ';' before '->'
+common.cpp(709) : error C2501: 'pDeviceDescription' : missing storage-class or type specifiers
+common.cpp(709) : error C2086: 'pDeviceDescription' : redefinition

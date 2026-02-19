@@ -426,18 +426,46 @@ Init
 	//apply device-specific config space patches depending on the VID/PID
 	switch (pci_ven){
 		case 0x1002: //ATI
-			if ((pci_dev == 0x437b) || (pci_dev == 0x4383)){
-				DbgPrint( "ATI SB450/600\n");
+		case 0x1022: //AMD
+			if ( (pci_dev == 0x437b) || (pci_dev == 0x4383) //ATI SB
+				|| (pci_dev == 0x780d) //Hudson
+				|| (pci_dev == 0x1457) || (pci_dev == 0x1487) //AMD Ryzen
+				|| (pci_dev == 0x157a) || (pci_dev == 0x15e3) //AMD APU
+			){
+				DbgPrint( "ATI/AMD SB450/600/APU\n");
+				//Enable Snoop
 				ntStatus = WriteConfigSpaceByte(0x42,
-					~ATI_SB450_HDAUDIO_ENABLE_SNOOP, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
+					~0x07, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
 				//should read back & confirm it was set.
+			} else if ( (pci_dev == 0x0002) || (pci_dev == 0x1308)
+				|| (pci_dev == 0x157a) || (pci_dev == 0x15b3)
+			){				
+				DbgPrint( "ATI/AMD HDMI Nosnoop\n");
+				//Disable Snoop
+				ntStatus = WriteConfigSpaceByte(0x42,
+					~ATI_SB450_HDAUDIO_ENABLE_SNOOP, 0);
+			} else {
+				DbgPrint( "ATI/AMD Other\n");
 			}
 			break;
 		case 0x10de: //nvidia
-			if((pci_dev == 0x026c) || (pci_dev == 0x0371)){
-				DbgPrint( "Nforce 510/550\n");			 
+			if ( (pci_dev == 0x026c) || (pci_dev == 0x0371) //MCP5x
+			  || (pci_dev == 0x03e4) || (pci_dev == 0x03f0) //MCP61
+			  || (pci_dev == 0x044a) || (pci_dev == 0x044b) //MCP65
+			  || (pci_dev == 0x055c) || (pci_dev == 0x055d) //MCP67
+			  || (pci_dev == 0x0774) || (pci_dev == 0x0775) //MCP77
+			  || (pci_dev == 0x0776) || (pci_dev == 0x0777) //MCP77
+		  	  || (pci_dev == 0x07fc) || (pci_dev == 0x07fd) //MCP73
+			  || (pci_dev == 0x0ac0) || (pci_dev == 0x0ac1) //MCP79
+			  || (pci_dev == 0x0ac2) || (pci_dev == 0x0ac3) //MCP79
+			  || (pci_dev == 0x0d94) || (pci_dev == 0x0d95) //MCP89
+			  || (pci_dev == 0x0d96) || (pci_dev == 0x0d97) //MCP
+			){
+				DbgPrint( "Nvidia MCP\n");			 
 				ntStatus = WriteConfigSpaceByte(0x4e,
 					~NVIDIA_HDA_ENABLE_COHBITS, NVIDIA_HDA_ENABLE_COHBITS);
+			} else{
+				DbgPrint("Nvidia HDMI\n");
 			}
 			break;
 		case 0x8086: //Intel
@@ -448,6 +476,16 @@ Init
 					//set device 27 function 0 configspace offset 40h bit 0 to 1
 					//to enable HDA link mode (if it isnt already)
 					ntStatus = WriteConfigSpaceByte(0x40, 0xfe, 0x01);
+					break;
+				//ICH
+				case 0x269a:
+				case 0x284b:
+				case 0x2911:
+				case 0x293e:
+				case 0x293f:
+				case 0x3a3e: //ICH8
+				case 0x3a6e: //ICH9
+					DbgPrint( "Intel ICH\n"); //these don't need nosnoop flag changed (?)
 					break;
 				//PCH
 				case 0x1c20: 
@@ -503,8 +541,9 @@ Init
 				case 0x080a:
 				case 0x0f04:
 				case 0x2284:
+				default:
 
-					DbgPrint( "Intel PCH/SCH\n");
+					DbgPrint( "Intel PCH/SCH/SKL/HDMI\n");
 					//disable no-snoop transaction feature (clear bit 11) if it is set
 					tmp = *((PUSHORT)(pConfigMem + INTEL_SCH_HDA_DEVC));
 					if((tmp & INTEL_SCH_HDA_DEVC_NOSNOOP) != 0){
@@ -514,8 +553,6 @@ Init
 					} else {
 						DbgPrint( "0x%X - snoop already ok\n", tmp);
 					}
-					break;
-				default:
 					break;
 			}
 			break;
@@ -617,7 +654,16 @@ Init
 
 	//offsets for stream engines
 	InputStreamBase = (0x80);
-	FirstOutputStream = ((caps >> 8) & 0xF);
+	UCHAR numCaptureStreams = ((caps >> 8) & 0xF);
+	UCHAR numPlaybackStreams = ((caps >> 12) & 0xf);
+	if(!numCaptureStreams && !numPlaybackStreams){
+		DOUT(DBG_ERROR, ("Capabilities reports no streams. Guessing 4"));
+		//TODO check on ULI and ATI systems that report weird caps!
+		FirstOutputStream = 4;
+	} else {
+		FirstOutputStream = numCaptureStreams;
+	}
+
 	OutputStreamBase = HDA_STREAMBASE(FirstOutputStream); //skip input streams ports
 	switch((caps >> 1) & 0x3){
 	case 0:

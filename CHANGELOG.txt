@@ -1,3 +1,8 @@
+## WDMHDA Alpha-017 2026-02-18
+- Allows multiple codecs on a controller link to be used
+- Added many more chipset device IDs for snoop flag. 
+  Should fix garbled audio on a lot of AMD and Nforce chipsets.
+
 ## WDMHDA Alpha-016 2026-01-28
 
 Note: You must install this version of the driver again with the .inf file!

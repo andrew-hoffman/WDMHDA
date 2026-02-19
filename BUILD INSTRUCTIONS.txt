@@ -1,16 +1,40 @@
 Build Instructions
 
-1. Create a Windows 98se or 2000 VM
+1. Create a Windows 98se or 2000 VM in VMWare or Virtualbox
+	Real hardware will work too but this is easier
 2. Install Visual C++ 6.0 (No service packs) with all options
 3. Install Windows 2000 DDK with all options except Alpha code selected
-4. Copy the source tree to C:\NTDDK\src\wdm\audio\hdac
+4. Copy the source tree to any folder under C:\NTDDK\src\wdm\audio\
+	I use C:\NTDDK\src\wdm\audio\hdac
 5. Open a "Checked Build Environment" or "Free Build Environment" command prompt 
 	(Start > Programs > Development Kits > Windows 2000 DDK)
 	checked builds include debug prints and extra memory bounds checking.
 6. CD to the C:\NTDDK\src\wdm\audio directory and run "build -cZ"
-	this will build all the sample audio drivers as well but we need stdunk.cpp and the headers from them
-	After the first build, you can build in the hdac directory.
+	this will build all the sample audio drivers because we need stdunk.cpp and the headers from them
+	After the first build, you can build in the subdirectory.
 
 HDA.SYS will be built in the "objfre" or "objchk" folders. Install it with hda.inf
 
-to use a kernel debugger see https://bikodbg.com/blog/2021/08/win98-ddk/
+To set up a kernel debugger see https://bikodbg.com/blog/2021/08/win98-ddk/
+
+Quick Guide to source files: Most of this code is from the Win2k DDK AC97 and SB16 sample drivers
+Also used code from BleskOS, MPXPlay, MSDN references
+
+File		Description
+---------------------------
+
+Adapter.cpp	Connects the driver with the system
+Codec.cpp 	Object for each Codec on HDA link
+codec.h 	Codec object header
+Common.cpp	Common object used by all miniports, and HDA controller setup
+Common.h 	Header file for the common object
+Makefile	Standard Windows NT makefile
+Mintopo.cpp	Implementation of the topology miniport
+Mintopo.h	Header file for the topology miniport
+Minwave.cpp	Implementation of the wave cyclic miniport and the stream object
+Minwave.h	Header file for the wave cyclic miniport and the stream object
+Hda.inf		Setup information
+Hda.rc		Resource file containing version information
+Sources		Dependency information for compiling
+Tables.h	Topology and property tables
+

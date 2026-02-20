@@ -1,10 +1,10 @@
-# Microsoft Developer Studio Project File - Name="adapter" - Package Owner=<4>
+# Microsoft Developer Studio Project File - Name="HDA" - Package Owner=<4>
 # Microsoft Developer Studio Generated Build File, Format Version 6.00
 # ** DO NOT EDIT **
 
 # TARGTYPE "Win32 (x86) Console Application" 0x0103
 
-CFG=adapter - Win32 Debug
+CFG=HDA - Win32 Debug
 !MESSAGE This is not a valid makefile. To build this project using NMAKE,
 !MESSAGE use the Export Makefile command and run
 !MESSAGE 
@@ -13,12 +13,12 @@ CFG=adapter - Win32 Debug
 !MESSAGE You can specify a configuration when running NMAKE
 !MESSAGE by defining the macro CFG on the command line. For example:
 !MESSAGE 
-!MESSAGE NMAKE /f "hda.mak" CFG="adapter - Win32 Debug"
+!MESSAGE NMAKE /f "hda.mak" CFG="HDA - Win32 Debug"
 !MESSAGE 
 !MESSAGE Possible choices for configuration are:
 !MESSAGE 
-!MESSAGE "adapter - Win32 Release" (based on "Win32 (x86) Console Application")
-!MESSAGE "adapter - Win32 Debug" (based on "Win32 (x86) Console Application")
+!MESSAGE "HDA - Win32 Release" (based on "Win32 (x86) Console Application")
+!MESSAGE "HDA - Win32 Debug" (based on "Win32 (x86) Console Application")
 !MESSAGE 
 
 # Begin Project
@@ -28,7 +28,7 @@ CFG=adapter - Win32 Debug
 CPP=cl.exe
 RSC=rc.exe
 
-!IF  "$(CFG)" == "adapter - Win32 Release"
+!IF  "$(CFG)" == "HDA - Win32 Release"
 
 # PROP BASE Use_MFC 0
 # PROP BASE Use_Debug_Libraries 0
@@ -51,7 +51,7 @@ LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386
 # ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:console /machine:I386
 
-!ELSEIF  "$(CFG)" == "adapter - Win32 Debug"
+!ELSEIF  "$(CFG)" == "HDA - Win32 Debug"
 
 # PROP BASE Use_MFC 0
 # PROP BASE Use_Debug_Libraries 1
@@ -78,19 +78,19 @@ LINK32=link.exe
 
 # Begin Target
 
-# Name "adapter - Win32 Release"
-# Name "adapter - Win32 Debug"
-# Begin Source File
-
-SOURCE=.\ac97reg.h
-# End Source File
+# Name "HDA - Win32 Release"
+# Name "HDA - Win32 Debug"
 # Begin Source File
 
 SOURCE=.\adapter.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\adapter.h
+SOURCE=.\codec.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\codec.h
 # End Source File
 # Begin Source File
 
@@ -114,15 +114,7 @@ SOURCE=.\hdaudio.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\ichreg.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\ichwave.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\ichwave.h
+SOURCE=.\ioctls.h
 # End Source File
 # Begin Source File
 
@@ -142,11 +134,15 @@ SOURCE=.\minwave.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\prophnd.cpp
+SOURCE=.\resource.h
 # End Source File
 # Begin Source File
 
 SOURCE=.\shared.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\tables.h
 # End Source File
 # End Target
 # End Project

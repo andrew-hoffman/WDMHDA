@@ -31,8 +31,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 5,0,2195,16
- PRODUCTVERSION 5,0,2195,16
+ FILEVERSION 5,0,2195,17
+ PRODUCTVERSION 5,0,2195,17
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -50,14 +50,14 @@ BEGIN
             VALUE "Comments", "\0"
             VALUE "CompanyName", "Sirius Cybernetics\0"
             VALUE "FileDescription", "HD Audio Controller+Codec Driver\0"
-            VALUE "FileVersion", "5.00.2195.16\0"
+            VALUE "FileVersion", "5.00.2195.17\0"
             VALUE "InternalName", "HDA.sys\0"
             VALUE "LegalCopyright", "(C) Microsoft Corp. 1981-1997, Andrew Hoffman 2025-2026\0"
             VALUE "LegalTrademarks", "\0"
             VALUE "OriginalFilename", "HDA.sys\0"
             VALUE "PrivateBuild", "\0"
             VALUE "ProductName", "HD Audio Sample Driver\0"
-            VALUE "ProductVersion", "5.00.2195.16\0"
+            VALUE "ProductVersion", "5.00.2195.17\0"
             VALUE "SpecialBuild", "\0"
         END
     END

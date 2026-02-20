@@ -541,7 +541,6 @@ Init
 				case 0x080a:
 				case 0x0f04:
 				case 0x2284:
-				default:
 
 					DbgPrint( "Intel PCH/SCH/SKL/HDMI\n");
 					//disable no-snoop transaction feature (clear bit 11) if it is set
@@ -554,6 +553,9 @@ Init
 						DbgPrint( "0x%X - snoop already ok\n", tmp);
 					}
 					break;
+				default:
+					DbgPrint( "Unknown intel chipset PID %X\n", pci_dev);
+
 			}
 			break;
 		case 0x10b9://ULI M5461

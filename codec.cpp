@@ -275,13 +275,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( ("no output device"));
 				}
-			} else if(type_of_node == HDA_PIN_HEADPHONE_OUT) {
+			} else if(pin_node_type == HDA_PIN_HEADPHONE_OUT) {
 				DbgPrint( ("Headphone Out"));
 
 				//save node number
 				//TODO: handle if there are multiple HP nodes
 				pin_headphone_node_number = node;
-			} else if(type_of_node == HDA_PIN_CD) {
+			} else if(pin_node_type == HDA_PIN_CD) {
 				DbgPrint( ("CD"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -291,7 +291,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_SPDIF_OUT) {
+			} else if(pin_node_type == HDA_PIN_SPDIF_OUT) {
 				DbgPrint( ("SPDIF Out"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -301,7 +301,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_OUT) {
+			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_OUT) {
 				DbgPrint( ("Digital Other Out"));
 				//save this node, this variable contain number of last alternative output
 				if (useAltOut){
@@ -310,7 +310,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_MODEM_LINE_SIDE) {
+			} else if(pin_node_type == HDA_PIN_MODEM_LINE_SIDE) {
 				DbgPrint( ("Modem Line Side"));
 
 				//save this node, this variable contain number of last alternative output
@@ -320,7 +320,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_MODEM_HANDSET_SIDE) {
+			} else if(pin_node_type == HDA_PIN_MODEM_HANDSET_SIDE) {
 				DbgPrint( ("Modem Handset Side"));
 	
 				//save this node, this variable contain number of last alternative output
@@ -330,21 +330,21 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				} else {
 					DbgPrint( (" not considered"));
 				}
-			} else if(type_of_node == HDA_PIN_LINE_IN) {
+			} else if(pin_node_type == HDA_PIN_LINE_IN) {
 				DbgPrint( ("Line In"));
-			} else if(type_of_node == HDA_PIN_AUX) {
+			} else if(pin_node_type == HDA_PIN_AUX) {
 				DbgPrint( ("AUX"));
-			} else if(type_of_node == HDA_PIN_MIC_IN) {
+			} else if(pin_node_type == HDA_PIN_MIC_IN) {
 				DbgPrint( ("Mic In"));
-			} else if(type_of_node == HDA_PIN_TELEPHONY) {
+			} else if(pin_node_type == HDA_PIN_TELEPHONY) {
 				DbgPrint( ("Telephony"));
-			} else if(type_of_node == HDA_PIN_SPDIF_IN) {
+			} else if(pin_node_type == HDA_PIN_SPDIF_IN) {
 				DbgPrint( ("SPDIF In"));
-			} else if(type_of_node == HDA_PIN_DIGITAL_OTHER_IN) {
+			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_IN) {
 				DbgPrint( ("Digital Other In"));
-			} else if(type_of_node == HDA_PIN_RESERVED) {
+			} else if(pin_node_type == HDA_PIN_RESERVED) {
 				DbgPrint( ("Reserved"));
-			} else if(type_of_node == HDA_PIN_OTHER) {
+			} else if(pin_node_type == HDA_PIN_OTHER) {
 				DbgPrint( ("Other"));
 			}
 		}

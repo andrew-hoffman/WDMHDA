@@ -1,10 +1,6 @@
  HDA
 
-<<<<<<< HEAD
- Timestamp is 69966178 (Wed Feb 18 17:03:52 2026)
-=======
- Timestamp is 69964b09 (Wed Feb 18 15:28:09 2026)
->>>>>>> daa9a0b0f5f8720cd84598f8c2b1371cf1850eea
+ Timestamp is 69975ff5 (Thu Feb 19 11:09:41 2026)
 
  Preferred load address is 00010000
 
@@ -14,7 +10,7 @@
  0002:000000b0 00000610H .rdata                  DATA
  0003:00000000 00000d10H .data                   DATA
  0003:00000d10 00000016H .bss                    DATA
- 0004:00000000 00002c2bH PAGE                    CODE
+ 0004:00000000 00002e5fH PAGE                    CODE
  0005:00000000 00000015H INIT                    CODE
  0005:00000018 0000003cH .idata$2                CODE
  0005:00000054 00000014H .idata$3                CODE
@@ -271,99 +267,52 @@
  0004:00000120       ?StartDevice@@YGJPAU_DEVICE_OBJECT@@PAU_IRP@@PAUIResourceList@@@Z 00013a20 f   adapter.obj
  0004:0000036e       ?AssignResources@@YGJPAUIResourceList@@PAPAU1@11111@Z 00013c6e f   adapter.obj
  0004:000004fe       ?NewAdapterCommon@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00013dfe f   common.obj
-<<<<<<< HEAD
- 0004:000007e7       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 000140e7 f   common.obj
- 0004:00000ec0       ??1CAdapterCommon@@UAE@XZ  000147c0 f   common.obj
- 0004:00001048       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00014948 f   common.obj
- 0004:00001108       ?WavePortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014a08 f   common.obj
- 0004:00001114       ?GetInterruptSync@CAdapterCommon@@UAGPAUIInterruptSync@@XZ 00014a14 f   common.obj
- 0004:00001122       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014a22 f   common.obj
- 0004:0000112e       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00014a2e f   common.obj
- 0004:0000115e       ?InitHDAController@CAdapterCommon@@QAGJXZ 00014a5e f   common.obj
- 0004:00001784       ?ReadRegistryBoolean@CAdapterCommon@@AAGEPBGE@Z 00015084 f   common.obj
- 0004:00001860       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015160 f   mintopo.obj
- 0004:000018c0       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 000151c0 f   mintopo.obj
- 0004:000018e4       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 000151e4 f   mintopo.obj
- 0004:00001992       ??1CMiniportTopologyHDA@@UAE@XZ 00015292 f   mintopo.obj
- 0004:000019d6       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 000152d6 f   mintopo.obj
- 0004:00001a38       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00015338 f   mintopo.obj
- 0004:0000225c       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015b5c f   minwave.obj
- 0004:000022bc       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015bbc f   minwave.obj
- 0004:00002362       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 00015c62 f   minwave.obj
- 0004:0000244c       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00015d4c f   minwave.obj
- 0004:000024fa       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00015dfa f   minwave.obj
- 0004:0000254e       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 00015e4e f   minwave.obj
- 0004:000025f6       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00015ef6 f   minwave.obj
- 0004:00002606       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00015f06 f   minwave.obj
- 0004:0000285c       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 0001615c f   minwave.obj
- 0004:0000299c       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 0001629c f   minwave.obj
- 0004:00002a24       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00016324 f   minwave.obj
- 0004:00002a8e       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 0001638e f   minwave.obj
- 0004:00002b14       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00016414 f   minwave.obj
- 0004:00002b54       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00016454 f   minwave.obj
- 0004:00002be0       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 000164e0 f   minwave.obj
- 0005:00000000       _DriverEntry@8             00016540 f   adapter.obj
- 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00016558     ntoskrnl:ntoskrnl.exe
- 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    0001656c     hal:HAL.dll
- 0005:00000040       __IMPORT_DESCRIPTOR_portcls 00016580     portcls:portcls.sys
- 0005:00000054       __NULL_IMPORT_DESCRIPTOR   00016594     ntoskrnl:ntoskrnl.exe
-=======
- 0004:00000797       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 00014097 f   common.obj
- 0004:00000efc       ??1CAdapterCommon@@UAE@XZ  000147fc f   common.obj
- 0004:00001084       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00014984 f   common.obj
- 0004:00001144       ?WavePortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014a44 f   common.obj
- 0004:00001150       ?GetInterruptSync@CAdapterCommon@@UAGPAUIInterruptSync@@XZ 00014a50 f   common.obj
- 0004:0000115e       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014a5e f   common.obj
- 0004:0000116a       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00014a6a f   common.obj
- 0004:0000119a       ?InitHDAController@CAdapterCommon@@QAGJXZ 00014a9a f   common.obj
- 0004:000017c0       ?ReadRegistryBoolean@CAdapterCommon@@AAGEPBGE@Z 000150c0 f   common.obj
- 0004:0000189c       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 0001519c f   mintopo.obj
- 0004:000018fc       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 000151fc f   mintopo.obj
- 0004:00001920       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 00015220 f   mintopo.obj
- 0004:000019ce       ??1CMiniportTopologyHDA@@UAE@XZ 000152ce f   mintopo.obj
- 0004:00001a12       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 00015312 f   mintopo.obj
- 0004:00001a74       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00015374 f   mintopo.obj
- 0004:00002298       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015b98 f   minwave.obj
- 0004:000022f8       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015bf8 f   minwave.obj
- 0004:0000239e       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 00015c9e f   minwave.obj
- 0004:00002488       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00015d88 f   minwave.obj
- 0004:00002536       ??1CMiniportWaveCyclicHDA@@UAE@XZ 00015e36 f   minwave.obj
- 0004:0000258a       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 00015e8a f   minwave.obj
- 0004:00002632       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 00015f32 f   minwave.obj
- 0004:00002642       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 00015f42 f   minwave.obj
- 0004:00002898       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 00016198 f   minwave.obj
- 0004:000029d8       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000162d8 f   minwave.obj
- 0004:00002a60       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00016360 f   minwave.obj
- 0004:00002aca       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 000163ca f   minwave.obj
- 0004:00002b50       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00016450 f   minwave.obj
- 0004:00002b90       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00016490 f   minwave.obj
- 0004:00002c1c       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 0001651c f   minwave.obj
- 0005:00000000       _DriverEntry@8             00016580 f   adapter.obj
- 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00016598     ntoskrnl:ntoskrnl.exe
- 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    000165ac     hal:HAL.dll
- 0005:00000040       __IMPORT_DESCRIPTOR_portcls 000165c0     portcls:portcls.sys
- 0005:00000054       __NULL_IMPORT_DESCRIPTOR   000165d4     ntoskrnl:ntoskrnl.exe
->>>>>>> daa9a0b0f5f8720cd84598f8c2b1371cf1850eea
+ 0004:00000807       ?Init@CAdapterCommon@@UAGJPAUIResourceList@@PAU_DEVICE_OBJECT@@@Z 00014107 f   common.obj
+ 0004:000010f4       ??1CAdapterCommon@@UAE@XZ  000149f4 f   common.obj
+ 0004:0000127c       ?NonDelegatingQueryInterface@CAdapterCommon@@UAGJABU_GUID@@PAPAX@Z 00014b7c f   common.obj
+ 0004:0000133c       ?WavePortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014c3c f   common.obj
+ 0004:00001348       ?GetInterruptSync@CAdapterCommon@@UAGPAUIInterruptSync@@XZ 00014c48 f   common.obj
+ 0004:00001356       ?MidiPortDriverDest@CAdapterCommon@@UAGPAPAUIUnknown@@XZ 00014c56 f   common.obj
+ 0004:00001362       ?SetWaveServiceGroup@CAdapterCommon@@UAGXPAUIServiceGroup@@@Z 00014c62 f   common.obj
+ 0004:00001392       ?InitHDAController@CAdapterCommon@@QAGJXZ 00014c92 f   common.obj
+ 0004:000019b8       ?ReadRegistryBoolean@CAdapterCommon@@AAGEPBGE@Z 000152b8 f   common.obj
+ 0004:00001a94       ?CreateMiniportTopologyHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015394 f   mintopo.obj
+ 0004:00001af4       ?ProcessResources@CMiniportTopologyHDA@@AAEJPAUIResourceList@@@Z 000153f4 f   mintopo.obj
+ 0004:00001b18       ?NonDelegatingQueryInterface@CMiniportTopologyHDA@@UAGJABU_GUID@@PAPAX@Z 00015418 f   mintopo.obj
+ 0004:00001bc6       ??1CMiniportTopologyHDA@@UAE@XZ 000154c6 f   mintopo.obj
+ 0004:00001c0a       ?Init@CMiniportTopologyHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortTopology@@@Z 0001550a f   mintopo.obj
+ 0004:00001c6c       ?GetDescription@CMiniportTopologyHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001556c f   mintopo.obj
+ 0004:00002490       ?CreateMiniportWaveCyclicHDA@@YGJPAPAUIUnknown@@ABU_GUID@@PAU1@W4_POOL_TYPE@@@Z 00015d90 f   minwave.obj
+ 0004:000024f0       ?ProcessResources@CMiniportWaveCyclicHDA@@AAEJPAUIResourceList@@@Z 00015df0 f   minwave.obj
+ 0004:00002596       ?ValidateFormat@CMiniportWaveCyclicHDA@@AAEJPATKSDATAFORMAT@@@Z 00015e96 f   minwave.obj
+ 0004:00002680       ?NonDelegatingQueryInterface@CMiniportWaveCyclicHDA@@UAGJABU_GUID@@PAPAX@Z 00015f80 f   minwave.obj
+ 0004:0000272e       ??1CMiniportWaveCyclicHDA@@UAE@XZ 0001602e f   minwave.obj
+ 0004:00002782       ?Init@CMiniportWaveCyclicHDA@@UAGJPAUIUnknown@@PAUIResourceList@@PAUIPortWaveCyclic@@@Z 00016082 f   minwave.obj
+ 0004:0000282a       ?GetDescription@CMiniportWaveCyclicHDA@@UAGJPAPAUPCFILTER_DESCRIPTOR@@@Z 0001612a f   minwave.obj
+ 0004:0000283a       ?DataRangeIntersection@CMiniportWaveCyclicHDA@@UAGJKPATKSDATAFORMAT@@0KPAXPAK@Z 0001613a f   minwave.obj
+ 0004:00002a90       ?NewStream@CMiniportWaveCyclicHDA@@UAGJPAPAUIMiniportWaveCyclicStream@@PAUIUnknown@@W4_POOL_TYPE@@KEPATKSDATAFORMAT@@PAPAUIDmaChannel@@PAPAUIServiceGroup@@@Z 00016390 f   minwave.obj
+ 0004:00002bd0       ?NonDelegatingQueryInterface@CMiniportWaveCyclicStreamHDA@@UAGJABU_GUID@@PAPAX@Z 000164d0 f   minwave.obj
+ 0004:00002c58       ??1CMiniportWaveCyclicStreamHDA@@UAE@XZ 00016558 f   minwave.obj
+ 0004:00002cc2       ?Init@CMiniportWaveCyclicStreamHDA@@QAEJPAVCMiniportWaveCyclicHDA@@KEPATKSDATAFORMAT@@PAUIDmaChannel@@@Z 000165c2 f   minwave.obj
+ 0004:00002d48       ?SetNotificationFreq@CMiniportWaveCyclicStreamHDA@@UAGKKPAK@Z 00016648 f   minwave.obj
+ 0004:00002d88       ?SetFormat@CMiniportWaveCyclicStreamHDA@@UAGJPATKSDATAFORMAT@@@Z 00016688 f   minwave.obj
+ 0004:00002e14       ?SetState@CMiniportWaveCyclicStreamHDA@@UAGJW4KSSTATE@@@Z 00016714 f   minwave.obj
+ 0005:00000000       _DriverEntry@8             00016760 f   adapter.obj
+ 0005:00000018       __IMPORT_DESCRIPTOR_ntoskrnl 00016778     ntoskrnl:ntoskrnl.exe
+ 0005:0000002c       __IMPORT_DESCRIPTOR_HAL    0001678c     hal:HAL.dll
+ 0005:00000040       __IMPORT_DESCRIPTOR_portcls 000167a0     portcls:portcls.sys
+ 0005:00000054       __NULL_IMPORT_DESCRIPTOR   000167b4     ntoskrnl:ntoskrnl.exe
 
  entry point at        0005:00000000
 
  Static symbols
 
-<<<<<<< HEAD
- 0004:00001a48       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015348 f   mintopo.obj
- 0004:00001be6       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000154e6 f   mintopo.obj
- 0004:00001dc0       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000156c0 f   mintopo.obj
- 0004:000020dc       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000159dc f   mintopo.obj
+ 0004:00001c7c       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 0001557c f   mintopo.obj
+ 0004:00001e1a       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 0001571a f   mintopo.obj
+ 0004:00001ff4       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000158f4 f   mintopo.obj
+ 0004:00002310       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015c10 f   mintopo.obj
  0001:00001b46       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00011e26 f   mintopo.obj
- 0004:00002168       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015a68 f   mintopo.obj
-=======
- 0004:00001a84       ?PropertyHandler_OnOff@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015384 f   mintopo.obj
- 0004:00001c22       ?PropertyHandler_SuperMixCaps@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015522 f   mintopo.obj
- 0004:00001dfc       ?PropertyHandler_SuperMixTable@@YGJPAU_PCPROPERTY_REQUEST@@@Z 000156fc f   mintopo.obj
- 0004:00002118       ?PropertyHandler_CpuResources@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015a18 f   mintopo.obj
- 0001:00001b46       ?PropertyHandler_Level@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00011e26 f   mintopo.obj
- 0004:000021a4       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015aa4 f   mintopo.obj
->>>>>>> daa9a0b0f5f8720cd84598f8c2b1371cf1850eea
+ 0004:0000239c       ?BasicSupportHandler@@YGJPAU_PCPROPERTY_REQUEST@@@Z 00015c9c f   mintopo.obj
 
  309 bytes saved through ICF
 

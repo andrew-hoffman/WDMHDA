@@ -706,7 +706,7 @@ Init
 
 	pDeviceDescription -> Version			= DEVICE_DESCRIPTION_VERSION;
 	pDeviceDescription -> Master			= TRUE;
-	pDeviceDescription -> ScatterGather		= FALSE; // for THIS purpose it can't
+	pDeviceDescription -> ScatterGather		= TRUE; 
 	pDeviceDescription -> DemandMode		= FALSE;
 	pDeviceDescription -> AutoInitialize	= FALSE;
 	pDeviceDescription -> Dma32BitAddresses = TRUE;
@@ -715,7 +715,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= BdlSize + 4096 + 8192;
+	pDeviceDescription -> MaximumLength		= MAXLEN_DMA_BUFFER + BdlSize + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -2670,6 +2670,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	KeFlushIoBuffers(mdl, FALSE, TRUE); 
 	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
+	__asm {
+		wbinvd;
+	}
 
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);

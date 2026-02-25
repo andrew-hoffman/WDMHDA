@@ -153,6 +153,9 @@ public:
     STDMETHODIMP_(PINTERRUPTSYNC) GetInterruptSync
     (   void
     );
+	STDMETHODIMP_(PDEVICE_DESCRIPTION) GetDeviceDescription
+    (   void
+    );
     STDMETHODIMP_(PUNKNOWN *) WavePortDriverDest
     (   void
     );
@@ -715,7 +718,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus;
-	pDeviceDescription -> MaximumLength		= MAXLEN_DMA_BUFFER + BdlSize + 4096 + 8192;
+	pDeviceDescription -> MaximumLength		= BdlSize + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -1093,6 +1096,22 @@ GetInterruptSync
     PAGED_CODE();
 
     return m_pInterruptSync;
+}
+
+/*****************************************************************************
+ * CAdapterCommon::GetDeviceDescription()
+ *****************************************************************************
+ * Get a pointer to the DeviceDescription object.
+ */
+STDMETHODIMP_(PDEVICE_DESCRIPTION)
+CAdapterCommon::
+GetDeviceDescription
+(   void
+)
+{
+    PAGED_CODE();
+
+    return pDeviceDescription;
 }
 
 /*****************************************************************************
@@ -1513,17 +1532,10 @@ hda_use_pio_interface:
     return ntStatus;
 }
 
-
 /*****************************************************************************
  * Note: hda_initialize_audio_function_group, hda_initialize_output_pin,
  * hda_initialize_audio_output, hda_initialize_audio_mixer, and 
  * hda_initialize_audio_selector have been moved to HDA_Codec class
- *****************************************************************************/
-
-/*****************************************************************************
- * Note: hda_initialize_output_pin, hda_initialize_audio_output,
- * hda_initialize_audio_mixer, and hda_initialize_audio_selector 
- * have been moved to HDA_Codec class
  *****************************************************************************/
 
 // Reads any Boolean value from the Registry Settings key.
@@ -2450,6 +2462,17 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
 	//start playing output stream 1. With interrupts
 	writeUCHAR(OutputStreamBase + 0x02, 0x14);
 	writeUCHAR(OutputStreamBase + 0x00, 0x06);
+
+	//
+    // Make sure there is a wave port driver.
+    //
+    if (m_pPortWave)
+    {
+        //
+        // Tell it it needs to do some work.
+        //
+        m_pPortWave->Notify(m_pServiceGroupWave);
+    }
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
@@ -2668,8 +2691,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 
 	DOUT(DBG_SYSINFO, ("BDL all set up"));
 
+	//KeFlushIoBuffers is defined to nothing in the NT DDK but exists in the 98 DDK
 	KeFlushIoBuffers(mdl, FALSE, TRUE); 
-	//flush processor cache to RAM to be sure sound card will read correct data? if this does anything?
+	//flush processor cache to RAM to be sure sound card will read correct data
+	//absolute performance killer so only doing this ONCE.
 	__asm {
 		wbinvd;
 	}

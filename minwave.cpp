@@ -81,10 +81,6 @@ ProcessResources
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ProcessResources]"));
 
-    ULONG   intNumber   = ULONG(-1);
-    ULONG   dma8Bit     = ULONG(-1);
-    ULONG   dma16Bit    = ULONG(-1);
-
     //
     // Get counts for the types of resources.
     //
@@ -114,15 +110,30 @@ ProcessResources
 	//
     // Create the DMA Channel object.
     //
-    ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OUT DmaChannel
+
+    
+	ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OUT DmaChannel
                                           NULL,             // OuterUnknown (opt)
-                                          NULL,             // ResourceList (opt)
+                                          ResourceList,      // ResourceList (opt)
 										  MAXLEN_DMA_BUFFER,// MaxLength
                                           TRUE,             // Dma32BitAddresses
                                           FALSE,            // Dma64BitAddresses
                                           MaximumDmaWidth,  // DmaWidth
                                           MaximumDmaSpeed   // DmaSpeed
-                                          );              
+                                          );
+	/*
+	//PcNewDmaChannel is missing from Win2K DDK so i can't use my own DeviceDescription
+	PDEVICE_DESCRIPTION DeviceDescription = AdapterCommon->GetDeviceDescription();
+
+	ntStatus = Port->PcNewDmaChannel(
+	OUT &DmaChannel,
+	IN NULL, //OuterUnknown
+	IN          NonPagedPoolCacheAligned,
+	IN          DeviceDescription,
+	IN          DeviceObject
+	);
+	*/
+
     if (!NT_SUCCESS (ntStatus))
     {
         DOUT (DBG_ERROR, ("Failed on NewMasterDmaChannel!"));
@@ -136,7 +147,7 @@ ProcessResources
 
 	//
     // Allocate the buffer. start MUST be aligned to 128 bytes
-	// and i think it should be as long as we allocate more than a page.
+	// it should be aligned to 4k as long as we allocate more than a page.
     //
     if (NT_SUCCESS(ntStatus)) {
         ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
@@ -145,21 +156,79 @@ ProcessResources
 			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
 			lDMABufferLength >>= 1;
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
+
 		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
 		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));
-
-		ASSERT((DmaChannel->PhysicalAddress().LowPart & 0x7F) == 0); //require 128 byte alignment
+		
+		//require 128 byte alignment
+		if ( (DmaChannel->PhysicalAddress().LowPart & 0x7F) != 0) {
+			DOUT (DBG_ERROR, ("DMA Buffer not properly aligned!" ));
+			ntStatus = STATUS_BUFFER_TOO_SMALL;
+		}
     }
 	if (NT_SUCCESS(ntStatus))
     {
-        intNumber = ResourceList->
-                    FindUntranslatedInterrupt(0)->u.Interrupt.Level;
-		//give it some fake DMA channel numbers in case those are needed
-		dma8Bit = 1;
-		dma16Bit = 5;
-		//it's showtime then
+		PVOID pSystemAddress = DmaChannel->SystemAddress();
+		ULONG bufferSize = DmaChannel->AllocatedBufferSize();
 
-		ntStatus = AdapterCommon->hda_showtime(DmaChannel);
+		if (IoIsWdmVersionAvailable(1, 0x10)) {
+
+			DOUT (DBG_SYSINFO, ("WDM call to fix caching"));
+
+			//If WDM 1.10 is supported, this is Windows 2000 or better.
+
+			// For Win2k, we use the internal MmSetPageAttributes
+			// which has to be found by name as it is not exported
+			
+			/*
+			UNICODE_STRING routineName;
+			PFN_MM_SET_PAGE_ATTRIBUTES pfnMmSetPageAttributes;
+
+			RtlInitUnicodeString(&routineName, L"MmSetPageAttributes");
+    
+			// Attempt to find the function in the current kernel
+			pfnMmSetPageAttributes = (PFN_MM_SET_PAGE_ATTRIBUTES)MmGetSystemRoutineAddress(&routineName);
+
+			if (pfnMmSetPageAttributes) {
+				// Function exists (we are on Win2k/XP)
+				NTSTATUS status = pfnMmSetPageAttributes(pSystemAddress, (SIZE_T)bufferSize, MM_NON_CACHED);
+        
+				if (!NT_SUCCESS(status)) {
+					// Log error or fallback to CLFLUSH
+					DOUT (DBG_ERROR, ("MmSetPageAttributes failed with 0x%08X\n", status));
+				}
+			}
+			*/
+			
+
+		} else {
+			DOUT (DBG_SYSINFO, ("VxD call to fix caching!"));
+
+			//call VMM.VxD to change the cacheability of the audio buffer
+			ULONG pageNum = (ULONG)pSystemAddress >> 12;
+			ULONG nPages = (bufferSize + 4095) >> 12;
+
+		_asm {
+			push 0x00000800     // PC_NOCACHE
+			push 0xFFFFFFFF     // permand
+			push nPages
+			push pageNum
+			int 20h				//VxD call...
+			//0x0001000D
+			_emit 0x0D          // Service Number (Low byte)
+			_emit 0x00          // Service Number (High byte)
+			_emit 0x01          // Device ID (Low byte)
+			_emit 0x00          // Device ID (High byte)
+    
+			add esp, 16         // Clean up the cdecl stack
+			}	
+		}
+
+		if(NT_SUCCESS(ntStatus)){
+			//if everything is ok, it's showtime then
+			ntStatus = AdapterCommon->hda_showtime(DmaChannel);
+		}
+
 	} else {
 		//
 		// Release instantiated objects in case of failure.
@@ -171,7 +240,6 @@ ProcessResources
             DmaChannel = NULL;
         }
 	}
-
 
     return ntStatus;
 }
@@ -1402,16 +1470,13 @@ SetState
         case KSSTATE_PAUSE:
             if (State == KSSTATE_RUN)
             {
-
                 Miniport->AdapterCommon->hda_stop_sound();
-
             }
             break;
 
         case KSSTATE_RUN:
             {
                 // Start DMA.
-
 				Miniport->AdapterCommon->hda_start_sound();
             }
             break;

@@ -241,6 +241,9 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     STDMETHOD_(PINTERRUPTSYNC,GetInterruptSync)
     (   THIS
     )   PURE;
+	STDMETHOD_(PDEVICE_DESCRIPTION,GetDeviceDescription)
+    (   THIS
+    )   PURE;
 
     STDMETHOD_(PUNKNOWN *,WavePortDriverDest)
     (   THIS

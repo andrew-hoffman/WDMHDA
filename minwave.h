@@ -153,8 +153,19 @@ public:
     );
 };
 
+// Function for changing cacheability of allocated memory
+// You have to declare this yourself as it's not in the W2K headers
 
+typedef NTSTATUS (NTAPI *PFN_MM_SET_PAGE_ATTRIBUTES)(
+    IN PVOID Address,
+    IN SIZE_T Length,
+    IN ULONG CacheType
+);
 
+// Memory Caching Types for Win2k
+#define MM_NON_CACHED 0
+#define MM_CACHED     1
+#define MM_WRITE_COMBINED 2
 
 
 #endif

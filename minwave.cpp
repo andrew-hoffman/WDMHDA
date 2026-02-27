@@ -7,6 +7,8 @@
 #include "minwave.h"
 
 #define STR_MODULENAME "HDAwave: "
+#define PC_CACHEDIS 0x00100000  /* Allocate uncached pages - new for WDM */
+#define PC_CACHEWT  0x00080000  /* Allocate write through cache pages - new for WDM */ 
 
 
 
@@ -179,6 +181,7 @@ ProcessResources
 
 			// For Win2k, we use the internal MmSetPageAttributes
 			// which has to be found by name as it is not exported
+			// Cannot compile this in on 9x; it will cause a linker error
 			
 			/*
 			UNICODE_STRING routineName;
@@ -207,21 +210,32 @@ ProcessResources
 			//call VMM.VxD to change the cacheability of the audio buffer
 			ULONG pageNum = (ULONG)pSystemAddress >> 12;
 			ULONG nPages = (bufferSize + 4095) >> 12;
+			ULONG permOr = PC_CACHEDIS | PC_CACHEWT;
+			ULONG permAnd = ~(PC_CACHEDIS | PC_CACHEWT);
+			ULONG result = 1; // Default to failure
 
-		_asm {
-			push 0x00000800     // PC_NOCACHE
-			push 0xFFFFFFFF     // permand
-			push nPages
-			push pageNum
-			int 20h				//VxD call...
-			//0x0001000D
-			_emit 0x0D          // Service Number (Low byte)
-			_emit 0x00          // Service Number (High byte)
-			_emit 0x01          // Device ID (Low byte)
-			_emit 0x00          // Device ID (High byte)
-    
-			add esp, 16         // Clean up the cdecl stack
-			}	
+			__asm { //7th time is the charm
+				pushad                  // Save registers
+				mov ebx, pageNum        // EBX: Starting Page Number
+				mov ecx, nPages         // ECX: Number of Pages
+				mov edx, permOr			// EDX: Bits to SET (Turn on No-Cache)
+				mov eax, permAnd	    // EAX: Bits to KEEP (Mask out old cache bits)
+        
+				int 20h                 // VMM Call: 0x00010133
+				_emit 0x33              // _PageModifyPermissions
+				_emit 0x01
+				_emit 0x01				// Service: VMM.VXD
+				_emit 0x00
+        
+				mov [result], eax       // Capture success/failure (0 = Success)
+				
+				invlpg pSystemAddress	// Flush the buffer out of the TLB if prefetched
+				wbinvd					// Flush all dirty pages from cache
+
+				popad                   // Restore everything
+			}
+			KeStallExecutionProcessor(10); //stall a bit to make sure everything is consistent
+			DOUT (DBG_SYSINFO, ("results %d", result));	
 		}
 
 		if(NT_SUCCESS(ntStatus)){

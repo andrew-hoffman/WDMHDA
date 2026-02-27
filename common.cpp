@@ -708,8 +708,8 @@ Init
 	RtlZeroMemory(pDeviceDescription, sizeof (DEVICE_DESCRIPTION));
 
 	pDeviceDescription -> Version			= DEVICE_DESCRIPTION_VERSION;
-	pDeviceDescription -> Master			= TRUE;
-	pDeviceDescription -> ScatterGather		= TRUE; 
+	pDeviceDescription -> Master			= TRUE;	 //is a bus master
+	pDeviceDescription -> ScatterGather		= FALSE; //false for this purpose
 	pDeviceDescription -> DemandMode		= FALSE;
 	pDeviceDescription -> AutoInitialize	= FALSE;
 	pDeviceDescription -> Dma32BitAddresses = TRUE;
@@ -717,7 +717,7 @@ Init
 	pDeviceDescription -> Reserved1			= FALSE;
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
-	pDeviceDescription -> InterfaceType		= PCIBus;
+	pDeviceDescription -> InterfaceType		= PCIBus; //assumed to be cache-coherent
 	pDeviceDescription -> MaximumLength		= BdlSize + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
@@ -2698,6 +2698,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	__asm {
 		wbinvd;
 	}
+
+	KeStallExecutionProcessor(10);
 
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlMemPhys.LowPart);

@@ -21,10 +21,6 @@
 #include "common.h"
 
 
-
-
-
-
 /*****************************************************************************
  * Defines
  */
@@ -493,6 +489,8 @@ StartDevice
             resourceListWave->Release();
         }
 
+		//everything below this line cannot exist now as it was removed from ProcessResources
+
         // Start the wave table miniport if it exists.
         if (resourceListWaveTable)
         {
@@ -511,6 +509,9 @@ StartDevice
         {
             //
             // Synth not working yet.
+			// This is supposed to pass an i/o port to the built-in FMSynth miniport
+			// if we don't have hardware FM this cannot work.
+			// TODO: build SBEMUL like driver to trap OPL ports & route to Nuked OPL3
             //
 
             if (NT_SUCCESS(ntStatus))
@@ -685,9 +686,11 @@ AssignResources
                           "   DMA count: %d",
                           countIO, countIRQ, countDMA));
 			ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
+		} else if (countIRQ == 0){
+			ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+		} else {
+			ntStatus = STATUS_SUCCESS;
 		}
-
-		ntStatus = STATUS_SUCCESS;
         //removed other cases
 		break;
     default:

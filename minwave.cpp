@@ -5,6 +5,7 @@
  */
 
 #include "minwave.h"
+#include "mydma.h"
 
 #define STR_MODULENAME "HDAwave: "
 #define PC_CACHEDIS 0x00100000  /* Allocate uncached pages - new for WDM */
@@ -112,9 +113,9 @@ ProcessResources
 	//
     // Create the DMA Channel object.
     //
-
+	PDMACHANNEL	RealChannel; 
     
-	ntStatus = Port->NewMasterDmaChannel (&DmaChannel,      // OUT DmaChannel
+	ntStatus = Port->NewMasterDmaChannel (&RealChannel,      // OUT DmaChannel
                                           NULL,             // OuterUnknown (opt)
                                           ResourceList,      // ResourceList (opt)
 										  MAXLEN_DMA_BUFFER,// MaxLength
@@ -123,18 +124,8 @@ ProcessResources
                                           MaximumDmaWidth,  // DmaWidth
                                           MaximumDmaSpeed   // DmaSpeed
                                           );
-	/*
-	//PcNewDmaChannel is missing from Win2K DDK so i can't use my own DeviceDescription
-	PDEVICE_DESCRIPTION DeviceDescription = AdapterCommon->GetDeviceDescription();
 
-	ntStatus = Port->PcNewDmaChannel(
-	OUT &DmaChannel,
-	IN NULL, //OuterUnknown
-	IN          NonPagedPoolCacheAligned,
-	IN          DeviceDescription,
-	IN          DeviceObject
-	);
-	*/
+	//PcNewDmaChannel is missing from Win2K DDK so i can't use my own DeviceDescription
 
     if (!NT_SUCCESS (ntStatus))
     {
@@ -145,7 +136,15 @@ ProcessResources
     //
     // Get the DMA adapter object.
     //
-    AdapterObject = DmaChannel->GetAdapterObject ();
+    AdapterObject = RealChannel->GetAdapterObject ();
+
+	//now immediately wrap that IDmaChannel in a wrapper class
+	if (NT_SUCCESS(ntStatus)) {
+		DmaChannel = new (NonPagedPool, 'myDA') CMyDmaChannel(RealChannel);
+		RealChannel->Release(); // Our wrapper holds its own AddRef
+    
+		if (!DmaChannel) ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+	}
 
 	//
     // Allocate the buffer. start MUST be aligned to 128 bytes
@@ -158,6 +157,7 @@ ProcessResources
 			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
 			lDMABufferLength >>= 1;
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
+
 
 		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
 		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));
@@ -172,71 +172,6 @@ ProcessResources
     {
 		PVOID pSystemAddress = DmaChannel->SystemAddress();
 		ULONG bufferSize = DmaChannel->AllocatedBufferSize();
-
-		if (IoIsWdmVersionAvailable(1, 0x10)) {
-
-			DOUT (DBG_SYSINFO, ("WDM call to fix caching"));
-
-			//If WDM 1.10 is supported, this is Windows 2000 or better.
-
-			// For Win2k, we use the internal MmSetPageAttributes
-			// which has to be found by name as it is not exported
-			// Cannot compile this in on 9x; it will cause a linker error
-			
-			/*
-			UNICODE_STRING routineName;
-			PFN_MM_SET_PAGE_ATTRIBUTES pfnMmSetPageAttributes;
-
-			RtlInitUnicodeString(&routineName, L"MmSetPageAttributes");
-    
-			// Attempt to find the function in the current kernel
-			pfnMmSetPageAttributes = (PFN_MM_SET_PAGE_ATTRIBUTES)MmGetSystemRoutineAddress(&routineName);
-
-			if (pfnMmSetPageAttributes) {
-				// Function exists (we are on Win2k/XP)
-				NTSTATUS status = pfnMmSetPageAttributes(pSystemAddress, (SIZE_T)bufferSize, MM_NON_CACHED);
-        
-				if (!NT_SUCCESS(status)) {
-					// Log error or fallback to CLFLUSH
-					DOUT (DBG_ERROR, ("MmSetPageAttributes failed with 0x%08X\n", status));
-				}
-			}
-			*/
-			
-
-		} else {
-			DOUT (DBG_SYSINFO, ("VxD call to fix caching!"));
-
-			//call VMM.VxD to change the cacheability of the audio buffer
-			ULONG pageNum = (ULONG)pSystemAddress >> 12;
-			ULONG nPages = (bufferSize + 4095) >> 12;
-			ULONG permOr = PC_CACHEDIS | PC_CACHEWT;
-			ULONG permAnd = ~(PC_CACHEDIS | PC_CACHEWT);
-			ULONG result = 1; // Default to failure
-
-			__asm { //7th time is the charm
-				pushad                  // Save registers
-				mov ebx, pageNum        // EBX: Starting Page Number
-				mov ecx, nPages         // ECX: Number of Pages
-				mov edx, permOr			// EDX: Bits to SET (Turn on No-Cache)
-				mov eax, permAnd	    // EAX: Bits to KEEP (Mask out old cache bits)
-        
-				int 20h                 // VMM Call: 0x00010133
-				_emit 0x33              // _PageModifyPermissions
-				_emit 0x01
-				_emit 0x01				// Service: VMM.VXD
-				_emit 0x00
-        
-				mov [result], eax       // Capture success/failure (0 = Success)
-				
-				invlpg pSystemAddress	// Flush the buffer out of the TLB if prefetched
-				wbinvd					// Flush all dirty pages from cache
-
-				popad                   // Restore everything
-			}
-			KeStallExecutionProcessor(10); //stall a bit to make sure everything is consistent
-			DOUT (DBG_SYSINFO, ("results %d", result));	
-		}
 
 		if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, it's showtime then

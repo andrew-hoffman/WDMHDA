@@ -45,7 +45,7 @@ public:
             PHYSICAL_ADDRESS phys = m_RealDmaChannel->PhysicalAddress();
             
             // 2. Use MmMapIoSpace to create a Non-Cached view of that same RAM
-            m_NonCachedBuffer = MmMapIoSpace(phys, m_BufferSize, MmNonCached);
+            m_NonCachedBuffer = MmMapIoSpace(phys, m_BufferSize, MmWriteCombined);
 			if (m_NonCachedBuffer) {
 				_asm wbinvd;
 			}

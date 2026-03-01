@@ -67,13 +67,16 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 
 	codec_ven = (USHORT)(codec_id >> 16);
 	codec_dev = (USHORT)(codec_id & 0xFFFF);
+	if(codec_ven == 0x10ec)
+		isRealtek = TRUE;
 
 	//log basic codec info
 	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
 	codec_address, codec_ven, codec_dev);
 
-	//Realtek ALC280 may need a delay here?
-	KeStallExecutionProcessor(100);
+	//Realtek ALC280 may need a delay here
+	//otherwise any read but the codec ID gives an error.
+	KeStallExecutionProcessor(500);
 
 	//find Audio Function Groups
 	ULONG response = hda_send_verb(0, 0xF00, 0x04);
@@ -84,7 +87,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	ULONG node = (response >> 16) & 0xFF;
 	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
 		if((hda_send_verb(node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
-			//initialize first Audio Function Group, if it doesn't work keep trying
+			//initialize first Audio Function Group, if it doesn't work keep trying others
 			DOUT (DBG_SYSINFO, ("Init AFG %d", node));
 			if ( NT_SUCCESS( hda_initialize_audio_function_group(node) )){
 				DOUT (DBG_SYSINFO, ("Success"));
@@ -111,6 +114,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	//reset AFG
 	hda_send_verb(afg_node_number, 0x7FF, 0x00);
+
+	KeStallExecutionProcessor(500);
 
 	//disable unsolicited responses
 	hda_send_verb(afg_node_number, 0x708, 0x00);
@@ -505,6 +510,7 @@ STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 		return FALSE;
 	}
 }
+
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number, HDA_NODE_PATH& path) {
     PAGED_CODE ();
 
@@ -517,22 +523,26 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 	path.audio_output_node_stream_format_capabilities = 0;
 	path.output_amp_node_number = 0;
 	path.output_amp_node_capabilities = 0;
+	
+	if(!isRealtek){
+		//turn on power for PIN First
+		hda_send_verb(pin_node_number, 0x705, 0x00);
+	}
 
 	//disable unsolicited responses
 	hda_send_verb(pin_node_number, 0x708, 0x00);
-
 	//disable any processing
 	hda_send_verb(pin_node_number, 0x703, 0x00);
-
-	//set 16-bit stereo format before turning on power so it sticks
+	//set 16-bit stereo format
 	hda_send_verb(pin_node_number, 0x200, 0x11);
 
-	//turn on power for PIN
-	hda_send_verb(pin_node_number, 0x705, 0x00);
+	if(isRealtek){
+		//turn on power for PIN Last
+		hda_send_verb(pin_node_number, 0x705, 0x00);
+	}
 
 	//enable PIN
 	hda_send_verb(pin_node_number, 0x707, (hda_send_verb(pin_node_number, 0xF07, 0x00) | 0x80 | 0x40));
-
 	//enable EAPD. do not enable L-R swap, why were we doing that, the channel order is correct
 	hda_send_verb(pin_node_number, 0x70C, 0x0002);
 
@@ -569,20 +579,29 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 	DOUT (DBG_PRINT, ("Initializing Audio Output %d", output_node_number));
 	path.audio_output_node_number = output_node_number;
 
-	//disable unsolicited responses
-	hda_send_verb(output_node_number, 0x708, 0x00);
-
-	//disable any processing
-	hda_send_verb(output_node_number, 0x703, 0x00);
-
-	//set 16-bit stereo format before turning on power so it sticks
-	hda_send_verb(output_node_number, 0x200, 0x11);
-
-	//turn on power for Audio Output
-	hda_send_verb(output_node_number, 0x705, 0x00);
-
-	//connect Audio Output to stream 1 channel 0
-	hda_send_verb(output_node_number, 0x706, 0x10);
+	if(isRealtek){
+		//disable unsolicited responses
+		hda_send_verb(output_node_number, 0x708, 0x00);
+		//disable any processing
+		hda_send_verb(output_node_number, 0x703, 0x00);
+		//set 16-bit stereo format before turning on power so it sticks
+		hda_send_verb(output_node_number, 0x200, 0x11);
+		//turn on power for Audio Output
+		hda_send_verb(output_node_number, 0x705, 0x00);
+		//connect Audio Output to stream 1 channel 0
+		hda_send_verb(output_node_number, 0x706, 0x10);
+	} else {
+		//turn on power for Audio Output
+		hda_send_verb(output_node_number, 0x705, 0x00);
+		//connect Audio Output to stream 1 channel 0
+		hda_send_verb(output_node_number, 0x706, 0x10);
+		//disable unsolicited responses
+		hda_send_verb(output_node_number, 0x708, 0x00);
+		//disable any processing
+		hda_send_verb(output_node_number, 0x703, 0x00);
+		//set 16-bit stereo format after turning on power so it isn't rejected
+		hda_send_verb(output_node_number, 0x200, 0x11);
+	}
 
 	//set maximum volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(output_node_number, 0xF00, 0x12);
@@ -628,14 +647,21 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 	}
 	DOUT (DBG_PRINT,("Initializing Audio Mixer %d", audio_mixer_node_number));
 
-	//set 16-bit stereo format before turning on power so it sticks
-	hda_send_verb(audio_mixer_node_number, 0x200, 0x11);
-
-	//turn on power for Audio Mixer
-	hda_send_verb(audio_mixer_node_number, 0x705, 0x00);
-
-	//disable unsolicited responses
-	hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
+	if(isRealtek){
+		//set 16-bit stereo format before turning on power so it sticks
+		hda_send_verb(audio_mixer_node_number, 0x200, 0x11);
+		//turn on power for Audio Mixer
+		hda_send_verb(audio_mixer_node_number, 0x705, 0x00);
+		//disable unsolicited responses
+		hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
+	} else {
+		//turn on power for Audio Mixer
+		hda_send_verb(audio_mixer_node_number, 0x705, 0x00);
+		//set 16-bit stereo format
+		hda_send_verb(audio_mixer_node_number, 0x200, 0x11);
+		//disable unsolicited responses
+		hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
+	}
 
 	//set maximal volume for Audio Mixer
 	ULONG audio_mixer_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x12);
@@ -672,17 +698,25 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 	}
 	DOUT (DBG_PRINT,("Initializing Audio Selector %d", audio_selector_node_number));
 
-	//set 16-bit stereo format before turning on power so it sticks
-	hda_send_verb(audio_selector_node_number, 0x200, 0x11);
-
-	//turn on power for Audio Selector
-	hda_send_verb(audio_selector_node_number, 0x705, 0x00);
-
-	//disable unsolicited responses
-	hda_send_verb(audio_selector_node_number, 0x708, 0x00);
-
-	//disable any processing
-	hda_send_verb(audio_selector_node_number, 0x703, 0x00);
+	if(isRealtek){
+		//set 16-bit stereo format before turning on power so it sticks
+		hda_send_verb(audio_selector_node_number, 0x200, 0x11);
+		//turn on power for Audio Selector
+		hda_send_verb(audio_selector_node_number, 0x705, 0x00);
+		//disable unsolicited responses
+		hda_send_verb(audio_selector_node_number, 0x708, 0x00);
+		//disable any processing
+		hda_send_verb(audio_selector_node_number, 0x703, 0x00);
+	} else {
+		//turn on power for Audio Selector
+		hda_send_verb(audio_selector_node_number, 0x705, 0x00);
+		//disable unsolicited responses
+		hda_send_verb(audio_selector_node_number, 0x708, 0x00);
+		//disable any processing
+		hda_send_verb(audio_selector_node_number, 0x703, 0x00);
+		//set 16-bit stereo format
+		hda_send_verb(audio_selector_node_number, 0x200, 0x11);
+	}
 
 	//set maximum volume for Audio Selector
 	ULONG audio_selector_amp_capabilities = hda_send_verb(audio_selector_node_number, 0xF00, 0x12);
@@ -735,14 +769,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 
     //
     // Check what sample rates we support based on
-	// afg_node_sample_capabilities & audio_output_node_sample_capabilities
+	// audio_output_node_sample_capabilities
     //
 	// if either is zero, give up as nothing has been inited yet?
 	// TODO: at least one real codec is getting a 0 here
 	if (!afg_node_sample_capabilities){
-		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported!"));
-			//i can't, it's a :VIA:!
-            return STATUS_UNSUCCESSFUL;
+		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported"));
+			//expected on VIA codecs at least
 	}
 	if (out_paths.count == 0){
 			DOUT (DBG_ERROR, ("No output paths inited yet!"));

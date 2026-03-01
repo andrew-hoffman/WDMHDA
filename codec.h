@@ -34,6 +34,7 @@ private:
     ULONG codec_id;                     // Codec vendor ID and device ID
 	USHORT codec_ven;
 	USHORT codec_dev;
+	BOOLEAN isRealtek;					// Realtek codecs need different init order
     
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag

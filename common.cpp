@@ -2459,10 +2459,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
-	//start playing output stream 1. With interrupts
-	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x06);
-
 	//
     // Make sure there is a wave port driver.
     //
@@ -2473,6 +2469,9 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
         //
         m_pPortWave->Notify(m_pServiceGroupWave);
     }
+	//then start playing output stream 1. With interrupts
+	writeUCHAR(OutputStreamBase + 0x02, 0x14);
+	writeUCHAR(OutputStreamBase + 0x00, 0x06);
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {

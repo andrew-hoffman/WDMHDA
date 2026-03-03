@@ -1,19 +1,31 @@
-//Wrapper class around IDmaChannel
-//generated with help of Gemini. yes I know
+// Wrapper class around IDmaChannel
+// generated with help of Gemini and chatGPT
+// so not copyrightable. 
+// yes I know, bad for society, but i'm no x86 ASM expert
 
 class CMyDmaChannel : public IDmaChannel {
 private:
     IDmaChannel* m_RealDmaChannel;
-    PVOID        m_NonCachedBuffer;
-    ULONG        m_BufferSize;
     LONG         m_RefCount;
+	BOOLEAN		 g_bHasClFlush;
 
 public:
     CMyDmaChannel(IDmaChannel* RealChannel) {
         m_RealDmaChannel = RealChannel;
         m_RealDmaChannel->AddRef();
         m_RefCount = 1;
-        m_NonCachedBuffer = NULL;
+
+		// Check for SSE2 / CLFLUSH support
+		ULONG edx_feat;
+		__asm {
+			pushad
+			mov eax, 1
+			cpuid
+			mov edx_feat, edx
+			popad
+		}	
+		g_bHasClFlush = (edx_feat & (1 << 19)) != 0;
+		DbgPrint("SSE2 %d \n", g_bHasClFlush);
     }
 
     // --- IUnknown ---
@@ -27,7 +39,6 @@ public:
     STDMETHODIMP_(ULONG) Release() {
         ULONG ul = InterlockedDecrement(&m_RefCount);
         if (ul == 0) {
-            if (m_NonCachedBuffer) { /* Cleanup if needed */ }
             m_RealDmaChannel->Release();
             delete this;
         }
@@ -36,50 +47,58 @@ public:
 
     // --- IDmaChannel Overrides ---
     STDMETHODIMP AllocateBuffer(ULONG BufferSize, PPHYSICAL_ADDRESS PhysicalAddressConstraint) {
-        // Here is where the magic happens
-        // 1. Let the real channel allocate the physical RAM
         NTSTATUS ntStatus = m_RealDmaChannel->AllocateBuffer(BufferSize, PhysicalAddressConstraint);
-        
-        if (NT_SUCCESS(ntStatus)) {
-            m_BufferSize = m_RealDmaChannel->AllocatedBufferSize();
-            PHYSICAL_ADDRESS phys = m_RealDmaChannel->PhysicalAddress();
-            
-            // 2. Use MmMapIoSpace to create a Non-Cached view of that same RAM
-            m_NonCachedBuffer = MmMapIoSpace(phys, m_BufferSize, MmWriteCombined);
-			if (m_NonCachedBuffer) {
-				_asm wbinvd;
-			}
-        }
         return ntStatus;
     }
 	STDMETHODIMP_(void) FreeBuffer(void) {
-		// 1. Clean up our non-cached alias first
-		if (m_NonCachedBuffer) {
-		    MmUnmapIoSpace(m_NonCachedBuffer, m_BufferSize);
-		    m_NonCachedBuffer = NULL;
-		}
-
-		// 2. Let the real channel free the actual physical memory
 		m_RealDmaChannel->FreeBuffer();
-		m_BufferSize = 0;
 	}
 
     STDMETHODIMP_(PVOID) SystemAddress() {
-        // If we have our non-cached alias, return that instead of the real one
-        return m_NonCachedBuffer ? m_NonCachedBuffer : m_RealDmaChannel->SystemAddress();
+        return m_RealDmaChannel->SystemAddress();
     }
 
     STDMETHODIMP_(void) CopyTo(
 		IN      PVOID   Destination,
         IN      PVOID   Source,
         IN      ULONG   ByteCount) {
-        RtlCopyMemory(Destination, Source, ByteCount);
-    }
+
+		// 1. Let the real PortCls buffer copy happen first.
+		// This moves data from the "S-Buffer" to the "C-Buffer" (Destination).
+		m_RealDmaChannel->CopyTo(Destination, Source, ByteCount);
+
+		// 2. Manual Cache Invalidation for AMD 6xx-9xx Coherency.
+		// We flush the 'Destination' because that is the DMA-accessible RAM.
+	    if (g_bHasClFlush) {        
+	        // We use a 64-byte stride (standard x86 cache line size)
+			ULONG_PTR start = (ULONG_PTR)Destination & ~((ULONG_PTR)63);
+			ULONG_PTR end = ((ULONG_PTR)Destination + ByteCount + 63) & ~((ULONG_PTR)63);
+		    for (ULONG_PTR p = start; p < end; p += 64) {
+			    __asm {
+				    mov eax, p
+	                _emit 0x0F // CLFLUSH [eax]
+		            _emit 0xAE
+			        _emit 0x38
+				}
+			}
+
+			// 3. Memory Fence: Ensures all flushes are globally visible 
+			// before the ISR/DPC returns and the HDA controller starts reading.
+			__asm {
+			    _emit 0x0F // MFENCE
+			    _emit 0xAE
+			    _emit 0xF0
+			}
+		}
+	}
+
 	STDMETHODIMP_(void) CopyFrom(
 		IN      PVOID   Destination,
         IN      PVOID   Source,
         IN      ULONG   ByteCount) {
-        RtlCopyMemory(Destination, Source, ByteCount);
+		//should not need to flush on copies out of the buffer?
+		//revisit this when adding capture / recording support.
+        m_RealDmaChannel->CopyFrom(Destination, Source, ByteCount);
     }
 
     // --- Pass-through the rest ---
@@ -91,66 +110,3 @@ public:
     STDMETHODIMP_(PHYSICAL_ADDRESS) PhysicalAddress() { return m_RealDmaChannel->PhysicalAddress(); }
     STDMETHODIMP_(PADAPTER_OBJECT) GetAdapterObject() { return m_RealDmaChannel->GetAdapterObject(); }
 };
-
-/* --- interface spec from Portcls ---
-
-DECLARE_INTERFACE_(IDmaChannel,IUnknown)
-{
-    STDMETHOD(AllocateBuffer)
-    (   THIS_
-        IN      ULONG               BufferSize,
-        IN      PPHYSICAL_ADDRESS   PhysicalAddressConstraint   OPTIONAL
-    )   PURE;
-
-    STDMETHOD_(void,FreeBuffer)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(ULONG,TransferCount)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(ULONG,MaximumBufferSize)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(ULONG,AllocatedBufferSize)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(ULONG,BufferSize)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(void,SetBufferSize)
-    (   THIS_
-        IN      ULONG   BufferSize
-    )   PURE;
-
-    STDMETHOD_(PVOID,SystemAddress)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(PHYSICAL_ADDRESS,PhysicalAddress)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(PADAPTER_OBJECT,GetAdapterObject)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(void,CopyTo)
-    (   THIS_
-        IN      PVOID   Destination,
-        IN      PVOID   Source,
-        IN      ULONG   ByteCount
-    )   PURE;
-
-    STDMETHOD_(void,CopyFrom)
-    (   THIS_
-        IN      PVOID   Destination,
-        IN      PVOID   Source,
-        IN      ULONG   ByteCount
-    )   PURE;
-
-*/

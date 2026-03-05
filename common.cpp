@@ -435,15 +435,15 @@ Init
 				|| (pci_dev == 0x1457) || (pci_dev == 0x1487) //AMD Ryzen
 				|| (pci_dev == 0x157a) || (pci_dev == 0x15e3) //AMD APU
 			){
-				DbgPrint( "ATI/AMD SB450/600/APU\n");
+				DbgPrint( "ATI/AMD SB450/600/APU Snoop\n");
 				//Enable Snoop
 				ntStatus = WriteConfigSpaceByte(0x42,
-					~0x07, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
+					~0x03, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
 				//should read back & confirm it was set.
 			} else if ( (pci_dev == 0x0002) || (pci_dev == 0x1308)
 				|| (pci_dev == 0x157a) || (pci_dev == 0x15b3)
 			){				
-				DbgPrint( "ATI/AMD HDMI Nosnoop\n");
+				DbgPrint( "ATI/AMD HDMI No Snoop\n");
 				//Disable Snoop
 				ntStatus = WriteConfigSpaceByte(0x42,
 					~ATI_SB450_HDAUDIO_ENABLE_SNOOP, 0);
@@ -563,7 +563,8 @@ Init
 			break;
 		case 0x10b9://ULI M5461
 			DbgPrint( "ULI\n");
-			//disable and zero out BAR1 on this hardware; it advertises 64 bit addressing support but can't deliver
+			//disable and zero out BAR1 on this hardware; 
+			//it advertises 64 bit addressing support but can't deliver
 			//not that we can use it anyway in 9x.
 			//this is according to ALSA.
 			//TODO: test this if i can find this rare chipset
@@ -2462,16 +2463,16 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
 	//
     // Make sure there is a wave port driver.
     //
-    if (m_pPortWave)
-    {
-        //
+    if (m_pPortWave) {
         // Tell it it needs to do some work.
-        //
         m_pPortWave->Notify(m_pServiceGroupWave);
-    }
-	//then start playing output stream 1. With interrupts
-	writeUCHAR(OutputStreamBase + 0x02, 0x14);
-	writeUCHAR(OutputStreamBase + 0x00, 0x06);
+		//then start playing output stream 1. With interrupts
+		writeUCHAR(OutputStreamBase + 0x02, 0x14);
+		writeUCHAR(OutputStreamBase + 0x00, 0x06);
+    } else {
+		DOUT (DBG_ERROR, ("Can't start playback with no wave port!"));
+	}
+
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {

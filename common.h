@@ -168,7 +168,9 @@
 
 /* Defines for ATI HD Audio support in SB450 south bridge */
 #define ATI_SB450_HDAUDIO_MISC_CNTR2_ADDR 0x42
-#define ATI_SB450_HDAUDIO_ENABLE_SNOOP 0x02
+//disable non-snoop on ALL transactions
+//see p.230 of AMD SB600 Register Reference Giude
+#define ATI_SB450_HDAUDIO_ENABLE_SNOOP 0x03 
 
 /* Defines for Nvidia HDA support */
 #define NVIDIA_HDA_TRANSREG_ADDR 0x4e

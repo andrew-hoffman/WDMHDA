@@ -930,8 +930,8 @@ CAdapterCommon::
 	//At least try to stop the stream before destruction
 	hda_stop_stream ();
 
-	//Delete all codec objects
-	for (UCHAR i = 0; i < 16; i++) {
+	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
+	for (UCHAR i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
 			delete pCodecs[i];
 			pCodecs[i] = NULL;
@@ -1410,6 +1410,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 				if (!NT_SUCCESS(ntStatus)) {
 					// If initialization failed, keep trying other codecs
 					codecCount--;
+					pCodecs[codecCount] = NULL;
 					delete pCodec;
 				}
 			}
@@ -1468,6 +1469,7 @@ blind_probe:
 				if (!NT_SUCCESS(ntStatus)) {
 					// If initialization failed, keep trying other codecs
 					codecCount--;
+					pCodecs[codecCount] = NULL;
 					delete pCodec;
 					ntStatus = STATUS_UNSUCCESSFUL;
 				}
@@ -1519,6 +1521,7 @@ hda_use_pio_interface:
 				if (!NT_SUCCESS(ntStatus)) {
 					// If initialization failed, keep trying other codecs
 					codecCount--;
+					pCodecs[codecCount] = NULL;
 					delete pCodec;
 					ntStatus = STATUS_UNSUCCESSFUL;
 				}

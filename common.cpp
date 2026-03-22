@@ -1421,11 +1421,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 	}
 
-	if (!NT_SUCCESS (ntStatus))
-    {        
-        DOUT (DBG_ERROR, ("Initialization of HDA Codec failed."));
+	if (codecCount > 0){
+		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
+		return STATUS_SUCCESS;
+    } else {        
+        DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
+		return STATUS_UNSUCCESSFUL;
     }
-	return ntStatus;
 
 blind_probe:
 
@@ -1477,11 +1479,13 @@ blind_probe:
 		}
 	}
 
-    if (!NT_SUCCESS (ntStatus))
-    {        
-        DOUT (DBG_ERROR, ("Initialization of HDA CoDec failed."));
+	if (codecCount > 0){
+		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
+		return STATUS_SUCCESS;
+    } else {        
+        DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
+		return STATUS_UNSUCCESSFUL;
     }
-	return ntStatus;
 	
 hda_use_pio_interface:
 
@@ -1528,12 +1532,13 @@ hda_use_pio_interface:
 			}
 		}
 	}
-	if (codecCount == 0)
-    {        
-        DOUT (DBG_ERROR, ("Initialization of HDA Codec failed."));
-        return STATUS_UNSUCCESSFUL;
+	if (codecCount > 0){
+		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
+		return STATUS_SUCCESS;
+    } else {        
+        DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
+		return STATUS_UNSUCCESSFUL;
     }
-    return ntStatus;
 }
 
 /*****************************************************************************

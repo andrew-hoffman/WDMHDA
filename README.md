@@ -33,8 +33,7 @@ It is recommended but not strictly necessary to install DirectX 8.1 or newer aft
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
 - Jack detection and retasking is not supported
-- Only initializes the first codec detected on the link (extra codecs in laptop docking stations or HDMI audio won't work yet)
-- Freezes, fails to start or outputs horrible noises on a lot of real hardware. No guarantees. 
+- Freezes, crashes, fails to start or outputs horrible noises on a lot of real hardware. No guarantees. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 

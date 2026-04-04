@@ -137,7 +137,7 @@ private:
     IN  BOOLEAN  DefaultValue
 	);
 	STDMETHODIMP_(void) TryInitializeCodecSlot(
-		IN UCHAR codec_number,
+		IN ULONG codec_number,
 		IN ULONG codec_id,
 		IN PCSTR interfaceName,
 		OUT NTSTATUS* pStatus
@@ -1505,7 +1505,7 @@ hda_use_pio_interface:
  *****************************************************************************/
 STDMETHODIMP_(void)
 CAdapterCommon::TryInitializeCodecSlot(
-	IN UCHAR codec_number,
+	IN ULONG codec_number,
 	IN ULONG codec_id,
 	IN PCSTR interfaceName,
 	OUT NTSTATUS* pStatus

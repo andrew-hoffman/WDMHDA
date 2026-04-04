@@ -137,7 +137,7 @@ private:
     IN  BOOLEAN  DefaultValue
 	);
 	STDMETHODIMP_(void) TryInitializeCodecSlot(
-		IN ULONG codec_number,
+		IN UCHAR codec_number,
 		IN ULONG codec_id,
 		IN PCSTR interfaceName,
 		OUT NTSTATUS* pStatus
@@ -1173,6 +1173,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
     PAGED_CODE ();
 	UCHAR codec_number;
 	ULONG codec_id;
+	ULONG statestsCodecCandidates = 0;
 	ULONG i;
     
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
@@ -1395,7 +1396,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		goto blind_probe;
 	
 	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS"));
-	ULONG statestsCodecCandidates = 0;
+	statestsCodecCandidates = 0;
 
 	for(codec_number = 0; codec_number < 16; codec_number++) {
 		communication_type = HDA_CORB_RIRB;
@@ -1504,7 +1505,7 @@ hda_use_pio_interface:
  *****************************************************************************/
 STDMETHODIMP_(void)
 CAdapterCommon::TryInitializeCodecSlot(
-	IN ULONG codec_number,
+	IN UCHAR codec_number,
 	IN ULONG codec_id,
 	IN PCSTR interfaceName,
 	OUT NTSTATUS* pStatus

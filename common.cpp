@@ -136,6 +136,12 @@ private:
     IN  PCWSTR   ValueName,
     IN  BOOLEAN  DefaultValue
 	);
+	STDMETHODIMP_(void) TryInitializeCodecSlot(
+		IN ULONG codec_number,
+		IN ULONG codec_id,
+		IN PCSTR interfaceName,
+		OUT NTSTATUS* pStatus
+	);
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -404,7 +410,11 @@ Init
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
 	ULONG pci_ven = 0;
 	ULONG pci_dev = 0;
+	memLength = 0;
 	pConfigMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
+	if (!pConfigMem) {
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
 	ntStatus = ReadWriteConfigSpace(
 		m_pDeviceObject,
 		0,			//read
@@ -735,14 +745,14 @@ Init
 	
 	//Allocate RIRB
 	PVOID RirbVirtualAddress = NULL;
-	PPHYSICAL_ADDRESS pRirbLogicalAddress = NULL;	
-	
+	PHYSICAL_ADDRESS RirbLogicalAddress = {0};
+
 	RirbVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
 		2048,
-		pRirbLogicalAddress, //out param
+		&RirbLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
-	RirbMemPhys = *pRirbLogicalAddress;
+	RirbMemPhys = RirbLogicalAddress;
 	RirbMemVirt = (PULONG) RirbVirtualAddress;
 	//mdl = IoAllocateMdl(VirtualAddress, 8192, FALSE, FALSE, NULL);
 
@@ -767,15 +777,14 @@ Init
 
 	//allocate CORB
 	PVOID CorbVirtualAddress = NULL;
-	PPHYSICAL_ADDRESS pCorbLogicalAddress = NULL;	
-	
+	PHYSICAL_ADDRESS CorbLogicalAddress = {0};
+
 	CorbVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
 		1024,
-		pCorbLogicalAddress, //out param
+		&CorbLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
-
-	CorbMemPhys = *pCorbLogicalAddress;
+	CorbMemPhys = CorbLogicalAddress;
 	CorbMemVirt = (PULONG) CorbVirtualAddress;
 
 	DOUT(DBG_SYSINFO, ("Corb Virt Addr = 0x%X,", CorbMemVirt));
@@ -799,16 +808,15 @@ Init
 
 	//allocate BDL
 	PVOID BdlVirtualAddress = NULL;
-	PPHYSICAL_ADDRESS pBdlLogicalAddress = NULL;
+	PHYSICAL_ADDRESS BdlLogicalAddress = {0};
 	
 	
 	BdlVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
 		BdlSize,
-		pBdlLogicalAddress, //out param
+		&BdlLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
-
-	BdlMemPhys = *pBdlLogicalAddress;
+	BdlMemPhys = BdlLogicalAddress;
 	BdlMemVirt = (PULONG) BdlVirtualAddress;
 
 	if (!BdlMemVirt) {
@@ -826,16 +834,15 @@ Init
 
 	//allocate DMA Position Buffer
 	PVOID DmaVirtualAddress = NULL;
-	PPHYSICAL_ADDRESS pDmaLogicalAddress = NULL;
+	PHYSICAL_ADDRESS DmaLogicalAddress = {0};
 	
 	
 	DmaVirtualAddress = DMA_Adapter->DmaOperations->AllocateCommonBuffer (
 		DMA_Adapter,
 		1024,
-		pDmaLogicalAddress, //out param
+		&DmaLogicalAddress, //out param
 		FALSE ); //CacheEnabled is probably ignored
-
-	DmaPosPhys = *pDmaLogicalAddress;
+	DmaPosPhys = DmaLogicalAddress;
 	DmaPosVirt = (PULONG) DmaVirtualAddress;
 
 	if (!DmaPosVirt) {
@@ -955,7 +962,7 @@ CAdapterCommon::
 		DOUT (DBG_PRINT, ("freeing Corb buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
 					DMA_Adapter,
-					2048,
+					1024,
                       CorbMemPhys,
                       CorbMemVirt,
                       FALSE );
@@ -965,7 +972,7 @@ CAdapterCommon::
 		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
 					DMA_Adapter,
-					2048,
+					BdlSize,
                       BdlMemPhys,
                       BdlMemVirt,
                       FALSE );
@@ -975,7 +982,7 @@ CAdapterCommon::
 		DOUT (DBG_PRINT, ("freeing Dma buffer"));
 		DMA_Adapter->DmaOperations->FreeCommonBuffer(
 					DMA_Adapter,
-					2048,
+					1024,
                       DmaPosPhys,
                       DmaPosVirt,
                       FALSE );
@@ -1388,11 +1395,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		goto blind_probe;
 	
 	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS"));
+	ULONG statestsCodecCandidates = 0;
 
 	for(codec_number = 0; codec_number < 16; codec_number++) {
 		communication_type = HDA_CORB_RIRB;
 		if (((statests >> codec_number) & 1) == 0)
 			continue;
+		statestsCodecCandidates++;
 
 		communication_type = HDA_CORB_RIRB;
 
@@ -1400,33 +1409,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
-		if((codec_id != 0x0) && (codec_id != 0xFFFFFFFF) && (codec_id != STATUS_UNSUCCESSFUL)) {
-			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
-			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
-			if (pCodec) {
-				pCodecs[codecCount++] = pCodec;
-				ntStatus = pCodec->InitializeCodec();
-				if (!NT_SUCCESS(ntStatus)) {
-					// If initialization failed, keep trying other codecs
-					codecCount--;
-					pCodecs[codecCount] = NULL;
-					delete pCodec;
-				}
-			}
-		} else if((statests >> (codec_number+1)) == 0){
-			//if no further codecs left in statests
-			goto blind_probe;
-		}
+		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
 
 	}
+	DOUT (DBG_SYSINFO, ("STATESTS reported %d codecs, initialized %d", statestsCodecCandidates, codecCount));
 
 	if (codecCount > 0){
 		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
 		return STATUS_SUCCESS;
-    } else {        
-        DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
-		return STATUS_UNSUCCESSFUL;
     }
 
 blind_probe:
@@ -1459,24 +1449,7 @@ blind_probe:
 			}
 		}
 
-		if((codec_id != 0) && (codec_id != 0xFFFFFFFF) && (codec_id != STATUS_UNSUCCESSFUL)) {
-
-			DOUT (DBG_SYSINFO, ("HDA: Codec %d CORB/RIRB communication interface", codec_id));
-
-			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
-			if (pCodec) {
-				pCodecs[codecCount++] = pCodec;
-				ntStatus = pCodec->InitializeCodec();
-				if (!NT_SUCCESS(ntStatus)) {
-					// If initialization failed, keep trying other codecs
-					codecCount--;
-					pCodecs[codecCount] = NULL;
-					delete pCodec;
-					ntStatus = STATUS_UNSUCCESSFUL;
-				}
-			}
-		}
+		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
 	}
 
 	if (codecCount > 0){
@@ -1515,22 +1488,7 @@ hda_use_pio_interface:
 			}
 		}
 
-		if((codec_id != 0) && (codec_id != STATUS_UNSUCCESSFUL)) {
-			DOUT (DBG_SYSINFO, ("HDA:  Codec %d PIO communication interface", codec_id));
-			//create and initialize codec object and pack into array
-			HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
-			if (pCodec) {
-				pCodecs[codecCount++] = pCodec;
-				ntStatus = pCodec->InitializeCodec();
-				if (!NT_SUCCESS(ntStatus)) {
-					// If initialization failed, keep trying other codecs
-					codecCount--;
-					pCodecs[codecCount] = NULL;
-					delete pCodec;
-					ntStatus = STATUS_UNSUCCESSFUL;
-				}
-			}
-		}
+		TryInitializeCodecSlot(codec_number, codec_id, "PIO", &ntStatus);
 	}
 	if (codecCount > 0){
 		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
@@ -1539,6 +1497,46 @@ hda_use_pio_interface:
         DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
 		return STATUS_UNSUCCESSFUL;
     }
+}
+
+/*****************************************************************************
+ * CAdapterCommon::TryInitializeCodecSlot
+ *****************************************************************************/
+STDMETHODIMP_(void)
+CAdapterCommon::TryInitializeCodecSlot(
+	IN ULONG codec_number,
+	IN ULONG codec_id,
+	IN PCSTR interfaceName,
+	OUT NTSTATUS* pStatus
+)
+{
+	if((codec_id == 0x0) || (codec_id == 0xFFFFFFFF) || (codec_id == STATUS_UNSUCCESSFUL)) {
+		return;
+	}
+
+	DOUT (DBG_SYSINFO, ("HDA: Codec %d %s communication interface", codec_id, interfaceName));
+
+	//create and initialize codec object and pack into array
+	if (codecCount < ARRAY_COUNT(pCodecs)) {
+		HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
+		if (pCodec) {
+			pCodecs[codecCount++] = pCodec;
+			NTSTATUS status = pCodec->InitializeCodec();
+			if (!NT_SUCCESS(status)) {
+				// If initialization failed, keep trying other codecs
+				codecCount--;
+				pCodecs[codecCount] = NULL;
+				delete pCodec;
+				if (pStatus) {
+					*pStatus = STATUS_UNSUCCESSFUL;
+				}
+			} else if (pStatus) {
+				*pStatus = status;
+			}
+		} else if (pStatus) {
+			*pStatus = STATUS_INSUFFICIENT_RESOURCES;
+		}
+	}
 }
 
 /*****************************************************************************

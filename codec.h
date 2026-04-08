@@ -34,7 +34,6 @@ private:
     ULONG codec_id;                     // Codec vendor ID and device ID
 	USHORT codec_ven;
 	USHORT codec_dev;
-	BOOLEAN isRealtek;					// Realtek codecs need different init order
     
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag
@@ -54,18 +53,55 @@ private:
     ULONG pin_output_node_number;
     ULONG headphone_node_number;
 
+    // Scht. >>>>>>
+    LONG HpPollingEnabled;
+    LONG InShutdown;
 
+    KTIMER HpTimer;
+    KDPC   HpDpc;
+    BOOLEAN HpPrev;
+    BOOLEAN HpTimerStarted;
+    KEVENT HpDpcIdleEvent;
+
+    void StartHpPolling();
+    void StopHpPolling();
+    static VOID HpDpcRoutine(
+        KDPC* Dpc,
+        PVOID DeferredContext,
+        PVOID SystemArgument1,
+        PVOID SystemArgument2
+    );
+
+    void ForcePinOut(ULONG pinNid, BOOLEAN enable);
+    void ForceEapd(ULONG pinNid, BOOLEAN enable);
+    BOOLEAN IsHpPresent();
+    void SwitchOutput(BOOLEAN hpPresent);
+    void UnmutePinOutAmp(ULONG pinNid);
+    void MutePinOutAmp(ULONG pinNid);   
+    void UnmutePinInAmp(ULONG pinNid, UCHAR inIndex);
+    void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
+    void ForceConnSel(ULONG nid, UCHAR sel);
+    void WakeSpeakerPath();
+    ULONG ReadCoef(ULONG node, USHORT idx);
+    void WriteCoef(ULONG node, USHORT idx, USHORT val);
+    void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
+    void ApplyEeeInit();
+    void ForcePlaybackChain();
+    void UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain);
+    void UnmuteOutAmp(ULONG nid, UCHAR gain);
+    // Scht. <<<<<<
 
 public:
     explicit HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, IAdapterCommon* adapter);
     ~HDA_Codec();
 
 	STDMETHODIMP_(NTSTATUS) InitializeCodec();
-	STDMETHODIMP_(NTSTATUS) hda_send_verb(
+	STDMETHODIMP_(ULONG) hda_send_verb(
         ULONG Node,
         ULONG Verb,
         ULONG Payload
     );
+    STDMETHODIMP_(ULONG) SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag);
 
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);

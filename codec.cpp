@@ -12,6 +12,326 @@
 
 #define STR_MODULENAME "HDA_Codec: "
 
+// Scht. >>>
+#include <stdarg.h>
+
+#define VERB_GET_PIN_SENSE            0xF09
+#define VERB_SET_PIN_WIDGET_CONTROL   0x707
+#define VERB_SET_EAPD_BTLENABLE       0x70C
+#define VERB_GET_CONN_LIST_ENTRY 0xF02
+#define VERB_GET_CONN_LIST_LEN   0xF00
+#define AC_PAR_CONNLIST_LEN      0x0E
+#define VERB_SET_CONNECT_SEL 0x701
+#define VERB_GET_CONNECT_SEL 0xF01
+#define VERB_SET_COEF_INDEX   0x500
+#define VERB_GET_COEF_INDEX   0xD00
+#define VERB_SET_PROC_COEF    0x400
+#define VERB_GET_PROC_COEF    0xC00
+#define VERB_GET_PIN_WIDGET_CONTROL 0xF07
+#define VERB_GET_EAPD_BTLENABLE     0xF0C
+#define VERB_GET_AMP_GAIN_MUTE      0xB00
+#define VERB_SET_AMP_GAIN_MUTE      0x300
+#define PINCTL_OUT_EN                 0x40
+#define PINCTL_IN_EN                  0x20
+
+#define hda_log DbgPrint
+
+void HDA_Codec::ForcePinOut(ULONG pinNid, BOOLEAN enable)
+{
+	if (InShutdown) return;
+
+    ULONG v = enable ? PINCTL_OUT_EN : 0x00;
+    hda_log("WDMHDA: ForcePinOut nid=%lu enable=%lu val=0x%02lX\n", pinNid, enable ? 1UL : 0UL, v);
+    hda_send_verb(pinNid, VERB_SET_PIN_WIDGET_CONTROL, v);
+}
+
+void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
+{
+	if (InShutdown) return;
+
+    // 0x02 (EAPD) or 0x03 (EAPD+BTL) - 0x02 is safe for ALC662
+    ULONG v = enable ? 0x02 : 0x00;
+    hda_log("WDMHDA: ForceEAPD nid=%lu enable=%lu val=0x%02lX\n", pinNid, enable ? 1UL : 0UL, v);
+    hda_send_verb(pinNid, VERB_SET_EAPD_BTLENABLE, v);
+}
+
+BOOLEAN HDA_Codec::IsHpPresent()
+{
+	if (InShutdown) return FALSE;
+
+    ULONG psense = hda_send_verb(27, VERB_GET_PIN_SENSE, 0);
+    // bit31 = presence detect
+    return (psense & 0x80000000UL) ? TRUE : FALSE;
+}
+
+void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
+{
+	if (InShutdown) return;
+
+    const ULONG speakerPin = 20;
+    const ULONG hpPin      = 27;
+
+    if (hpPresent)
+    {
+        hda_log("WDMHDA: SwitchOutput -> HEADPHONES\n");
+
+		ForcePlaybackChain();
+
+		ForcePinOut(speakerPin, FALSE);
+		ForcePinOut(hpPin, TRUE);
+		
+		MutePinOutAmp(speakerPin);
+		UnmutePinOutAmp(hpPin);
+
+        pin_output_node_number = hpPin;
+        selected_output_node = hpPin;
+    }
+    else
+    {
+        hda_log("WDMHDA: SwitchOutput -> SPEAKERS\n");
+
+		ForcePlaybackChain();
+
+		ForcePinOut(hpPin, FALSE);
+		ForcePinOut(speakerPin, TRUE);
+		
+		ForceEapd(speakerPin, TRUE);
+		
+		MutePinOutAmp(hpPin);
+		SetOutAmpLR(2, FALSE, 0x00);
+		UnmutePinOutAmp(speakerPin);
+
+        pin_output_node_number = speakerPin;
+        selected_output_node = speakerPin;
+    }
+}
+
+void HDA_Codec::ForcePlaybackChain()
+{
+    SetOutAmpLR(2, FALSE, 0x00);
+    UnmuteInAmp(12, 0, 0x00);
+    UnmuteOutAmp(12, 0x00);
+    ForceConnSel(12, 0);
+}
+
+void HDA_Codec::StartHpPolling()
+{
+    if (InterlockedExchange(&HpPollingEnabled, 1) == 1)
+        return;
+
+    InShutdown = 0;
+    KeInitializeEvent(&HpDpcIdleEvent, NotificationEvent, TRUE);
+
+    KeInitializeTimer(&HpTimer);
+    KeInitializeDpc(&HpDpc, HpDpcRoutine, this);
+
+    HpPrev = IsHpPresent();
+    SwitchOutput(HpPrev);
+
+    LARGE_INTEGER due;
+    due.QuadPart = -2500000;
+
+    KeSetTimerEx(&HpTimer, due, 250, &HpDpc);
+
+    hda_log("WDMHDA: HP polling START\n");
+}
+
+void HDA_Codec::StopHpPolling()
+{
+    if (InterlockedExchange(&HpPollingEnabled, 0) == 0)
+        return;
+
+    InterlockedExchange(&InShutdown, 1);
+
+    BOOLEAN wasSet = KeCancelTimer(&HpTimer);
+    KeRemoveQueueDpc(&HpDpc);
+
+    LARGE_INTEGER timeout;
+    timeout.QuadPart = -10 * 1000 * 1000; // 1 sec
+
+    NTSTATUS st = KeWaitForSingleObject(&HpDpcIdleEvent, Executive, KernelMode, FALSE, &timeout);
+
+    hda_log("WDMHDA: HP polling STOP (wasSet=%lu wait=0x%08lX)\n", wasSet ? 1UL : 0UL, st);
+}
+
+VOID HDA_Codec::HpDpcRoutine(KDPC* /*Dpc*/, PVOID DeferredContext, PVOID /*a1*/, PVOID /*a2*/)
+{
+    HDA_Codec* self = (HDA_Codec*)DeferredContext;
+    if (!self) return;
+
+    KeClearEvent(&self->HpDpcIdleEvent);
+
+	__try
+	{
+	if (self->InShutdown || !self->HpPollingEnabled)
+    	return;
+
+    BOOLEAN hp = self->IsHpPresent();
+    if (hp != self->HpPrev)
+    {
+        hda_log("WDMHDA: HP state changed -> %lu\n", hp ? 1UL : 0UL);
+        self->HpPrev = hp;
+        self->SwitchOutput(hp);
+    }
+	}
+	__finally
+	{
+		KeSetEvent(&self->HpDpcIdleEvent, IO_NO_INCREMENT, FALSE);
+	}
+}
+
+static ULONG make_amp_cmd(BOOLEAN output, UCHAR index, BOOLEAN mute, UCHAR gainSteps)
+{
+    // HDA SET_AMP_GAIN_MUTE payload format:
+    // bit15: 1=set output, 0=set input
+    // bits 14..13: reserved
+    // bit12..8: index (input index if input amp, else 0)
+    // bit7: mute (1=mute)
+    // bit6..0: gain (steps)
+    ULONG cmd = 0;
+    if (output) cmd |= 0x8000;
+    cmd |= ((ULONG)(index & 0x1F)) << 8;
+    if (mute) cmd |= 0x0080;
+    cmd |= (gainSteps & 0x7F);
+    return cmd;
+}
+
+static ULONG amp_get_cmd(BOOLEAN output, BOOLEAN right, UCHAR index)
+{
+    ULONG cmd = 0;
+    cmd |= output ? 0x8000 : 0x0000;
+    cmd |= right  ? 0x2000 : 0x1000;     // R / L
+    cmd |= ((ULONG)(index & 0x1F)) << 8; // index
+    return cmd;
+}
+
+static ULONG amp_set_cmd(BOOLEAN output, BOOLEAN right, UCHAR index, BOOLEAN mute, UCHAR gain)
+{
+    ULONG cmd = 0;
+    cmd |= output ? 0x8000 : 0x0000;
+    cmd |= right  ? 0x2000 : 0x1000;
+    cmd |= ((ULONG)(index & 0x1F)) << 8;
+    if (mute) cmd |= 0x0080;
+    cmd |= (gain & 0x7F);
+    return cmd;
+}
+
+void HDA_Codec::UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain)
+{
+    ULONG left  = amp_set_cmd(FALSE, FALSE, inIndex, FALSE, gain); // INPUT, LEFT
+    ULONG right = amp_set_cmd(FALSE, TRUE,  inIndex, FALSE, gain); // INPUT, RIGHT
+
+    hda_log("WDMHDA: UnmuteInAmp nid=%lu idx=%u gain=%u L=0x%04lX R=0x%04lX\n",
+            nid, (ULONG)inIndex, (ULONG)gain, left, right);
+
+    hda_send_verb(nid, VERB_SET_AMP_GAIN_MUTE, left);
+    hda_send_verb(nid, VERB_SET_AMP_GAIN_MUTE, right);
+}
+
+void HDA_Codec::UnmuteOutAmp(ULONG nid, UCHAR gain)
+{
+    ULONG left  = amp_set_cmd(TRUE, FALSE, 0, FALSE, gain); // OUTPUT, LEFT, index=0
+    ULONG right = amp_set_cmd(TRUE, TRUE,  0, FALSE, gain); // OUTPUT, RIGHT
+
+    hda_log("WDMHDA: UnmuteOutAmp nid=%lu gain=%u L=0x%04lX R=0x%04lX\n",
+            nid, (ULONG)gain, left, right);
+
+    hda_send_verb(nid, VERB_SET_AMP_GAIN_MUTE, left);
+    hda_send_verb(nid, VERB_SET_AMP_GAIN_MUTE, right);
+}
+
+void HDA_Codec::SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain)
+{
+    ULONG left  = amp_set_cmd(TRUE,  FALSE, 0, mute, gain);
+    ULONG right = amp_set_cmd(TRUE,  TRUE,  0, mute, gain);
+
+    hda_log("WDMHDA: OutAmpLR nid=%lu mute=%lu gain=%u L=0x%04lX R=0x%04lX\n",
+            nid, mute ? 1UL : 0UL, (ULONG)gain, left, right);
+
+    hda_send_verb(nid, 0x300, left);
+    hda_send_verb(nid, 0x300, right);
+}
+
+void HDA_Codec::UnmutePinOutAmp(ULONG nid) { SetOutAmpLR(nid, FALSE, 0x10); }
+void HDA_Codec::MutePinOutAmp(ULONG nid)   { SetOutAmpLR(nid, TRUE,  0x00); }
+
+void HDA_Codec::UnmutePinInAmp(ULONG pinNid, UCHAR inIndex)
+{
+	if (InShutdown) return;
+
+	ULONG cmd = make_amp_cmd(FALSE, inIndex, FALSE, 0x40); // input amp, index=inIndex
+    hda_log("WDMHDA: UnmutePinInAmp nid=%lu idx=%u cmd=0x%04lX\n", pinNid, (ULONG)inIndex, cmd);
+    hda_send_verb(pinNid, VERB_SET_AMP_GAIN_MUTE, cmd);
+}
+
+void HDA_Codec::MutePinInAmp(ULONG pinNid, UCHAR inIndex)
+{
+	if (InShutdown) return;
+
+	ULONG cmd = make_amp_cmd(FALSE, inIndex, TRUE, 0x00); // input amp, index=inIndex
+    hda_log("WDMHDA: MutePinInAmp nid=%lu idx=%u cmd=0x%04lX\n", pinNid, (ULONG)inIndex, cmd);
+    hda_send_verb(pinNid, VERB_SET_AMP_GAIN_MUTE, cmd);
+}
+
+void HDA_Codec::ForceConnSel(ULONG nid, UCHAR sel)
+{
+	if (InShutdown) return;
+
+    ULONG old = hda_send_verb(nid, VERB_GET_CONNECT_SEL, 0);
+    hda_log("WDMHDA: ConnSel nid=%lu old=0x%08lX -> sel=%u\n", nid, old, (ULONG)sel);
+    hda_send_verb(nid, VERB_SET_CONNECT_SEL, sel);
+}
+
+void HDA_Codec::WakeSpeakerPath()
+{
+	if (InShutdown) return;
+
+    const ULONG speakerPin = 20;
+    const ULONG mix12      = 12;
+
+    ForceConnSel(mix12, 0);
+    UnmutePinInAmp(mix12, 0);
+    UnmutePinOutAmp(mix12);
+    UnmutePinOutAmp(speakerPin);
+
+    hda_send_verb(speakerPin, VERB_SET_EAPD_BTLENABLE, 0x03);
+}
+
+ULONG HDA_Codec::ReadCoef(ULONG node, USHORT idx)
+{
+	if (InShutdown) return 0;
+
+    hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
+    return hda_send_verb(node, VERB_GET_PROC_COEF, 0);
+}
+
+void HDA_Codec::WriteCoef(ULONG node, USHORT idx, USHORT val)
+{
+	if (InShutdown) return;
+
+    hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
+    hda_send_verb(node, VERB_SET_PROC_COEF, val);
+}
+
+void HDA_Codec::ApplyEeeInit()
+{
+    hda_log("WDMHDA: ApplyEeeInit\n");
+
+    hda_send_verb(20, 0x707, 0x40);
+    hda_send_verb(27, 0x707, 0x40);
+
+    hda_send_verb(20, 0x701, 0x00);
+    hda_send_verb(27, 0x701, 0x00);
+
+    SetOutAmpLR(20, FALSE, 0x40);
+    SetOutAmpLR(27, FALSE, 0x40);
+
+    SetOutAmpLR(2, FALSE, 0x00);
+    SetOutAmpLR(3, FALSE, 0x00);
+    SetOutAmpLR(4, FALSE, 0x00);
+}
+// Scht. <<<
+
 /*****************************************************************************
  * HDA_Codec::HDA_Codec()
  *****************************************************************************
@@ -44,6 +364,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
 HDA_Codec::~HDA_Codec()
 {
 	// Cleanup if needed
+	StopHpPolling();		// Scht.
 }
 
 
@@ -430,11 +751,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			//check once for now
 			hda_check_headphone_connection_change();
 
-			//TODO: add task for checking headphone connection
-			// this will have to be a DPC
-
-			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
-
 			//add path to paths list
 			if (out_paths.count < MAX_OUTPUT_PATHS) {
 				out_paths.paths[out_paths.count++] = path;
@@ -466,6 +782,35 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		DbgPrint("\nCodec does not have any usable output PINs");
 		return STATUS_UNSUCCESSFUL;
 	}
+
+	// Scht. >>>>>
+	hda_log("WDMHDA: ---- GPIO scan (mask!=0) ----\n");
+
+	for (ULONG n = ((subordinate_node_count_reponse >> 16) & 0xFF),
+			   last = n + (subordinate_node_count_reponse & 0xFF);
+		 n < last;
+		 n++)
+	{
+		ULONG gmask = hda_send_verb(n, 0xF16, 0);
+		if (gmask != 0 && gmask != 0xFFFFFFFFUL)
+		{
+			ULONG gdir  = hda_send_verb(n, 0xF17, 0);
+			ULONG gdata = hda_send_verb(n, 0xF15, 0);
+			hda_log("WDMHDA: GPIO node=%lu mask=%08lX dir=%08lX data=%08lX\n", n, gmask, gdir, gdata);
+		}
+	}
+	
+	ApplyEeeInit();
+
+	if (!HpTimerStarted)
+	{
+		StartHpPolling();
+
+		HpTimerStarted = TRUE;
+		hda_log("WDMHDA: HP polling timer started (250ms)\n");
+	}
+	// Scht. <<<<<
+
 	return STATUS_SUCCESS;
 }
 
@@ -934,11 +1279,22 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, UL
  * Helper function that sends a verb command to this codec.
  * Wraps the adapter's hda_send_verb with this codec's address.
  */
-STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
+STDMETHODIMP_(ULONG) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
 {
 	return pAdapter->hda_send_verb(codec_address, node, verb, command);
 }
 
+// Scht. >>>>>>>
+STDMETHODIMP_(ULONG) HDA_Codec::SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag)
+{
+    ULONG st = this->hda_send_verb(node, verb, command);
+
+    hda_log("WDMHDA: %s node=0x%02lX verb=0x%03lX cmd=0x%04lX -> 0x%08lX\n",
+		(tag ? tag : "verb"), node, verb, command, st);
+
+    return st;
+}
+// Scht. <<<<<<<<<
 
 STDMETHODIMP_(USHORT) HDA_Codec::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
 	USHORT data_format = 0;

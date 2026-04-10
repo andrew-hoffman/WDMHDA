@@ -309,7 +309,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			} else if(pin_node_type == HDA_PIN_DIGITAL_OTHER_OUT) {
 				DbgPrint( ("Digital Other Out"));
 				//save this node, this variable contain number of last alternative output
-				if (useAltOut){
+				if (useSpdif){
 					pin_alternative_output_node_number = node;
 					DbgPrint( (" used"));
 				} else {
@@ -934,7 +934,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, UL
  * Helper function that sends a verb command to this codec.
  * Wraps the adapter's hda_send_verb with this codec's address.
  */
-STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
+STDMETHODIMP_(ULONG) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
 {
 	return pAdapter->hda_send_verb(codec_address, node, verb, command);
 }

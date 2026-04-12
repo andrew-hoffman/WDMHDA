@@ -154,7 +154,8 @@ public:
     STDMETHODIMP_(NTSTATUS) Init
     (
         IN      PRESOURCELIST   ResourceList,
-        IN      PDEVICE_OBJECT  DeviceObject
+        IN      PDEVICE_OBJECT  DeviceObject,
+		IN      PDEVICE_OBJECT  PDO
     );
     STDMETHODIMP_(PINTERRUPTSYNC) GetInterruptSync
     (   void
@@ -361,13 +362,15 @@ CAdapterCommon::
 Init
 (
     IN      PRESOURCELIST   ResourceList,
-    IN      PDEVICE_OBJECT  DeviceObject
+    IN      PDEVICE_OBJECT  DeviceObject,
+	IN      PDEVICE_OBJECT  PDO
 )
 {
     PAGED_CODE();
 
     ASSERT(ResourceList);
-    ASSERT(DeviceObject);
+    ASSERT(DeviceObject != NULL);
+	ASSERT(PDO != NULL);
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 	PHYSICAL_ADDRESS physAddr = {0};
@@ -380,25 +383,17 @@ Init
     //
     m_pDeviceObject = DeviceObject;
 
-	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
-    DOUT(DBG_SYSINFO, ("Initial PDO align was %d", 
-				m_pDeviceObject -> AlignmentRequirement));
-
-	if (m_pDeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
-		m_pDeviceObject -> AlignmentRequirement = FILE_128_BYTE_ALIGNMENT;
-		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
-				m_pDeviceObject -> AlignmentRequirement));
-	}
-
 	//init spin lock for protecting the CORB/RIRB or PIO
 	KeInitializeSpinLock(&QLock);
 	
 	//Read settings from registry
+	
 	for (i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
 		*g_BooleanSettings[i].Variable =
             ReadRegistryBoolean(g_BooleanSettings[i].ValueName, 
 			g_BooleanSettings[i].DefaultValue);
     }
+	
 
 	// Initialize codec array
 	codecCount = 0;
@@ -408,9 +403,12 @@ Init
 
 	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
+	
 	ULONG pci_ven = 0;
 	ULONG pci_dev = 0;
 	memLength = 0;
+
+	
 	pConfigMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
 	if (!pConfigMem) {
 		return STATUS_INSUFFICIENT_RESOURCES;
@@ -598,6 +596,7 @@ Init
         //return ntStatus; //is failure fatal? i dont think so
 	}
 
+
 	//there may be multiple instances of this driver loaded at once
 	//on systems with HDMI display audio support for instance
 	//but it should be one driver object per HDA controller.
@@ -735,7 +734,7 @@ Init
 	ULONG nMapRegisters = 0;
 
 	DMA_Adapter = IoGetDmaAdapter (
-		m_pDeviceObject,
+		PDO, //NOT Optional
 		pDeviceDescription,
 		&nMapRegisters );
 
@@ -915,6 +914,7 @@ Init
 		m_pInterruptSync = NULL;
 		return ntStatus;
 	}
+	
 
 	DbgPrint("Init Finished Successfully!\n");
     return ntStatus;

@@ -33,7 +33,7 @@
 #endif
 
 
-
+PDEVICE_OBJECT   PDO;
 
 
 /*****************************************************************************
@@ -165,9 +165,25 @@ AddDevice
 {
     PAGED_CODE();
 
+	ASSERT(PhysicalDeviceObject != NULL);
+
+	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
+	    DOUT(DBG_SYSINFO, ("PDO 0x%X", 
+				PhysicalDeviceObject));
+    DOUT(DBG_SYSINFO, ("Initial PDO align was %d", 
+				PhysicalDeviceObject -> AlignmentRequirement));
+
+	if (PhysicalDeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
+		PhysicalDeviceObject -> AlignmentRequirement = FILE_128_BYTE_ALIGNMENT;
+		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
+				PhysicalDeviceObject -> AlignmentRequirement));
+	}
+	PDO = PhysicalDeviceObject;
+
     //
     // Tell the class driver to add the device.
     //
+
     return PcAddAdapterDevice( DriverObject,
                                PhysicalDeviceObject,
                                PCPFNSTARTDEVICE( StartDevice ),
@@ -424,7 +440,7 @@ StartDevice
                 {
                     // Initialize the object
                     ntStatus = pAdapterCommon->Init( resourceListAdapter,
-                                                     DeviceObject );
+                                                     DeviceObject, PDO );
                     if (NT_SUCCESS(ntStatus))
                     {
                         // register with PortCls for power-managment services

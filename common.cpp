@@ -377,6 +377,16 @@ Init
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::Init]"));
 	ULONG i;
+
+	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
+    DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
+				DeviceObject -> AlignmentRequirement));
+
+	if (DeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
+		DeviceObject -> AlignmentRequirement = FILE_128_BYTE_ALIGNMENT;
+		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
+				DeviceObject -> AlignmentRequirement));
+	}
         
     //
     // Save the device object

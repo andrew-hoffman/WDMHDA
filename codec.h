@@ -61,7 +61,7 @@ public:
     ~HDA_Codec();
 
 	STDMETHODIMP_(NTSTATUS) InitializeCodec();
-	STDMETHODIMP_(NTSTATUS) hda_send_verb(
+	STDMETHODIMP_(ULONG) hda_send_verb(
         ULONG Node,
         ULONG Verb,
         ULONG Payload

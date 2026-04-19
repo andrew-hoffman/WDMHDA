@@ -237,7 +237,8 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     STDMETHOD_(NTSTATUS,Init)
     (   THIS_
         IN      PRESOURCELIST   ResourceList,
-        IN      PDEVICE_OBJECT  DeviceObject
+        IN      PDEVICE_OBJECT  DeviceObject,
+		IN      PDEVICE_OBJECT  PDO
     )   PURE;
     
     STDMETHOD_(PINTERRUPTSYNC,GetInterruptSync)

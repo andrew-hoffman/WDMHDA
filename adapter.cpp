@@ -33,7 +33,7 @@
 #endif
 
 
-
+PDEVICE_OBJECT   PDO;
 
 
 /*****************************************************************************
@@ -165,9 +165,19 @@ AddDevice
 {
     PAGED_CODE();
 
+	ASSERT(PhysicalDeviceObject != NULL);
+    DOUT(DBG_SYSINFO, ("PDO 0x%X", 
+				PhysicalDeviceObject));
+	PDO = PhysicalDeviceObject;
+
+
+	DOUT(DBG_SYSINFO, ("FDO 0x%X", 
+				DriverObject));
+
     //
     // Tell the class driver to add the device.
     //
+
     return PcAddAdapterDevice( DriverObject,
                                PhysicalDeviceObject,
                                PCPFNSTARTDEVICE( StartDevice ),
@@ -424,7 +434,7 @@ StartDevice
                 {
                     // Initialize the object
                     ntStatus = pAdapterCommon->Init( resourceListAdapter,
-                                                     DeviceObject );
+                                                     DeviceObject, PDO );
                     if (NT_SUCCESS(ntStatus))
                     {
                         // register with PortCls for power-managment services

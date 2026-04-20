@@ -26,7 +26,8 @@ HDA.sys=222
 ;; Mechanism for excluding drivers from the "Add New Hardware" list.
 ;;
 [ControlFlags]
-ExcludeFromSelect = *
+;; *EXCLUDE is a made up ID to prevent rank 1 drivers from showing in list.
+ExcludeFromSelect = *EXCLUDE
 
 ;; HDA miniport
 [SiriusCybernetics]

@@ -19,7 +19,10 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 ## Installation:
 
-Install HDA.inf with Device Manager on the HD Audio Controller device which will be listed as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices). Select the location of the HDA.sys file when Windows asks you. The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
+Install HDA.inf with Device Manager on the HD Audio Controller device. This will be listed on Windows 9x as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
+On Windows 2000/XP the HDA controller will be listed as "Microsoft UAA Bus Device" or similar if you have the official KB888111 update installed.
+Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
+The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
 For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 

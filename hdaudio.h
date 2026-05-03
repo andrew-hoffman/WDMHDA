@@ -58,6 +58,32 @@
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
 
+// Scht. >>>>>
+// HDA verbs
+#define VERB_GET_PARAMETER            0xF00
+#define VERB_GET_CONN_LIST_ENTRY      0xF02
+#define VERB_GET_CONFIG_DEFAULT       0xF1C
+#define VERB_GET_PIN_WIDGET_CONTROL   0xF07
+#define VERB_GET_PIN_SENSE            0xF09
+
+#define VERB_SET_PIN_WIDGET_CONTROL   0x707
+#define VERB_SET_EAPD_BTLENABLE       0x70C
+
+// Pin Widget Control bits
+#define PINCTL_OUT_EN                 0x40
+#define PINCTL_IN_EN                  0x20
+
+// GET_PARAMETER id's
+#define AC_PAR_AUDIO_WIDGET_CAP       0x09
+#define AC_PAR_PIN_CAP                0x0C
+
+// Widget caps helpers
+#define AC_WCAP_TYPE_SHIFT 20
+#define AC_WCAP_TYPE_MASK  (0xF << AC_WCAP_TYPE_SHIFT)
+#define AC_WCAP_TYPE_PIN   (0x4 << AC_WCAP_TYPE_SHIFT)
+
+// Scht. <<<<<
+
 /*****************************************************************************
  * HD Audio register definitions
  *****************************************************************************/

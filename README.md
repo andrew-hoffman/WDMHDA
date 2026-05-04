@@ -22,11 +22,12 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 Install HDA.inf with Device Manager on the HD Audio Controller device. This will be listed on Windows 9x as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
 On Windows 2000/XP the HDA controller will be listed as "Microsoft UAA Bus Device" or similar if you have the official KB888111 update installed.
 Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
-The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
+
+You may get a dialog asking "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys. **Always keep the newer file.**
 
 For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 
-It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver. 
+It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver.
 
 ## Current Limitations:
 
@@ -50,6 +51,8 @@ See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com
 For build instructions, see the file Build Instructions.txt
 
 Testing and feedback from anyone who can run this on bare metal with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated. 
+
+The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
 ## If the driver will not start for you or has other issues here's how you can get a debug log:
  

@@ -1217,8 +1217,8 @@ Init
     KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
 
 	if(NT_SUCCESS(ntStatus)){
-			//if everything is ok, set up the stream for showtime
-			ntStatus = Miniport->AdapterCommon->hda_showtime(DmaChannel);
+			//if everything is ok, set up the stream
+			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
 	}
     
     SetFormat( DataFormat );
@@ -1344,12 +1344,12 @@ GetPosition
 			//bias the stream position forward when in Run mode
 			//to account for the DMA engine block size and the codec's buffer.
 			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 128 + 16 )
-				//% DmaChannel->BufferSize()
+				% DmaChannel->BufferSize()
 				; 
 		}
 		else {
 			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position()
-				//% DmaChannel->BufferSize()
+				% DmaChannel->BufferSize()
 				;
 		}
     }
@@ -1405,8 +1405,8 @@ SetState
 )
 {
 	/* States always progress in in the order of:
-	DmaChannel created - KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN -> (Playing)
-	(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP - DmaChannel Destroyed
+	DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
+	(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
 	*/
 
     PAGED_CODE();

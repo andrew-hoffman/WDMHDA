@@ -319,7 +319,7 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
-	STDMETHODIMP_(NTSTATUS)	hda_showtime(PDMACHANNEL DmaChannel);
+	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(PDMACHANNEL DmaChannel);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
@@ -2695,12 +2695,12 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 	writeULONG(reg, readULONG(reg) & ~flag);
 }
 
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL DmaChannel) {
 	
-	int i = 0;
+	ULONG i = 0;
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
-	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_showtime]"));
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_setup_stream_descriptor]"));
 
 	//get the physical and virtual address pointers from the dma channel object
 	BufLogicalAddress = DmaChannel->PhysicalAddress();
@@ -2723,11 +2723,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
         DOUT (DBG_ERROR, ("Can't reset stream"));
         return ntStatus;
     }
-	//ProgramSampleRate(44100);
 	
 	//divide the buffer into <entries> chunks (must be a power of 2)
 	
-	USHORT entries = 64;
+	ULONG entries = audBufSize / 2048;
+	if(entries > 128UL) entries = 128;
 	for(i = 0; i < (entries * 4); i += 4){
 		BdlBuffer.AlignedVirtualAddress[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
 		BdlBuffer.AlignedVirtualAddress[i+1] = BufLogicalAddress.HighPart;
@@ -2773,7 +2773,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	*/
 	
 
-	DOUT(DBG_SYSINFO, ("BDL all set up"));
+	DOUT(DBG_SYSINFO, ("BDL set up"));
 
 	//KeFlushIoBuffers is defined to nothing in the NT DDK but exists in the 98 DDK
 	KeFlushIoBuffers(mdl, FALSE, TRUE); 
@@ -2789,13 +2789,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	writeULONG(OutputStreamBase + 0x18, BdlBuffer.AlignedLogicalAddress.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlBuffer.AlignedLogicalAddress.HighPart);
 	writeULONG(OutputStreamBase + 0x08, audBufSize);
-	writeUSHORT(OutputStreamBase + 0x0C, entries - 1); //there are entries-1 entries in buffer
+	writeUSHORT(OutputStreamBase + 0x0C, (USHORT)(entries - 1)); //there are entries-1 entries in buffer
 
-	DOUT(DBG_SYSINFO, ("buffer address programmed"));
+	//DOUT(DBG_SYSINFO, ("buffer address programmed"));
 
 	KeStallExecutionProcessor(10);
 
-	DOUT(DBG_SYSINFO, ("ready to start the stream"));
+	//DOUT(DBG_SYSINFO, ("ready to start the stream"));
 
 	//clear pending codec interrupts once, we do not care
 	UCHAR rirbsts = readUCHAR(0x5D);
@@ -2806,7 +2806,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_showtime(PDMACHANNEL DmaChannel) {
 	//TODO account for other streams in use
 	writeULONG(0x20, ((1 << 31) | (1 << FirstOutputStream)) ); 
 
-	DOUT(DBG_SYSINFO, ("showtime"));
+	DOUT(DBG_SYSINFO, ("stream descriptor ready"));
 
 	// wait for Play state to actually start the stream though.
 	

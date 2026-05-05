@@ -300,7 +300,7 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     (   THIS
     )   PURE;
 
-	STDMETHOD_(NTSTATUS,hda_showtime)
+	STDMETHOD_(NTSTATUS,hda_setup_stream_descriptor)
     (   THIS_
         IN      PDMACHANNEL DmaChannel
     )   PURE;

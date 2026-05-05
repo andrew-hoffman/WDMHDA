@@ -38,8 +38,10 @@ It is recommended but not strictly necessary to install DirectX 8.1 or newer aft
 - Volume control is only implemented for the main mix output
 - Jack detection and retasking is not supported
 - Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported.
-- DOS Sound Blaster emulation is provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL. DOSBox can be used to run games with OPL emulation and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA). 
-- Freezes, crashes, fails to start or outputs horrible noises on some real hardware. No guarantees. 
+- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
+DOSBox can be used to run games with OPL emulation and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
+The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.
+- May Freeze, crash, fail to start or outputs horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 

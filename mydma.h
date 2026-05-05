@@ -68,7 +68,8 @@ public:
 			ULONG_PTR alignedOffset;
 			ULONG_PTR alignedVirtual;
 
-			alignedOffset = (ULONG_PTR)((DMA_BUFFER_ALIGNMENT - (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1))) & (DMA_BUFFER_ALIGNMENT - 1));
+			alignedOffset = (ULONG_PTR)((DMA_BUFFER_ALIGNMENT - (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)))
+				& (DMA_BUFFER_ALIGNMENT - 1));
 			alignedVirtual = (ULONG_PTR)realSystemAddress + alignedOffset;
 
 			m_AlignedPhysicalAddress.QuadPart = realPhysicalAddress.QuadPart + alignedOffset;

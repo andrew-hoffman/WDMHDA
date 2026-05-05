@@ -155,7 +155,7 @@ ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
 ServiceBinary  = %10%\system32\drivers\HDA.sys
 
 [Strings]
-MSFT="Drew Hoffman, VOGONS"
+MSFT="Drew Hoffman"
 CLMfgName="Sirius Cybernetics"
 DiskDescription="HD Audio WDM Sample Driver Disk"
 *WDM_HDA.DeviceDesc="HD Audio Controller (WDM)"

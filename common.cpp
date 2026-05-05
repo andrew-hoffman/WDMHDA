@@ -2541,6 +2541,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
+	DOUT (DBG_SYSINFO, ("HDA: starting output stream pos %d", readULONG(OutputStreamBase + 0x04)));
 	//
     // Make sure there is a wave port driver.
     //
@@ -2557,6 +2558,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
 }
 
 STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
+	DOUT (DBG_SYSINFO, ("HDA: stopping output stream pos %d", readULONG(OutputStreamBase + 0x04)));
 	writeUCHAR(OutputStreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
 	while(ticks++ < 40) {
@@ -2570,6 +2572,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
 	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
 		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
 	}
+	DOUT (DBG_SYSINFO, ("HDA: stopped stream pos %d", readULONG(OutputStreamBase + 0x04)));
 }
 
 

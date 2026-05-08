@@ -2343,7 +2343,7 @@ PowerChangeState
                 // also be noted that new miniport and new streams will only be
                 // attempted at D0 (portcls will place the device in D0 prior to the
                 // NewStream call).
-				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D0 from",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
+				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D0 from D%d",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
 
                 // Save the new state.  This local value is used to determine when to cache
                 // property accesses and when to permit the driver from accessing the hardware.
@@ -2724,7 +2724,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
         return ntStatus;
     }
 	
-	//divide the buffer into <entries> chunks (must be a power of 2)
+	//divide the buffer into <entries> chunks (buffer must be an integer multiple of chunk size)
 	
 	ULONG entries = audBufSize / 2048;
 	if(entries > 128UL) entries = 128;

@@ -155,7 +155,7 @@ ProcessResources
             
         do {
 			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
-			lDMABufferLength >>= 1;
+			lDMABufferLength -= PAGE_SIZE;
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
 
 
@@ -1443,6 +1443,7 @@ SetState
             break;
 
         case KSSTATE_STOP:
+			// fill buffer with silence
             break;
         }
 

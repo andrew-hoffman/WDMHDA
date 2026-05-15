@@ -19,15 +19,15 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 ## Installation:
 
-Install HDA.inf with Device Manager on the HD Audio Controller device. This will be listed on Windows 9x as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
-On Windows 2000/XP the HDA controller will be listed as "Microsoft UAA Bus Device" or similar if you have the official KB888111 update installed.
-Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
-
-You may get a dialog asking "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys. **Always keep the newer file.**
-
-For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
+- Install HDA.inf with Device Manager on the HD Audio Controller device. This will be listed on Windows 9x as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
+- On Windows 2000/XP the HDA controller will be listed as "Microsoft UAA Bus Device" or similar if you have the official KB888111 update installed.
+  - Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
+- If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys. **Always keep the newer file.**
+- After installation finishes you will need to restart before audio will work.
 
 It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver.
+
+For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 
 ## Current Limitations:
 

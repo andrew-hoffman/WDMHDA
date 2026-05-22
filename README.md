@@ -19,17 +19,19 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 ## Installation:
 
-- Install HDA.inf with Device Manager on the HD Audio Controller device. This will be listed on Windows 9x as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
-- On Windows 2000/XP the HDA controller will be listed as "Microsoft UAA Bus Device" or similar if you have the official KB888111 update installed.
-  - Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
-- If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys. **Always keep the newer file.**
-- After installation finishes you will need to restart before audio will work.
+- Install HDA.inf with Device Manager on the HD Audio Controller device.
+  - On Windows 98se/Me the device is **"PCI Card"** with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
+  - On Windows 2000/XP if you have the official KB888111 update installed, the HDA controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
+- If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys, **Always keep the newer file.**
+- After installation, you must restart before the Volume Control will load and audio will work. If the Volume Control still does not appear after a restart, open the Multimedia control panel, click to select the "Show volume control on the taskbar" check box, then click OK and restart the computer again.
 
-For Redbook CD Audio to work, go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
+It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver as it contains some improvements to the kernel streaming components. You may also wish to install the WDM Audio Update from Microsoft, which are packages Q242937 and Q269601.
 
-It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver.
+For best sound quality: go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 
-For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
+For Redbook CD Audio to work:
+- On Windows 98SE: go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
+- On Windows Me/2000/XP: Go to the properties of your CD-ROM drive in Device Manager, the Properties tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
 
 ## Current Limitations:
 
@@ -39,9 +41,9 @@ For best results, go to the Multimedia control panel, Click the Advanced Propert
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
 - Jack detection and retasking is not supported
-- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this in the "CD Music" tab of the Multimedia control panel.
+- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
 - DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
-DOSBox can be used to run games with OPL emulation and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
+DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
 The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.
 - May Freeze, crash, fail to start or outputs horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
 

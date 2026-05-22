@@ -25,6 +25,8 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 - If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys. **Always keep the newer file.**
 - After installation finishes you will need to restart before audio will work.
 
+For Redbook CD Audio to work, go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
+
 It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver.
 
 For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
@@ -37,7 +39,7 @@ For best results, go to the Multimedia control panel, Click the Advanced Propert
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
 - Jack detection and retasking is not supported
-- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported.
+- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this in the "CD Music" tab of the Multimedia control panel.
 - DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
 DOSBox can be used to run games with OPL emulation and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
 The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.

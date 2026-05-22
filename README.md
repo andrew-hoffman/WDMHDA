@@ -3,13 +3,11 @@ HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97.
 
-It is designed for all versions of Windows with Windows Driver Model (WDM) support, but only Windows 98 SE and ME are officially supported currently.
-
-Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
+It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
 
 As of Version Alpha-019 the driver functions on Windows 2000/XP, though as these OSes already have the oficial KB888111 HDA Bus driver update, they are not the primary target.
 
-Current status of this driver is an Alpha. It is known to function in VMware and VirtualBox, and on many Intel, AMD & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia chipsets, and IDT, Analog Devices, Cirrus Logic and VIA codecs, are not well supported yet.
+Current status of this driver is an Alpha. It is known to function well in VMware, VirtualBox, Intel, AMD & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia chipsets, and IDT, Analog Devices, Cirrus Logic and VIA codecs, are not well supported yet.
 
 This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
 
@@ -20,8 +18,8 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 ## Installation:
 
 - Install HDA.inf with Device Manager on the HD Audio Controller device.
-  - On Windows 98se/Me the device is **"PCI Card"** with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices).
-  - On Windows 2000/XP if you have the official KB888111 update installed, the HDA controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. Do not install on the HD Audio Codec device (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
+  - On Windows 98se/Me the device is listed in "Other Devices" as **"PCI Card"** with class code **0403** (you can run `hwinfo /gui` to see the vendor /device info on unknown devices).
+  - On Windows 2000/XP if you have the official KB888111 update installed, the HDA controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. **Do not install on the HD Audio Codec device** (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
 - If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys, **Always keep the newer file.**
 - After installation, you must restart before the Volume Control will load and audio will work. If the Volume Control still does not appear after a restart, open the Multimedia control panel, click to select the "Show volume control on the taskbar" check box, then click OK and restart the computer again.
 

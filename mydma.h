@@ -1,5 +1,5 @@
 // Wrapper class around IDmaChannel
-// generated with help of Gemini and chatGPT
+// generated with help of Gemini and chatGPT Codex
 // so not copyrightable. 
 // yes I know, bad for society, but i'm no x86 ASM expert
 
@@ -60,6 +60,9 @@ public:
 		if (BufferSize > (MAXULONG - (DMA_BUFFER_ALIGNMENT - 1))) {
 			return STATUS_INVALID_BUFFER_SIZE;
 		}
+		//over-allocate the buffer size and then present an aligned view of it to all callers
+		//TODO: rewrite this so it doesn't over-allocate the requested buffer if what it gets back is already aligned,
+		//because 128k aligned is likely to work but 128k + 127 is likely to fail.
 		ULONG realBufferSize = BufferSize + (DMA_BUFFER_ALIGNMENT - 1);
         NTSTATUS ntStatus = m_RealDmaChannel->AllocateBuffer(realBufferSize, PhysicalAddressConstraint);
 		if (NT_SUCCESS(ntStatus)) {
@@ -68,7 +71,8 @@ public:
 			ULONG_PTR alignedOffset;
 			ULONG_PTR alignedVirtual;
 
-			alignedOffset = (ULONG_PTR)((DMA_BUFFER_ALIGNMENT - (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1))) & (DMA_BUFFER_ALIGNMENT - 1));
+			alignedOffset = (ULONG_PTR)((DMA_BUFFER_ALIGNMENT - (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)))
+				& (DMA_BUFFER_ALIGNMENT - 1));
 			alignedVirtual = (ULONG_PTR)realSystemAddress + alignedOffset;
 
 			m_AlignedPhysicalAddress.QuadPart = realPhysicalAddress.QuadPart + alignedOffset;

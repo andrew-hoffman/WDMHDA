@@ -1,7 +1,40 @@
+## WDMHDA Alpha-020 2026-05-08
+- Fixes choppy audio after stopping a stream and starting a new one. This can still happen when pausing and unpausing rapidly.
+- Try to fix inf to make installation more reliable on 98Lite Micro
+- Works with audio buffer sizes that are not powers of 2.
+
+
+## WDMHDA Alpha-019 2026-04-18
+
+- Memory-safety fixes for codec initialization and DMA common buffer handling; by @andrew-hoffman in #55
+- Now runs on Windows 2000/XP; by @andrew-hoffman in #58
+- Remove unnecessary non-PNP configurations from .inf
+- Support Intel HDMI display audio
+
+
+## WDMHDA Alpha-018-1 2026-03-22
+
+- Flushes the updated portion of the audio buffer out of cache after every write
+  (should fix audio looping issues with AMD 6xx-9xx chipsets)
+- Do 1 buffer update immediately before starting playback
+  (should help with short system sounds getting eaten)
+- Fail earlier if device doesn't get an interrupt
+- Fixed crash for Intel mobile chipsets
+
+- Ignore AFG sample rate format support, lets VIA codecs initialize
+
+Warning: VIA codecs still won't set the correct audio format,
+and now may play static at high volume out of the left channel!
+
+
 ## WDMHDA Alpha-017 2026-02-18
+
 - Allows multiple codecs on a controller link to be used
 - Added many more chipset device IDs for snoop flag. 
-  Should fix garbled audio on a lot of AMD and Nforce chipsets.
+- Should fix garbled audio on a lot of AMD and Nforce chipsets.
+- Fixed inf file not specifying source disks correctly for 98se
+- Increased range of reported sample rates again, fixes DXDIAG 6.1 playing no sounds
+
 
 ## WDMHDA Alpha-016 2026-01-28
 

@@ -3,7 +3,7 @@ HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97.
 
-It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
+It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows 98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
 
 As of Version Alpha-019 the driver functions on Windows 2000/XP, though as these OSes already have the oficial KB888111 HDA Bus driver update, they are not the primary target.
 

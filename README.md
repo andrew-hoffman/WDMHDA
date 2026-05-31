@@ -3,11 +3,13 @@ HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97.
 
-It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
+It is designed for all versions of Windows with Windows Driver Model (WDM) support, but only Windows 98 SE and ME are officially supported currently.
+
+Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
 
 As of Version Alpha-019 the driver functions on Windows 2000/XP, though as these OSes already have the oficial KB888111 HDA Bus driver update, they are not the primary target.
 
-Current status of this driver is an Alpha. It is known to function well in VMware, VirtualBox, Intel, AMD & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia chipsets, and IDT, Analog Devices, Cirrus Logic and VIA codecs, are not well supported yet.
+Current status of this driver is an Alpha. It is known to function in VMware and VirtualBox, and on many Intel, AMD & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia chipsets, and IDT, Analog Devices, Cirrus Logic and VIA codecs, are not well supported yet.
 
 This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
 
@@ -17,19 +19,11 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 ## Installation:
 
-- Install HDA.inf with Device Manager on the HD Audio Controller device.
-  - On Windows 98se/Me the device is listed in "Other Devices" as **"PCI Card"** with class code **0403** (you can run `hwinfo /ui` to see the vendor /device info on unknown devices).
-  - On Windows 2000/XP if you have the official KB888111 update installed, the HDA controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. **Do not install on the HD Audio Codec device** (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
-- If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys, **Always keep the newer file.**
-- After installation, you must restart before the Volume Control will load and audio will work. If the Volume Control still does not appear after a restart, open the Multimedia control panel, click to select the "Show volume control on the taskbar" check box, then click OK and restart the computer again.
+Install HDA.inf with Device Manager on the HD Audio Controller device which will be listed as a "PCI Card" with class code 0403 (you can run hwinfo /gui to see the vendor /device info on unknown devices). Select the location of the HDA.sys file when Windows asks you. The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
-It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver as it contains some improvements to the kernel streaming components. You may also wish to install the WDM Audio Update from Microsoft, which are packages Q242937 and Q269601.
+For best results, go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 
-For best sound quality: go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
-
-For Redbook CD Audio to work:
-- On Windows 98SE: go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
-- On Windows Me/2000/XP: Go to the properties of your CD-ROM drive in Device Manager, the Properties tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
+It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver. 
 
 ## Current Limitations:
 
@@ -39,11 +33,9 @@ For Redbook CD Audio to work:
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
 - Jack detection and retasking is not supported
-- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
-- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
-DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
-The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.
-- May Freeze, crash, fail to start or outputs horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
+- Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported.
+- DOS Sound Blaster emulation is provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL. DOSBox can be used to run games with OPL emulation and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA). 
+- Freezes, crashes, fails to start or outputs horrible noises on some real hardware. No guarantees. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 
@@ -55,8 +47,6 @@ See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com
 For build instructions, see the file Build Instructions.txt
 
 Testing and feedback from anyone who can run this on bare metal with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated. 
-
-The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
 ## If the driver will not start for you or has other issues here's how you can get a debug log:
  

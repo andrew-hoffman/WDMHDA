@@ -155,7 +155,7 @@ ProcessResources
             
         do {
 			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
-			lDMABufferLength -= PAGE_SIZE;
+			lDMABufferLength >>= 1;
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
 
 
@@ -172,6 +172,11 @@ ProcessResources
     {
 		PVOID pSystemAddress = DmaChannel->SystemAddress();
 		ULONG bufferSize = DmaChannel->AllocatedBufferSize();
+
+		if(NT_SUCCESS(ntStatus)){
+			//if everything is ok, it's showtime then
+			ntStatus = AdapterCommon->hda_showtime(DmaChannel);
+		}
 
 	} else {
 		//
@@ -1153,8 +1158,6 @@ CMiniportWaveCyclicStreamHDA::
             Miniport->Allocated8Bit = FALSE;
         }
 
-		Miniport->AdapterCommon->hda_stop_stream();
-
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
         Miniport->Release();
     }
@@ -1176,7 +1179,6 @@ Init
     IN      PDMACHANNEL		            DmaChannel_
 )
 {
-	NTSTATUS ntStatus = STATUS_SUCCESS;
     PAGED_CODE();
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
@@ -1215,15 +1217,10 @@ Init
     );
     Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
     KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
-
-	if(NT_SUCCESS(ntStatus)){
-			//if everything is ok, set up the stream
-			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
-	}
     
     SetFormat( DataFormat );
 
-    return ntStatus;
+    return STATUS_SUCCESS;
 }
 
 /*****************************************************************************
@@ -1325,7 +1322,7 @@ SetFormat
 /*****************************************************************************
  * CMiniportWaveCyclicStreamHDA::GetPosition()
  *****************************************************************************
- * Gets the current stream position from the hardware.
+ * Gets the current position.
  */
 STDMETHODIMP
 CMiniportWaveCyclicStreamHDA::
@@ -1343,14 +1340,10 @@ GetPosition
 		if (State == KSSTATE_RUN){
 			//bias the stream position forward when in Run mode
 			//to account for the DMA engine block size and the codec's buffer.
-			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 128 + 16 )
-				% DmaChannel->BufferSize()
-				; 
+			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 128 + 16) % DmaChannel->BufferSize(); 
 		}
 		else {
-			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position()
-				% DmaChannel->BufferSize()
-				;
+			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position();
 		}
     }
     else
@@ -1404,11 +1397,6 @@ SetState
     IN      KSSTATE     NewState
 )
 {
-	/* States always progress in in the order of:
-	DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
-	(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
-	*/
-
     PAGED_CODE();
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("CMiniportWaveCyclicStreamHDA[%p]::SetState(%d)", this, NewState));
@@ -1443,7 +1431,6 @@ SetState
             break;
 
         case KSSTATE_STOP:
-			// fill buffer with silence
             break;
         }
 

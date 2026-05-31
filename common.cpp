@@ -187,6 +187,7 @@ private:
 	USHORT statests;
 
 	BOOLEAN is64OK;
+	BOOLEAN g_bHasClFlush;
 
 	ULONG communication_type;
 
@@ -341,6 +342,10 @@ public:
 
 	STDMETHODIMP_(void)		setULONGBit(USHORT reg, ULONG flag);
 	STDMETHODIMP_(void)		clearULONGBit(USHORT reg, ULONG flag);
+
+	STDMETHODIMP_(void)		CacheLineFlush(PVOID Destination, ULONG ByteCount);
+
+	
 
     
     /*************************************************************************
@@ -503,7 +508,21 @@ Init
             ReadRegistryBoolean(g_BooleanSettings[i].ValueName, 
 			g_BooleanSettings[i].DefaultValue);
     }
+
+	// Check for SSE2 / CLFLUSH support
+	ULONG edx_feat;
+		__asm {
+			pushad
+			mov eax, 1
+			cpuid
+			mov edx_feat, edx
+			popad
+    }	
+	g_bHasClFlush = (edx_feat & (1 << 19)) != 0;
 	
+	if (! g_bHasClFlush){
+		DOUT(DBG_ERROR,("SSE2 instructions not detected, cache flushes will not work!"));
+	}
 
 	// Initialize codec array
 	codecCount = 0;
@@ -2810,27 +2829,19 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 
 	DOUT(DBG_SYSINFO, ("BDL set up"));
 
-	//KeFlushIoBuffers is defined to nothing in the NT DDK but exists in the 98 DDK
-	KeFlushIoBuffers(mdl, FALSE, TRUE); 
-	//flush processor cache to RAM to be sure sound card will read correct data
-	//absolute performance killer so only doing this ONCE.
-	__asm {
-		wbinvd;
-	}
+	
+	//Flush audio buffer and BDL out of cache to RAM
+	//to be sure controller will read correct data.
+	//KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 
-	KeStallExecutionProcessor(10);
+	CacheLineFlush(BufVirtualAddress, audBufSize);
+	CacheLineFlush(BdlBuffer.RawVirtualAddress, BdlBuffer.RawLength);
 
 	//set buffer registers
 	writeULONG(OutputStreamBase + 0x18, BdlBuffer.AlignedLogicalAddress.LowPart);
 	writeULONG(OutputStreamBase + 0x1C, BdlBuffer.AlignedLogicalAddress.HighPart);
 	writeULONG(OutputStreamBase + 0x08, audBufSize);
 	writeUSHORT(OutputStreamBase + 0x0C, (USHORT)(entries - 1)); //there are entries-1 entries in buffer
-
-	//DOUT(DBG_SYSINFO, ("buffer address programmed"));
-
-	KeStallExecutionProcessor(10);
-
-	//DOUT(DBG_SYSINFO, ("ready to start the stream"));
 
 	//clear pending codec interrupts once, we do not care
 	UCHAR rirbsts = readUCHAR(0x5D);
@@ -2839,7 +2850,15 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 
 	//enable interrupts from output stream 1
 	//TODO account for other streams in use
-	writeULONG(0x20, ((1 << 31) | (1 << FirstOutputStream)) ); 
+	writeULONG(0x20, ((1 << 31) | (1 << FirstOutputStream)) );
+	
+	// Memory Fence: Ensures all flushes are globally visible 
+	// before the ISR/DPC returns
+		__asm {
+		    _emit 0x0F // MFENCE
+		    _emit 0xAE
+		    _emit 0xF0
+		}
 
 	DOUT(DBG_SYSINFO, ("stream descriptor ready"));
 
@@ -2996,4 +3015,29 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceWord(UCHAR offset, USHOR
 		2         // Number of bytes to write
 		);
 }
+
+STDMETHODIMP_(void)CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteCount){
+	// Manual Cache Invalidation for AMD 6xx-9xx Coherency..
+	if (g_bHasClFlush) {        
+        // We use a 64-byte stride (standard x86 cache line size)
+		ULONG_PTR start = (ULONG_PTR)Destination & ~((ULONG_PTR)63);
+		ULONG_PTR end = ((ULONG_PTR)Destination + ByteCount + 63) & ~((ULONG_PTR)63);
+	    for (ULONG_PTR p = start; p < end; p += 64) {
+		    __asm {
+			    mov eax, p
+                _emit 0x0F // CLFLUSH [eax]
+	            _emit 0xAE
+		        _emit 0x38
+			}
+		}
+		// Memory Fence: Ensures all flushes are globally visible 
+		// before the ISR/DPC returns
+		__asm {
+		    _emit 0x0F // MFENCE
+		    _emit 0xAE
+		    _emit 0xF0
+		}
+	}
+}
+
 

@@ -335,6 +335,12 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
 		IN      ULONG    verb,
 		IN      ULONG    command
     )   PURE;
+
+	STDMETHOD_(void,CacheLineFlush)
+    (   THIS_
+        IN      PVOID Destination,
+        IN      ULONG ByteCount
+    )   PURE;
 };
 
 typedef IAdapterCommon *PADAPTERCOMMON;

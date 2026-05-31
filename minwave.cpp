@@ -148,7 +148,7 @@ ProcessResources
 
 	//
     // Allocate the buffer. start MUST be aligned to 128 bytes
-	// it should be aligned to 4k as long as we allocate more than a page.
+	// this may fail or return a smaller buffer than requested
     //
     if (NT_SUCCESS(ntStatus)) {
         ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
@@ -157,7 +157,6 @@ ProcessResources
 			ntStatus = DmaChannel->AllocateBuffer(lDMABufferLength,NULL);
 			lDMABufferLength -= PAGE_SIZE;
         } while (!NT_SUCCESS(ntStatus) && (lDMABufferLength > (PAGE_SIZE)));
-
 
 		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
 		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));

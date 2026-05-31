@@ -9,6 +9,7 @@ private:
     LONG         m_RefCount;
 	BOOLEAN		 g_bHasClFlush;
 	BOOLEAN      m_UseAlignedView;
+	ULONG        m_MaxBufferSize;
 	ULONG        m_RequestedBufferSize;
 	PVOID        m_AlignedSystemAddress;
 	PHYSICAL_ADDRESS m_AlignedPhysicalAddress;
@@ -32,6 +33,7 @@ public:
         }	
 		g_bHasClFlush = (edx_feat & (1 << 19)) != 0;
 		m_UseAlignedView = FALSE;
+		m_MaxBufferSize = 0;
 		m_RequestedBufferSize = 0;
 		m_AlignedSystemAddress = NULL;
 		m_AlignedPhysicalAddress.QuadPart = 0;
@@ -60,36 +62,44 @@ public:
 		if (BufferSize > (MAXULONG - (DMA_BUFFER_ALIGNMENT - 1))) {
 			return STATUS_INVALID_BUFFER_SIZE;
 		}
-		//over-allocate the buffer size and then present an aligned view of it to all callers
-		//TODO: rewrite this so it doesn't over-allocate the requested buffer if what it gets back is already aligned,
-		//because 128k aligned is likely to work but 128k + 127 is likely to fail.
-		ULONG realBufferSize = BufferSize + (DMA_BUFFER_ALIGNMENT - 1);
-        NTSTATUS ntStatus = m_RealDmaChannel->AllocateBuffer(realBufferSize, PhysicalAddressConstraint);
+
+		//align the buffer start address to 128-bytes as required in the HDA spec.
+		//if the real dma channel's buffer is not aligned, this is allowed to return a smaller buffer
+		//it will shrink by one page.
+
+        NTSTATUS ntStatus = m_RealDmaChannel->AllocateBuffer(BufferSize, PhysicalAddressConstraint);
+
 		if (NT_SUCCESS(ntStatus)) {
 			PHYSICAL_ADDRESS realPhysicalAddress = m_RealDmaChannel->PhysicalAddress();
 			PVOID realSystemAddress = m_RealDmaChannel->SystemAddress();
 			ULONG_PTR alignedOffset;
 			ULONG_PTR alignedVirtual;
 
-			alignedOffset = (ULONG_PTR)((DMA_BUFFER_ALIGNMENT - (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)))
-				& (DMA_BUFFER_ALIGNMENT - 1));
-			alignedVirtual = (ULONG_PTR)realSystemAddress + alignedOffset;
+			alignedOffset = (ULONG_PTR)(
+				( DMA_BUFFER_ALIGNMENT 
+				- (realPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)))
+				& (DMA_BUFFER_ALIGNMENT - 1)
+				);
 
+			alignedVirtual = (ULONG_PTR)realSystemAddress + alignedOffset;
 			m_AlignedPhysicalAddress.QuadPart = realPhysicalAddress.QuadPart + alignedOffset;
 			m_AlignedSystemAddress = (PVOID)alignedVirtual;
-			m_RequestedBufferSize = BufferSize;
+			m_MaxBufferSize = BufferSize - ((alignedOffset > 0) ? 4096 : 0);
+			m_RequestedBufferSize = m_MaxBufferSize;
 			m_UseAlignedView = TRUE;
 
-			if ((alignedVirtual & (DMA_BUFFER_ALIGNMENT - 1)) != 0 ||
-				(m_AlignedPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)) != 0 ||
-				(m_RealDmaChannel->AllocatedBufferSize() < (alignedOffset + BufferSize))) {
+			if (   (alignedVirtual & (DMA_BUFFER_ALIGNMENT - 1)) != 0 
+				|| (m_AlignedPhysicalAddress.QuadPart & (DMA_BUFFER_ALIGNMENT - 1)) != 0) {
+
 				DbgPrint("Aligned DMA view invalid (off=%lu req=%lu alloc=%lu)\n",
 					(ULONG)alignedOffset,
 					BufferSize,
 					m_RealDmaChannel->AllocatedBufferSize());
+
 				m_RealDmaChannel->FreeBuffer();
 				m_AlignedSystemAddress = NULL;
 				m_AlignedPhysicalAddress.QuadPart = 0;
+				m_MaxBufferSize = 0;
 				m_RequestedBufferSize = 0;
 				m_UseAlignedView = FALSE;
 				ntStatus = STATUS_DATATYPE_MISALIGNMENT;
@@ -146,7 +156,7 @@ public:
 		}
 	}
 
-	STDMETHODIMP_(void) CopyFrom(
+	STDMETHODIMP_(void) CopyFrom (
 		IN      PVOID   Destination,
         IN      PVOID   Source,
         IN      ULONG   ByteCount) {
@@ -155,10 +165,7 @@ public:
         m_RealDmaChannel->CopyFrom(Destination, Source, ByteCount);
     }
 
-    // --- Pass-through the rest ---
-	STDMETHODIMP_(ULONG) TransferCount() { return m_RealDmaChannel->TransferCount();}
-	STDMETHODIMP_(ULONG) MaximumBufferSize() { return m_RealDmaChannel->MaximumBufferSize(); }
-    STDMETHODIMP_(ULONG) AllocatedBufferSize() {
+	STDMETHODIMP_(ULONG) AllocatedBufferSize() {
 		if (m_UseAlignedView) {
 			return m_RequestedBufferSize;
 		}
@@ -180,5 +187,18 @@ public:
 		}
 		return m_RealDmaChannel->PhysicalAddress();
 	}
-    STDMETHODIMP_(PADAPTER_OBJECT) GetAdapterObject() { return m_RealDmaChannel->GetAdapterObject(); }
+	STDMETHODIMP_(ULONG) MaximumBufferSize() {
+		if (m_UseAlignedView) {
+			return m_MaxBufferSize;
+		}
+		return m_RealDmaChannel->MaximumBufferSize();
+	}
+
+    // --- Pass-through the rest ---
+	STDMETHODIMP_(ULONG) TransferCount() {
+		return m_RealDmaChannel->TransferCount();
+	}
+    STDMETHODIMP_(PADAPTER_OBJECT) GetAdapterObject() {
+		return m_RealDmaChannel->GetAdapterObject();
+	}
 };

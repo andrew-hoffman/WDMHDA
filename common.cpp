@@ -63,6 +63,7 @@ AllocateAlignedCommonBuffer(
 
 	ResetCommonBufferDescriptor(Buffer);
 	rawLength = BufferLength + (Alignment - 1);
+
 	rawVirtualAddress = DmaAdapter->DmaOperations->AllocateCommonBuffer(
 		DmaAdapter,
 		rawLength,
@@ -79,19 +80,24 @@ AllocateAlignedCommonBuffer(
 	Buffer->RawVirtualAddress = rawVirtualAddress;
 	Buffer->RawLogicalAddress = rawLogicalAddress;
 	Buffer->RawLength = rawLength;
+	
+	//confirm alignment matches requirement
+	if ( (((ULONG_PTR)Buffer->AlignedVirtualAddress) & (Alignment - 1) ) != 0 
+		|| ((Buffer->AlignedLogicalAddress.QuadPart & (Alignment - 1)) != 0) ) {
 
-	if ((((ULONG_PTR)Buffer->AlignedVirtualAddress) & (Alignment - 1)) != 0 ||
-		((Buffer->AlignedLogicalAddress.QuadPart & (Alignment - 1)) != 0)) {
 		DmaAdapter->DmaOperations->FreeCommonBuffer(
 			DmaAdapter,
 			Buffer->RawLength,
 			Buffer->RawLogicalAddress,
 			Buffer->RawVirtualAddress,
 			FALSE);
+
 		ResetCommonBufferDescriptor(Buffer);
 		return STATUS_DATATYPE_MISALIGNMENT;
 	}
 
+	//make sure to zero the usable portion of the buffer
+	RtlZeroMemory(Buffer->AlignedVirtualAddress, BufferLength);
 	return STATUS_SUCCESS;
 }
 
@@ -853,6 +859,7 @@ Init
 		2048,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&RirbBuffer);
+
 	if (!NT_SUCCESS(ntStatus)) {
 		DOUT(DBG_ERROR, ("Couldn't allocate aligned RIRB Space (status 0x%X)", ntStatus));
 		return ntStatus;
@@ -883,6 +890,7 @@ Init
 		1024,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&CorbBuffer);
+
 	if (!NT_SUCCESS(ntStatus)) {
 		DOUT(DBG_ERROR, ("Couldn't allocate aligned Corb Space (status 0x%X)", ntStatus));
 		return ntStatus;
@@ -913,6 +921,7 @@ Init
 		BdlSize,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&BdlBuffer);
+
 	if (!NT_SUCCESS(ntStatus)) {
 		DOUT(DBG_ERROR, ("Couldn't allocate aligned BDL Space (status 0x%X)", ntStatus));
 		return ntStatus;
@@ -937,6 +946,7 @@ Init
 		1024,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&DmaPosBuffer);
+
 	if (!NT_SUCCESS(ntStatus)) {
 		DOUT(DBG_ERROR, ("Couldn't allocate aligned DMA Position Buffer (status 0x%X)", ntStatus));
 		return ntStatus;
@@ -961,8 +971,7 @@ Init
 	}
 
 
-	// Not mapping an audio buffer yet, that happens when the
-	// Wave miniport calls showtime()
+	// Not mapping an audio buffer yet, the Wave miniport creates that.
 
 	//
     // Reset the controller and init registers
@@ -981,13 +990,14 @@ Init
     //
     // Hook up the interrupt.
     //
-    ntStatus = PcNewInterruptSync(                              // See portcls.h
-                                        &m_pInterruptSync,          // Save object ptr
-                                        NULL,                       // OuterUnknown(optional).
-                                        ResourceList,               // He gets IRQ from ResourceList.
-                                        0,                          // Resource Index
-                                        InterruptSyncModeNormal     // Run ISRs once until we get SUCCESS
-                                     );
+    ntStatus = PcNewInterruptSync(				// See portcls.h
+					&m_pInterruptSync,          // Save object ptr
+					NULL,                       // OuterUnknown(optional).
+					ResourceList,               // He gets IRQ from ResourceList.
+					0,                          // Resource Index
+					InterruptSyncModeNormal     // Run ISRs once until we get SUCCESS
+               );
+
 	if (!NT_SUCCESS(ntStatus) || m_pInterruptSync == NULL) {
 			DbgPrint("PcNewInterruptSync failed: 0x%X\n", ntStatus);
 			return ntStatus;
@@ -1046,19 +1056,19 @@ CAdapterCommon::
 	//do NOT free the audio buffer now minwave is managing it
 
 	//free DMA buffers
-	if((RirbBuffer.RawVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+	if((RirbBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing rirb buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &RirbBuffer);
 	}
-	if((CorbBuffer.RawVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+	if((CorbBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Corb buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &CorbBuffer);
 	}
-	if((BdlBuffer.RawVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+	if((BdlBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &BdlBuffer);
 	}
-	if((DmaPosBuffer.RawVirtualAddress != NULL) && (DMA_Adapter!= NULL)){
+	if((DmaPosBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Dma buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &DmaPosBuffer);
 	}
@@ -1248,7 +1258,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	UCHAR codec_number;
 	ULONG codec_id;
 	ULONG statestsCodecCandidates = 0;
-	ULONG i;
+	UCHAR corbSzCap, rirbSzCap;
+	int timeout;
     
 	NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
 
@@ -1261,49 +1272,58 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	statests = readUSHORT(0x0E);
 	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
 
-	//to preserve BIOS pin information,
-	//ONLY reset the whole controller if no codecs have enum. in statests
+	//maybe skip controller reset if flag is set and there's
+	//already a codec in statests
+
 	if ((statests != 0) && skipControllerReset) {
 		DOUT(DBG_SYSINFO, ("Skipping reset"));
 	} else {
 		
-		//Reset the whole controller. Spec says this can take up to 521 us
+		//Reset the whole controller
 
 		DOUT(DBG_SYSINFO, ("Resetting HDA Controller"));
-
+		
+		//write 0 to GCTL to put the controller into reset
 		writeUCHAR(0x08,0x0);
 		
 		//wait for reset start acknowledgement
-		for (i = 0; i < 100; i++) {
-			KeStallExecutionProcessor(150);
+		for (timeout = 10000; timeout > 0; timeout--) {
+			KeStallExecutionProcessor(1);
 			if ((readUCHAR(0x08) & 0x1) == 0x0) {
-				DOUT(DBG_SYSINFO, ("Controller Reset Started %d", i));
+				DOUT(DBG_SYSINFO, ("Controller Reset Started %d us", 10000 - timeout));
 				break;
-			} else if (i == 99) {
-				DOUT (DBG_ERROR, ("Controller Not Responding Reset Start"));
-				return STATUS_UNSUCCESSFUL;
 			}
 		}
+		if (timeout <= 0) {
+			DOUT(DBG_ERROR, ("Controller Reset Start Timeout, GCTL=%X",readUCHAR(0x08)));
+			return STATUS_UNSUCCESSFUL;
+		}
 
-		KeStallExecutionProcessor(100);
-		writeUCHAR(0x08,0x1);
 		//try to disable interrupts immediately
+		writeULONG (0x20, 0x0);
+
+		KeStallExecutionProcessor(1000);
+
+		//acknowledge reset
+		writeUCHAR(0x08,0x1);
+
+		//try to disable interrupts again
 		writeULONG (0x20, 0x0);
 	
 		//wait for reset complete
-		for (i = 0; i < 100; i++) {
-			KeStallExecutionProcessor(150);
+		for (timeout = 10000; timeout > 0; timeout--) {
+			KeStallExecutionProcessor(1);
 			if ((readUCHAR(0x08) & 0x1) == 0x1) {
-				DOUT(DBG_SYSINFO, ("Controller Reset Complete %d", i));
+				DOUT(DBG_SYSINFO, ("Controller Reset Complete %d us", 10000 - timeout));
 				break;
 			}
-			else if (i == 99) {
-				DOUT (DBG_ERROR, ("Controller Not Responding Reset Complete"));
+		}
+		if (timeout <= 0) {
+				DOUT(DBG_ERROR, ("Controller Reset Start Timeout, GCTL=%X",readUCHAR(0x08)));
 				return STATUS_UNSUCCESSFUL;
-			}
 		}
 
-		// now we're supposed to wait at least 1ms for codec reset events before continuing
+		// now we're supposed to wait at least 521us for codec reset events before continuing
 		DOUT(DBG_SYSINFO, ("waiting for codecs to enumerate on link"));
 		KeStallExecutionProcessor(1000);
 	}
@@ -1311,14 +1331,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//disable interrupts again just to be sure
 	writeULONG (0x20, 0x0);
 
-	//turn ON WAKEEN interrupts so we can see if any codecs ever respond to reset
-	//writeUSHORT(0x0C, 0x7FFF);
-
 	// clear dma position buffer address
 	writeULONG (0x70, 0);
 	writeULONG (0x74, 0);
  
-	//disable synchronization at both registers it could be
+	//disable stream synchronization at both registers it could be
 	writeULONG (0x34, 0);
 	writeULONG (0x38, 0);
 
@@ -1326,16 +1343,17 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	writeUCHAR (0x4C, 0x0);
 	writeUCHAR (0x5C, 0x0);
 
-
-	
+	//check how many codecs enumerated
 	statests = readUSHORT(0x0E);
 	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
-	//this may read zero, not sure if writing a 1 to a bit just acknowledges or clears it too
-	//but if it clears it we'll get an interrupt with it first and print a msg there
 
-	//write the needed logical addresses for CORB/RIRB to the HDA controller registers
+	//this may read zero and will have to search blind
+	//also other codecs can show up later with docking.
+	//would need to enable WAKEEN interrupts (register 0x0C) to handle later additions
+ 
+	//Setup CORB:
 
-	//corb addr
+	//1. corb memory physical address
 	writeULONG (0x40, CorbBuffer.AlignedLogicalAddress.LowPart);
 	if (is64OK){
 		writeULONG (0x44, CorbBuffer.AlignedLogicalAddress.HighPart);
@@ -1343,61 +1361,69 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	else {
 		writeULONG (0x44, 0);
 	}
-	//corb number of entries (each entries is 4 bytes)
-	//check what is supported and set it to the max supported
 
-	if ((readUCHAR (0x4E)  & 0x40) == 0x40){
+	//2. number of corb buffer entries
+	//check supported and set it to max possible 
+	corbSzCap = readUCHAR (0x4E) & 0xF0;
+
+	if (corbSzCap & 0x40){
 		//corb size is 256 entries
 		DOUT (DBG_SYSINFO, ("Corb size 256 entries"));
 		CorbBuffer.NumberOfEntries = 256;
-		writeUCHAR (0x4E, 0x2);
-	} else if ((readUCHAR (0x4E)  & 0x40) == 0x20){
+		writeUCHAR (0x4E, corbSzCap | 0x2);
+	} else if (corbSzCap & 0x20){
 		//corb size is 16 entries
 		DOUT (DBG_SYSINFO, ("Corb size 16 entries"));
 		CorbBuffer.NumberOfEntries = 16;
-		writeUCHAR (0x4E, 0x1);
-	} else if ((readUCHAR (0x4E)  & 0x40) == 0x10){
+		writeUCHAR (0x4E, corbSzCap | 0x1);
+	} else if (corbSzCap & 0x10){
 		//corb size is 2 entries
 		DOUT (DBG_SYSINFO, ("Corb size 2 entries"));
 		CorbBuffer.NumberOfEntries = 2;
-		writeUCHAR (0x4E, 0x0);
+		writeUCHAR (0x4E, corbSzCap | 0x0);
 	} else {
 		//CORB not supported, need to use PIO
 		DOUT (DBG_ERROR, ("CORB only supports PIO"));
 		goto hda_use_pio_interface;
 		//return STATUS_UNSUCCESSFUL;
 	}
-	//Reset corb read pointer
+
+	//3. Reset corb read pointer
 	writeUSHORT (0x4A, 0x8000); //write a 1 to bit 15
-	for (i = 0; i < 50; i++) {
-		if ((readUSHORT(0x4A) & 0x8000) == 0x8000) break;
-		KeStallExecutionProcessor(10);
-		//read back the 1 to verify reset
-	}
-	if ((readUSHORT(0x4A) & 0x8000) == 0x0000){
-		//VMWare never returns a 1 in this bit so we fall back to PIO. that's fine for now
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset On"));
-		goto hda_use_pio_interface;
-		//return STATUS_UNSUCCESSFUL;
+	
+	//wait for bit to change to 1 to indicate reset start
+	//skip this check for VEN_15AD because VMWare never returns a 1
+	if (pci_ven != 0x15AD) {
+		for (timeout = 10000; timeout > 0; timeout--) {
+			//read back the 1 to verify reset
+			if (readUSHORT(0x4A) & 0x8000) break;
+			KeStallExecutionProcessor(1);
+		}
+
+		if (timeout <= 0) {
+			//fall back to PIO.
+			DOUT(DBG_ERROR, ("CORB Reset 1 timeout, Falling back to PIO"));
+			goto hda_use_pio_interface;
+		}
 	}
 
 	//then write a 0 and read back the 0 to verify a clear
 	writeUSHORT(0x4A, 0x0000);
-	for (i = 0; i < 50; i++) {
-		if ((readUSHORT(0x4A) & 0x8000) == 0x0000) break;
-		KeStallExecutionProcessor(10);
+	for (timeout = 10000; timeout > 0; timeout--) {
+		if ((readUSHORT(0x4A) & 0x8000) == 0x0) break;
+		KeStallExecutionProcessor(1);		
 	}
-	if ((readUSHORT(0x4A) & 0x8000) == 0x8000){
-		DOUT (DBG_ERROR, ("Controller Not Responding to CORB Pointer Reset Off"));
+	if (timeout <= 0) {
+		OUT(DBG_ERROR, ("CORB Reset 0 timeout, Falling back to PIO"));
 		goto hda_use_pio_interface;
-		//return STATUS_UNSUCCESSFUL;
 	}
-
+	
+	//4. reset CORBWP to zero
 	writeUSHORT (0x48,0);
 	CorbBuffer.BufferPointer = 1; //always points to next free entries
 
-	//rirb addr
-
+	//Setup RIRB:
+	//1. memory address
 	writeULONG (0x50, RirbBuffer.AlignedLogicalAddress.LowPart);
 	if (is64OK){
 		writeULONG (0x54, RirbBuffer.AlignedLogicalAddress.HighPart);
@@ -1405,34 +1431,41 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	else {
 		writeULONG (0x54, 0);
 	}
-	//rirb number of entries (each entries is 8 bytes)
-	
-	if ((readUCHAR (0x5E)  & 0x40) == 0x40){
+
+	//2. rirb number of entries (each entries is 8 bytes)
+	rirbSzCap = readUCHAR (0x5E) & 0xF0;
+	if (rirbSzCap  & 0x40){
 		//rirb size is 256 entries
 		DOUT (DBG_SYSINFO, ("rirb size 256 entries"));
 		RirbBuffer.NumberOfEntries = 256;
-		writeUCHAR (0x5E, 0x2);
-	} else if ((readUCHAR (0x5E)  & 0x40) == 0x20){
+		writeUCHAR (0x5E, rirbSzCap | 0x2);
+	} else if (rirbSzCap & 0x20){
 		//rirb size is 16 entries
 		DOUT (DBG_SYSINFO, ("rirb size 16 entries"));
 		RirbBuffer.NumberOfEntries = 16;
-		writeUCHAR (0x5E, 0x1);
-	} else if ((readUCHAR (0x5E)  & 0x40) == 0x10){
+		writeUCHAR (0x5E, rirbSzCap | 0x1);
+	} else if (rirbSzCap & 0x10){
 		//rirb size is 2 entries
 		DOUT (DBG_SYSINFO, ("rirb size 2 entries"));
 		RirbBuffer.NumberOfEntries = 2;
-		writeUCHAR (0x5E, 0x0);
+		writeUCHAR (0x5E, rirbSzCap | 0x0);
 	} else {
 		//rirb not supported, need to use PIO
 		DOUT (DBG_ERROR, ("RIRB only supports PIO"))
 		goto hda_use_pio_interface;
-		//return STATUS_NOT_IMPLEMENTED;
 	}
 
-	//reset RIRB write pointer to 0th entries
+	//3. reset RIRB write pointer to 0th entries
 	writeUSHORT (0x58, 0x8000);
+	
+	//4. clear RIRB response count
+	writeUSHORT(0x5A, 0);
 
-	//dma position buffer pointer
+	//5. disable RIRB interrupts
+	writeUSHORT(0x5C, 0);
+	RirbBuffer.BufferPointer = 1; //always points to next free entries
+
+	//Set DMA Position Buffer physical address
 	writeULONG (0x70, DmaPosBuffer.AlignedLogicalAddress.LowPart);
 	if (is64OK){
 		writeULONG (0x74, DmaPosBuffer.AlignedLogicalAddress.HighPart);
@@ -1441,19 +1474,18 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		writeULONG (0x74, 0);
 	}
 
-	if(useDmaPos){
+	if (useDmaPos){
 		// turn on dma position transfer
 		writeULONG (0x70, DmaPosBuffer.AlignedLogicalAddress.LowPart | 0x1);
 	}
 
 
 	KeStallExecutionProcessor(10);
-	writeULONG(0x5A, 0); //disable interrupts
-	RirbBuffer.BufferPointer = 1; //always points to next free entries
 	
-	//start CORB and RIRB. i think this also makes the HDA controller zero them
-	writeUCHAR ( 0x4C, 0x2);
-	writeUCHAR ( 0x5C, 0x2);
+	//start CORB and RIRB.
+	//I think the HDA controller will also zero the memory on 1st start
+	writeUCHAR (0x4C, 0x2);
+	writeUCHAR (0x5C, 0x2);
 
 	communication_type = HDA_CORB_RIRB;
 
@@ -1461,8 +1493,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//one immediate that stalls, and one with a callback
 	//maybe take more than one verb at once w/o blocking
 
-	//find codecs on the link.
-
+	//Find codecs on the link.
 	//check codecs enumerated in STATESTS first if available
 
 	//TODO: rewrite without the gotos!

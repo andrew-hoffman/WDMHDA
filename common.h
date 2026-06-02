@@ -120,8 +120,9 @@
 
 // Communication types
 #define HDA_UNINITIALIZED 0
-#define HDA_CORB_RIRB 1
-#define HDA_PIO 2
+#define HDA_ERROR 1
+#define HDA_CORB_RIRB 2
+#define HDA_PIO 3
 
 // Widget types
 #define HDA_WIDGET_AUDIO_OUTPUT 0x0

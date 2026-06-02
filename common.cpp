@@ -232,11 +232,9 @@ private:
     IN  PCWSTR   ValueName,
     IN  BOOLEAN  DefaultValue
 	);
-	STDMETHODIMP_(void) TryInitializeCodecSlot(
+	STDMETHODIMP_(NTSTATUS) TryInitializeCodecSlot(
 		IN UCHAR codec_number,
-		IN ULONG codec_id,
-		IN PCSTR interfaceName,
-		OUT NTSTATUS* pStatus
+		IN PCSTR interfaceName
 	);
 
 public:
@@ -1279,7 +1277,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 {
     PAGED_CODE ();
 	UCHAR codec_number;
-	ULONG codec_id;
 	ULONG statestsCodecCandidates = 0;
 	UCHAR corbSzCap, rirbSzCap;
 	int timeout;
@@ -1550,22 +1547,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	statestsCodecCandidates = 0;
 
 	for(codec_number = 0; codec_number < 16; codec_number++) {
-		communication_type = HDA_CORB_RIRB;
+
 		if (((statests >> codec_number) & 1) == 0)
 			continue;
 		statestsCodecCandidates++;
-
-		communication_type = HDA_CORB_RIRB;
-
-		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-
-		communication_type = HDA_CORB_RIRB;
-
-		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
-		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
-
-		communication_type = HDA_CORB_RIRB;
+		ntStatus = TryInitializeCodecSlot(codec_number, "CORB/RIRB");
 
 	}
 	DOUT (DBG_SYSINFO, ("STATESTS reported %d codecs, initialized %d", statestsCodecCandidates, codecCount));
@@ -1581,8 +1568,6 @@ blind_probe:
 
 	//If we haven't found anything yet, resort to blindly trying to reset each codec
 	for (codec_number = 0; codec_number < 16; codec_number++) {
-
-		communication_type = HDA_CORB_RIRB;
 		
 		//send codec reset command (Realtek needs it before it will respond to IDs?)
 		//there won't be a response
@@ -1590,18 +1575,8 @@ blind_probe:
 
 		//stall for at least 477 clocks for codec reset turnaround
 		KeStallExecutionProcessor(500);		
-
-		communication_type = HDA_CORB_RIRB;
-
-		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-
-		communication_type = HDA_CORB_RIRB;
-
-		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
-		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
-
-		communication_type = HDA_CORB_RIRB;
+		ntStatus = TryInitializeCodecSlot(codec_number, "CORB/RIRB");
 	}
 	if (codecCount == 0){
 		//if we got to last codec and no codecs were successfully initialized
@@ -1645,22 +1620,13 @@ hda_use_pio_interface:
 		statestsCodecCandidates = 0;
 
 		for(codec_number = 0; codec_number < 16; codec_number++) {
-			communication_type = HDA_PIO;
+
 			if (((statests >> codec_number) & 1) == 0)
 				continue;
 			statestsCodecCandidates++;
 
-			communication_type = HDA_PIO;
+			ntStatus = TryInitializeCodecSlot(codec_number, "PIO");
 
-			codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-
-			communication_type = HDA_PIO;
-
-			DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
-		
-			TryInitializeCodecSlot(codec_number, codec_id, "PIO", &ntStatus);
-
-			communication_type = HDA_PIO;
 		}
 		DOUT (DBG_SYSINFO, ("STATESTS reported %d codecs, initialized %d", statestsCodecCandidates, codecCount));
 
@@ -1672,29 +1638,15 @@ hda_use_pio_interface:
 
 	//Otherwise probe codecs blindly
 	DOUT (DBG_SYSINFO, ("Probing codecs by PIO blind"));
-	for (codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
-
-		communication_type = HDA_PIO;
+	for (codec_number = 0; codec_number < 16; codec_number++) {
 		
 		//send codec reset command, there won't be a response
 		hda_send_verb(codec_number, 1, 0x7ff, 0);
 		
 		//wait 1ms
 		KeStallExecutionProcessor(1000);
-		
-		//set communication type back after every verb attempt in case there is a timeout
-		communication_type = HDA_PIO;
 
-		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
-		
-		communication_type = HDA_PIO;
-
-		if(codec_id == STATUS_UNSUCCESSFUL){
-			DOUT (DBG_ERROR, ("Codec %d no response", codec_number));
-			continue;
-		}
-
-		TryInitializeCodecSlot(codec_number, codec_id, "PIO", &ntStatus);
+		ntStatus = TryInitializeCodecSlot(codec_number, "PIO");
 	}
 	if (codecCount == 0){
 			//if we got to last codec and no responses from any of them
@@ -1713,16 +1665,18 @@ hda_use_pio_interface:
 /*****************************************************************************
  * CAdapterCommon::TryInitializeCodecSlot
  *****************************************************************************/
-STDMETHODIMP_(void)
+STDMETHODIMP_(NTSTATUS)
 CAdapterCommon::TryInitializeCodecSlot(
 	IN UCHAR codec_number,
-	IN ULONG codec_id,
-	IN PCSTR interfaceName,
-	OUT NTSTATUS* pStatus
+	IN PCSTR interfaceName
 )
 {
+	ULONG codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+
+	DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
+
 	if((codec_id == 0x0) || (codec_id == 0xFFFFFFFF) || (codec_id == STATUS_UNSUCCESSFUL)) {
-		return;
+		return STATUS_UNSUCCESSFUL;
 	}
 
 	DOUT (DBG_SYSINFO, ("HDA: Codec %d VID/PID: %08X %s communication interface", codec_number, codec_id, interfaceName));
@@ -1734,20 +1688,19 @@ CAdapterCommon::TryInitializeCodecSlot(
 			pCodecs[codecCount++] = pCodec;
 			NTSTATUS status = pCodec->InitializeCodec();
 			if (!NT_SUCCESS(status)) {
-				// If initialization failed, keep trying other codecs
+				// If initialization failed, clear the codec slot then keep trying other codecs
 				codecCount--;
 				pCodecs[codecCount] = NULL;
 				delete pCodec;
-				if (pStatus) {
-					*pStatus = STATUS_UNSUCCESSFUL;
-				}
-			} else if (pStatus) {
-				*pStatus = status;
+				return STATUS_UNSUCCESSFUL;
+			} else {
+				return status;
 			}
-		} else if (pStatus) {
-			*pStatus = STATUS_INSUFFICIENT_RESOURCES;
+		} else {
+			return STATUS_INSUFFICIENT_RESOURCES;
 		}
 	}
+	return STATUS_UNSUCCESSFUL;
 }
 
 
@@ -1877,11 +1830,10 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	//TODO: check for responses with high bit set (those are the errors)
 	
 	KIRQL oldirql;
+	ULONG response = 0;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
 	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbBuffer.BufferPointer));
-	if (communication_type == HDA_CORB_RIRB) {
-
-		ULONG response = STATUS_UNSUCCESSFUL;
+	if (communication_type == HDA_CORB_RIRB) {	
 		
 		//CORB/RIRB interface
 
@@ -1907,8 +1859,9 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 				break;
 			} else if (ticks == 599) {
 				//6 ms and no movement
-				DOUT (DBG_ERROR, ("No Response to Codec Verb"));
-				//communication_type = HDA_UNINITIALIZED;
+				DOUT (DBG_ERROR, ("\nSend_Codec_Verb PIO ERROR: no response\nCodec verb 0x%X position %d",
+				value, CorbBuffer.BufferPointer));
+				//communication_type = HDA_ERROR;
 			}
 		}
 		if (valid){
@@ -1974,12 +1927,13 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		//there was no response after 6 ms
 		//unlock
 		KeReleaseSpinLock(&QLock, oldirql);
-		DOUT (DBG_ERROR, ("\nHDA PIO ERROR: no response"));
-
-		communication_type = HDA_UNINITIALIZED;
-		return STATUS_UNSUCCESSFUL;
-	} else {
-		return STATUS_UNSUCCESSFUL;
+		DOUT (DBG_ERROR, ("\nSend_Codec_Verb PIO ERROR: no response\nCodec verb 0x%X position %d",
+			value, CorbBuffer.BufferPointer));
+		//communication_type = HDA_ERROR;
+		return response;
+	} else{
+	DOUT (DBG_ERROR, ("\nHDA Communication in Error State\n"));
+	return response;
 	}
 }
 

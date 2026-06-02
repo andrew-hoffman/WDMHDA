@@ -565,6 +565,9 @@ Init
 	
 	//apply device-specific config space patches depending on the VID/PID
 	switch (pci_ven){
+		case 0x15AD: //VMWare
+			DbgPrint( "VMWare\n");
+			break;
 		case 0x1002: //ATI
 		case 0x1022: //AMD
 			if ( (pci_dev == 0x437b) || (pci_dev == 0x4383) //ATI SB
@@ -1264,6 +1267,8 @@ SetWaveServiceGroup
         m_pServiceGroupWave->AddRef();
     }
 }
+
+
 /*****************************************************************************
  * CAdapterCommon::InitHDAController
  *****************************************************************************
@@ -1385,17 +1390,17 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	corbSzCap = readUCHAR (0x4E) & 0xF0;
 
 	if (corbSzCap & 0x40){
-		//corb size is 256 entries
+		//max corb size is 256 entries
 		DOUT (DBG_SYSINFO, ("Corb size 256 entries"));
 		CorbBuffer.NumberOfEntries = 256;
 		writeUCHAR (0x4E, corbSzCap | 0x2);
 	} else if (corbSzCap & 0x20){
-		//corb size is 16 entries
+		//max corb size is 16 entries
 		DOUT (DBG_SYSINFO, ("Corb size 16 entries"));
 		CorbBuffer.NumberOfEntries = 16;
 		writeUCHAR (0x4E, corbSzCap | 0x1);
 	} else if (corbSzCap & 0x10){
-		//corb size is 2 entries
+		//max corb size is 2 entries
 		DOUT (DBG_SYSINFO, ("Corb size 2 entries"));
 		CorbBuffer.NumberOfEntries = 2;
 		writeUCHAR (0x4E, corbSzCap | 0x0);
@@ -1422,9 +1427,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		if (readUSHORT(0x4A) & 0x8000) break;
 
 	}
-
 	if (timeout <= 0) {
 		//fall back to PIO.
+		//still turn off the reset line
+		writeUSHORT(0x4A, 0x0000);
 		DOUT(DBG_ERROR, ("CORB Reset 1 timeout, Falling back to PIO"));
 		goto hda_use_pio_interface;
 	}
@@ -1437,7 +1443,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		if ((readUSHORT(0x4A) & 0x8000) == 0x0) break;				
 	}
 	if (timeout <= 0) {
-		OUT(DBG_ERROR, ("CORB Reset 0 timeout, Falling back to PIO"));
+		DOUT(DBG_ERROR, ("CORB Reset 0 timeout, Falling back to PIO"));
 		goto hda_use_pio_interface;
 	}
 	
@@ -1458,17 +1464,17 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//2. rirb number of entries (each entries is 8 bytes)
 	rirbSzCap = readUCHAR (0x5E) & 0xF0;
 	if (rirbSzCap  & 0x40){
-		//rirb size is 256 entries
+		//max rirb size is 256 entries
 		DOUT (DBG_SYSINFO, ("rirb size 256 entries"));
 		RirbBuffer.NumberOfEntries = 256;
 		writeUCHAR (0x5E, rirbSzCap | 0x2);
 	} else if (rirbSzCap & 0x20){
-		//rirb size is 16 entries
+		//max rirb size is 16 entries
 		DOUT (DBG_SYSINFO, ("rirb size 16 entries"));
 		RirbBuffer.NumberOfEntries = 16;
 		writeUCHAR (0x5E, rirbSzCap | 0x1);
 	} else if (rirbSzCap & 0x10){
-		//rirb size is 2 entries
+		//max rirb size is 2 entries
 		DOUT (DBG_SYSINFO, ("rirb size 2 entries"));
 		RirbBuffer.NumberOfEntries = 2;
 		writeUCHAR (0x5E, rirbSzCap | 0x0);
@@ -1480,6 +1486,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 	//3. reset RIRB write pointer to 0th entries
 	writeUSHORT (0x58, 0x8000);
+	KeStallExecutionProcessor(10);
 	
 	//4. clear RIRB response count
 	writeUSHORT(0x5A, 0);
@@ -1505,16 +1512,32 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 	KeStallExecutionProcessor(10);
 	
-	//start CORB and RIRB.
-	//I think the HDA controller will also zero the memory on 1st start
+	//Start CORB and RIRB.
+	//All DMA buffers should be zeroed when allocated
+	//I think the HDA controller will also zero the memory on 1st start 
 	writeUCHAR (0x4C, 0x2);
+
+	//wait for CORBRUN to read back as 1
+	for (timeout = 10000; timeout > 0; timeout--) {
+		KeStallExecutionProcessor(1);
+		if ((readUCHAR(0x4C) & 0x2) != 0) break;				
+	} if (timeout <= 0) {
+		DOUT(DBG_ERROR, ("CORB Run timeout, Falling back to PIO"));
+		goto hda_use_pio_interface;
+	}
+
 	writeUCHAR (0x5C, 0x2);
 
-	communication_type = HDA_CORB_RIRB;
+	//wait for RIRBRUN to read back as 1
+	for (timeout = 10000; timeout > 0; timeout--) {
+		KeStallExecutionProcessor(1);
+		if ((readUCHAR(0x5C) & 0x2) != 0) break;				
+	} if (timeout <= 0) {
+		DOUT(DBG_ERROR, ("RIRB Run timeout, Falling back to PIO"));
+		goto hda_use_pio_interface;
+	}
 
-	//TODO: i will need 2 implementations of send_codec_verb
-	//one immediate that stalls, and one with a callback
-	//maybe take more than one verb at once w/o blocking
+	communication_type = HDA_CORB_RIRB;
 
 	//Find codecs on the link.
 	//check codecs enumerated in STATESTS first if available
@@ -1523,7 +1546,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	if(statests == 0)
 		goto blind_probe;
 	
-	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS"));
+	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS with CORB/RIRB"));
 	statestsCodecCandidates = 0;
 
 	for(codec_number = 0; codec_number < 16; codec_number++) {
@@ -1536,9 +1559,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
 
+		communication_type = HDA_CORB_RIRB;
+
 		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
 		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
+
+		communication_type = HDA_CORB_RIRB;
 
 	}
 	DOUT (DBG_SYSINFO, ("STATESTS reported %d codecs, initialized %d", statestsCodecCandidates, codecCount));
@@ -1550,7 +1577,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 blind_probe:
 
-	DOUT (DBG_SYSINFO, ("Probing codecs blind"));
+	DOUT (DBG_SYSINFO, ("Probing codecs by CORB/RIRB blind"));
 
 	//If we haven't found anything yet, resort to blindly trying to reset each codec
 	for (codec_number = 0; codec_number < 16; codec_number++) {
@@ -1562,64 +1589,119 @@ blind_probe:
 		hda_send_verb(codec_number, 1, 0x7ff, 0);
 
 		//stall for at least 477 clocks for codec reset turnaround
-		KeStallExecutionProcessor(50);		
+		KeStallExecutionProcessor(500);		
 
 		communication_type = HDA_CORB_RIRB;
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
 
+		communication_type = HDA_CORB_RIRB;
+
 		DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
 		
-		if(codec_number == 15 && codec_id == STATUS_UNSUCCESSFUL){
-			//if we got to last codec and no responses from any of them
-			DOUT (DBG_ERROR, ("CORB/RIRB Communication is Broken."));
-			if (codecCount == 0) {
-				return STATUS_UNSUCCESSFUL;
-			}
-		}
-
 		TryInitializeCodecSlot(codec_number, codec_id, "CORB/RIRB", &ntStatus);
-	}
 
-	if (codecCount > 0){
+		communication_type = HDA_CORB_RIRB;
+	}
+	if (codecCount == 0){
+		//if we got to last codec and no codecs were successfully initialized
+		DOUT (DBG_ERROR, ("No codecs found by blind probing thru CORB/RIRB, falling back to PIO"));
+	} else if (codecCount > 0){
 		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
 		return STATUS_SUCCESS;
-    } else {        
-        DOUT (DBG_ERROR, ("Initialization of HDA Codecs failed."));
-		return STATUS_UNSUCCESSFUL;
     }
 	
 hda_use_pio_interface:
 
 	DOUT (DBG_SYSINFO, ("Using Immediate Command Interface."));
-
-	//stop CORB and RIRB
-	writeUCHAR ( 0x4C, 0x0);
-	writeUCHAR ( 0x5C, 0x0);
-
 	communication_type = HDA_PIO;
 
-	for(codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
+	//stop CORB and RIRB:
+	//Clear CORBRST and RIRBRST if they're on (if that timed out)
+	if(readUSHORT (0x4A)) writeUSHORT (0x4A, 0);
+	if(readUSHORT (0x58)) writeUSHORT (0x58, 0);
+
+	//clear CORBRUN bits
+	writeUCHAR (0x4C, 0x0);
+	//wait for CORBRUN to read back as 0
+	for (timeout = 10000; timeout > 0; timeout--) {
+		KeStallExecutionProcessor(1);
+		if ((readUSHORT(0x4C)  & 0x2) == 0x0) break;				
+	}
+	
+	//clear RIRBRUN
+	writeUCHAR (0x5C, 0x0);
+	//wait for RIRBRUN to read back as 0
+	for (timeout = 10000; timeout > 0; timeout--) {
+		KeStallExecutionProcessor(1);
+		if ((readUSHORT(0x5C) & 0x2) == 0x0) break;				
+	}
+	//Optionally clear pending RIRB interrupt status bits.
+	if(readUCHAR (0x5D) & 1) writeUCHAR (0x5D, 0x1);
+
+	//if Statests != 0 then probe codecs we know about
+	if (statests != 0){
+		DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS with PIO"));
+		statestsCodecCandidates = 0;
+
+		for(codec_number = 0; codec_number < 16; codec_number++) {
+			communication_type = HDA_PIO;
+			if (((statests >> codec_number) & 1) == 0)
+				continue;
+			statestsCodecCandidates++;
+
+			communication_type = HDA_PIO;
+
+			codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+
+			communication_type = HDA_PIO;
+
+			DOUT (DBG_SYSINFO, ("Codec %d response 0x%X", codec_number, codec_id));
+		
+			TryInitializeCodecSlot(codec_number, codec_id, "PIO", &ntStatus);
+
+			communication_type = HDA_PIO;
+		}
+		DOUT (DBG_SYSINFO, ("STATESTS reported %d codecs, initialized %d", statestsCodecCandidates, codecCount));
+
+		if (codecCount > 0){
+			DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
+			return STATUS_SUCCESS;
+		}
+	}
+
+	//Otherwise probe codecs blindly
+	DOUT (DBG_SYSINFO, ("Probing codecs by PIO blind"));
+	for (codec_number = 0, codec_id = 0; codec_number < 16; codec_number++) {
 
 		communication_type = HDA_PIO;
 		
+		//send codec reset command, there won't be a response
 		hda_send_verb(codec_number, 1, 0x7ff, 0);
-
+		
+		//wait 1ms
+		KeStallExecutionProcessor(1000);
+		
+		//set communication type back after every verb attempt in case there is a timeout
 		communication_type = HDA_PIO;
 
 		codec_id = hda_send_verb(codec_number, 0, 0xF00, 0);
+		
+		communication_type = HDA_PIO;
 
-		if(codec_number == 15 && codec_id == STATUS_UNSUCCESSFUL){
-			//if we got to last codec and no responses from any of them
-			DOUT (DBG_ERROR, ("PIO Communication is Broken."));
-			if (codecCount == 0) {
-				return STATUS_UNSUCCESSFUL;
-			}
+		if(codec_id == STATUS_UNSUCCESSFUL){
+			DOUT (DBG_ERROR, ("Codec %d no response", codec_number));
+			continue;
 		}
 
 		TryInitializeCodecSlot(codec_number, codec_id, "PIO", &ntStatus);
 	}
-	if (codecCount > 0){
+	if (codecCount == 0){
+			//if we got to last codec and no responses from any of them
+			DOUT (DBG_ERROR, ("No codecs found by blind probing on PIO. Giving up."));
+			return STATUS_UNSUCCESSFUL;
+		}
+	else if (codecCount > 0){
 		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
 		return STATUS_SUCCESS;
     } else {        
@@ -1643,7 +1725,7 @@ CAdapterCommon::TryInitializeCodecSlot(
 		return;
 	}
 
-	DOUT (DBG_SYSINFO, ("HDA: Codec %d %s communication interface", codec_id, interfaceName));
+	DOUT (DBG_SYSINFO, ("HDA: Codec %d VID/PID: %08X %s communication interface", codec_number, codec_id, interfaceName));
 
 	//create and initialize codec object and pack into array
 	if (codecCount < ARRAY_COUNT(pCodecs)) {
@@ -1668,11 +1750,6 @@ CAdapterCommon::TryInitializeCodecSlot(
 	}
 }
 
-/*****************************************************************************
- * Note: hda_initialize_audio_function_group, hda_initialize_output_pin,
- * hda_initialize_audio_output, hda_initialize_audio_mixer, and 
- * hda_initialize_audio_selector have been moved to HDA_Codec class
- *****************************************************************************/
 
 // Reads any Boolean value from the Registry Settings key.
 // If nonexistent, returns DefaultValue
@@ -1784,6 +1861,10 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_r
 	return TRUE;
 }
 
+//TODO: i will need an implementation of send_verb with a callback
+//maybe take more than one verb at once w/o blocking
+
+//TODO: overloading the response with STATUS_UNSUCCESSFUL is not good!
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));

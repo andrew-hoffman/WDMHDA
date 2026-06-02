@@ -491,7 +491,7 @@ Init
     //
     m_pDeviceObject = DeviceObject;
 
-	//init spin lock for protecting the CORB/RIRB or PIO
+	//init spin lock for protecting the CORB/RIRB or PIO codec comms
 	KeInitializeSpinLock(&QLock);
 
 	ResetCommonBufferDescriptor(&RirbBuffer);
@@ -1814,10 +1814,14 @@ STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_r
 	return TRUE;
 }
 
-//TODO: i will need an implementation of send_verb with a callback
-//maybe take more than one verb at once w/o blocking
 
-//TODO: overloading the response with STATUS_UNSUCCESSFUL is not good!
+/*****************************************************************************
+ * CAdapterCommon::hda_send_verb
+ *****************************************************************************
+	Send a verb to the HD Audio codec, return its response in the return value
+	Returns 0 on communication failure (and prints a debug message). 
+
+*/
 
 STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command) {
 	//DOUT (DBG_PRINT, ("[CAdapterCommon::hda_send_verb]"));
@@ -1828,21 +1832,28 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 
 	//TODO: check for unsolicited responses and maybe schedule a DPC to deal with them
 	//TODO: check for responses with high bit set (those are the errors)
+	//TODO: i will need an implementation of send_verb with a callback
+	//maybe take more than one verb at once w/o blocking
 	
 	KIRQL oldirql;
 	ULONG response = 0;
+	BOOLEAN valid = FALSE;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
+
 	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbBuffer.BufferPointer));
-	if (communication_type == HDA_CORB_RIRB) {	
-		
+
+	if( (communication_type != HDA_CORB_RIRB) && (communication_type != HDA_PIO) ){
+		DOUT (DBG_ERROR, ("\nHDA Communication in Error State\n"));
+		return 0;
+	}
+
+	//acquire spin lock: this isnt great to do as well as blocking but what can i do
+	KeAcquireSpinLock(&QLock, &oldirql);
+
+	if (communication_type == HDA_CORB_RIRB) {			
 		//CORB/RIRB interface
-
-		//acquire spin lock: this isnt great to do as well as blocking but what can i do
-		KeAcquireSpinLock(&QLock, &oldirql);
-
 		//get current rirb pointer temp
 		USHORT RirbTmp = readUSHORT (0x58);
-		BOOLEAN valid = FALSE;
  
 		//write verb
 		WRITE_REGISTER_ULONG(CorbBuffer.AlignedVirtualAddress + (CorbBuffer.BufferPointer), value);
@@ -1851,18 +1862,12 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		writeUSHORT(0x48, CorbBuffer.BufferPointer);
   
 		//wait for RIRB pointer to increment/wrap
-
-		for(ULONG ticks = 0; ticks < 600; ++ticks) {
+		for (ULONG ticks = 0; ticks < 600; ++ticks) {
 			KeStallExecutionProcessor(10);
-			if(readUSHORT (0x58) != RirbTmp) {
+			if (readUSHORT (0x58) != RirbTmp) {
 				valid = TRUE;
 				break;
-			} else if (ticks == 599) {
-				//6 ms and no movement
-				DOUT (DBG_ERROR, ("\nSend_Codec_Verb PIO ERROR: no response\nCodec verb 0x%X position %d",
-				value, CorbBuffer.BufferPointer));
-				//communication_type = HDA_ERROR;
-			}
+			} 
 		}
 		if (valid){
 
@@ -1874,67 +1879,50 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 			//TODO: if we have usolicited responses on there may be more than 1 difference
 			//between last read and last written
 			RirbBuffer.BufferPointer++;
-			if(RirbBuffer.BufferPointer == RirbBuffer.NumberOfEntries) {
+			if (RirbBuffer.BufferPointer == RirbBuffer.NumberOfEntries) {
 				RirbBuffer.BufferPointer = 0;
 			}
 		} 
-		
-		//move corb pointer
+		//move corb pointer (unconditionally)
 		CorbBuffer.BufferPointer++;
 		if(CorbBuffer.BufferPointer == CorbBuffer.NumberOfEntries) {
 			CorbBuffer.BufferPointer = 0;
 		}
-		//unlock! must get here!
-		KeReleaseSpinLock(&QLock, oldirql);
 
-		//return response whatever it is. single point of exit
-		return response;
-
-	} else if (communication_type == HDA_PIO){
-		
+	} else if (communication_type == HDA_PIO){		
 		//Immediate command interface
-		//acquire spin lock: this isnt great to do as well as blocking but what can ya do
-		KeAcquireSpinLock(&QLock, &oldirql);
 
-		//DOUT (DBG_SYSINFO, ("Write codec verb Immediate:0x%X", value));
 		//clear Immediate Result Valid bit
 		writeUSHORT(0x68, 0x2);
-
 		//write verb
 		writeULONG(0x60, value);
-
 		//start verb transfer
 		writeUSHORT(0x68, 0x1);
 
 		//poll for response
-		ULONG ticks = 0;
-		while (++ticks < 600) {
+		for (ULONG ticks = 0; ticks < 600; ++ticks) {
 			KeStallExecutionProcessor(10);
-
 			//wait for Immediate Result Valid bit = set and Immediate Command Busy bit = clear
 			if ((readUSHORT(0x68) & 0x3) == 0x2) {
 				//clear Immediate Result Valid bit
 				writeUSHORT(0x68, 0x2);
-				
-				ULONG response = readULONG(0x64);
-				//unlock!
-				KeReleaseSpinLock(&QLock, oldirql);
-				//return response
-				return response;
+				valid = TRUE;
+				response = readULONG(0x64);
+				break;
 			}
 		}
-
-		//there was no response after 6 ms
-		//unlock
-		KeReleaseSpinLock(&QLock, oldirql);
-		DOUT (DBG_ERROR, ("\nSend_Codec_Verb PIO ERROR: no response\nCodec verb 0x%X position %d",
-			value, CorbBuffer.BufferPointer));
-		//communication_type = HDA_ERROR;
-		return response;
-	} else{
-	DOUT (DBG_ERROR, ("\nHDA Communication in Error State\n"));
-	return response;
 	}
+
+	//unlock! must get here!
+	KeReleaseSpinLock(&QLock, oldirql);
+
+	if (!valid){
+		//there was no response after 6 ms
+		DOUT (DBG_ERROR, ("\nSend_Codec_Verb ERROR: no response\nCodec verb 0x%X position %d",
+			value, CorbBuffer.BufferPointer));
+	}
+	//return response whatever it is. single point of exit
+	return response;
 }
 
 

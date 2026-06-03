@@ -146,7 +146,8 @@ class CAdapterCommon
 {
 private:
 	PMDL mdl;
-	KSPIN_LOCK QLock;
+	KSPIN_LOCK RirbLock;
+	FAST_MUTEX VerbMutex;
 	PDMA_ADAPTER DMA_Adapter;
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	
@@ -491,8 +492,10 @@ Init
     //
     m_pDeviceObject = DeviceObject;
 
-	//init spin lock for protecting the CORB/RIRB or PIO codec comms
-	KeInitializeSpinLock(&QLock);
+	//init mutex & spin lock protecting the communication to the codec
+	ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+	ExInitializeFastMutex(&VerbMutex);
+	KeInitializeSpinLock(&RirbLock);
 
 	ResetCommonBufferDescriptor(&RirbBuffer);
 	ResetCommonBufferDescriptor(&CorbBuffer);
@@ -1837,7 +1840,9 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	
 	KIRQL oldirql;
 	ULONG response = 0;
+	ULONG response_ex = 0;
 	BOOLEAN valid = FALSE;
+	BOOLEAN unsolicited = FALSE;
 	ULONG value = ((codec<<28) | (node<<20) | (verb<<8) | (command));
 
 	//DOUT (DBG_SYSINFO, ("Write codec verb 0x%X position %d", value, CorbBuffer.BufferPointer));
@@ -1846,43 +1851,44 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 		DOUT (DBG_ERROR, ("\nHDA Communication in Error State\n"));
 		return 0;
 	}
-
-	//acquire spin lock: this isnt great to do as well as blocking but what can i do
-	KeAcquireSpinLock(&QLock, &oldirql);
+	//take mutex
+	ExAcquireFastMutex(&VerbMutex);
 
 	if (communication_type == HDA_CORB_RIRB) {			
 		//CORB/RIRB interface
+
 		//get current rirb pointer temp
-		USHORT RirbTmp = readUSHORT (0x58);
- 
+		USHORT expected_rirb = readUSHORT (0x58);
 		//write verb
-		WRITE_REGISTER_ULONG(CorbBuffer.AlignedVirtualAddress + (CorbBuffer.BufferPointer), value);
-  
+		WRITE_REGISTER_ULONG(CorbBuffer.AlignedVirtualAddress + (CorbBuffer.BufferPointer), value); 
 		//move write pointer
 		writeUSHORT(0x48, CorbBuffer.BufferPointer);
-  
+
 		//wait for RIRB pointer to increment/wrap
 		for (ULONG ticks = 0; ticks < 600; ++ticks) {
 			KeStallExecutionProcessor(10);
-			if (readUSHORT (0x58) != RirbTmp) {
-				valid = TRUE;
+			if (readUSHORT (0x58) != expected_rirb) {
+
+				//acquire spin lock
+				KeAcquireSpinLock(&RirbLock, &oldirql);
+					valid = TRUE;
+					//read response. each response is 8 bytes long but only the lower 4 bytes are from the codec
+					response_ex = READ_REGISTER_ULONG (RirbBuffer.AlignedVirtualAddress + (RirbBuffer.BufferPointer * 2) +1);
+					unsolicited = ((response_ex & 0x10) == 0x10);
+					response = READ_REGISTER_ULONG (RirbBuffer.AlignedVirtualAddress + (RirbBuffer.BufferPointer * 2));
+					//move RIRB pointer **only if we got a response**
+					//TODO: if we have unsolicited responses on there may be more than 1 difference
+					//between last read and last written
+					RirbBuffer.BufferPointer++;
+					if (RirbBuffer.BufferPointer == RirbBuffer.NumberOfEntries) {
+						RirbBuffer.BufferPointer = 0;
+					}
+				KeReleaseSpinLock(&RirbLock, oldirql);
+
 				break;
-			} 
+				} 
 		}
-		if (valid){
 
-			//read response. each response is 8 bytes long but we only care about the lower 32 bits
-			response = READ_REGISTER_ULONG (RirbBuffer.AlignedVirtualAddress + (RirbBuffer.BufferPointer * 2));
-
-			//move RIRB pointer **only if we got a response**
-
-			//TODO: if we have usolicited responses on there may be more than 1 difference
-			//between last read and last written
-			RirbBuffer.BufferPointer++;
-			if (RirbBuffer.BufferPointer == RirbBuffer.NumberOfEntries) {
-				RirbBuffer.BufferPointer = 0;
-			}
-		} 
 		//move corb pointer (unconditionally)
 		CorbBuffer.BufferPointer++;
 		if(CorbBuffer.BufferPointer == CorbBuffer.NumberOfEntries) {
@@ -1904,22 +1910,26 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 			KeStallExecutionProcessor(10);
 			//wait for Immediate Result Valid bit = set and Immediate Command Busy bit = clear
 			if ((readUSHORT(0x68) & 0x3) == 0x2) {
+				valid = TRUE;
 				//clear Immediate Result Valid bit
 				writeUSHORT(0x68, 0x2);
-				valid = TRUE;
 				response = readULONG(0x64);
 				break;
 			}
 		}
 	}
 
-	//unlock! must get here!
-	KeReleaseSpinLock(&QLock, oldirql);
+	//release mutex
+	ExReleaseFastMutex(&VerbMutex);
 
 	if (!valid){
 		//there was no response after 6 ms
-		DOUT (DBG_ERROR, ("\nSend_Codec_Verb ERROR: no response\nCodec verb 0x%X position %d",
-			value, CorbBuffer.BufferPointer));
+		DOUT (DBG_ERROR, ("\nSend_Codec_Verb TIMEOUT: Codec %d verb 0x%X position %d",
+			codec, value, CorbBuffer.BufferPointer));
+	}
+	if (unsolicited){
+			DOUT (DBG_ERROR, ("\nUnexpected Unsolicited Response: response 0x%X EX 0x%X",
+			response, response_ex));
 	}
 	//return response whatever it is. single point of exit
 	return response;
@@ -2105,7 +2115,7 @@ HDA_INTERRUPT_TYPE CAdapterCommon::AcknowledgeIRQ()
         ctrlSeen = TRUE;
     }
 
-    /* CORB */
+    /* CORB Fatal Error */
     UCHAR corbsts = readUCHAR(0x4D);
     if (corbsts & 0x01)   // memory error
     {

@@ -81,14 +81,14 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	//find Audio Function Groups
 	ULONG response = hda_send_verb(0, 0xF00, 0x04);
 
-	DOUT (DBG_SYSINFO, ( "First Group node: %d Number of Groups: %d", 
+	DOUT (DBG_SYSINFO, ( "First Audio Function Group node: 0x%x Number of AFGs: %d", 
 	 (response >> 16) & 0xFF, response & 0xFF 
 	 ));
 	ULONG node = (response >> 16) & 0xFF;
 	for(ULONG last_node = (node + (response & 0xFF)); node < last_node; node++) {
 		if((hda_send_verb(node, 0xF00, 0x05) & 0x7F)==0x01) { //this is Audio Function Group
 			//initialize first Audio Function Group, if it doesn't work keep trying others
-			DOUT (DBG_SYSINFO, ("Init AFG %d", node));
+			DOUT (DBG_SYSINFO, ("Init AFG node 0x%x", node));
 			if ( NT_SUCCESS( hda_initialize_audio_function_group(node) )){
 				DOUT (DBG_SYSINFO, ("Success"));
 				return STATUS_SUCCESS;
@@ -130,7 +130,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	afg_node_output_amp_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x12);
 
 	//log AFG info
-	DOUT (DBG_SYSINFO, ("\nAudio Function Group node %d", afg_node_number));
+	DOUT (DBG_SYSINFO, ("\nAudio Function Group node 0x%x", afg_node_number));
 	DOUT (DBG_SYSINFO, ("\nAFG sample capabilities: 0x%x", afg_node_sample_capabilities));
 	DOUT (DBG_SYSINFO, ("\nAFG stream format capabilities: 0x%x", afg_node_stream_format_capabilities));
 	DOUT (DBG_SYSINFO, ("\nAFG input amp capabilities: 0x%x", afg_node_input_amp_capabilities));
@@ -153,7 +153,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		RtlZeroMemory(&path,sizeof(HDA_NODE_PATH));
 
 		//log number of node
-		DbgPrint("\n%d ", node);
+		DbgPrint("\n Node 0x%x ", node);
   
 		//get type of node
 		type_of_node = hda_get_node_type(node);
@@ -371,7 +371,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		UCHAR connection_entries_number = 0;
 		ULONG connection_entries_node = hda_get_node_connection_entries(node, 0);
 		while (connection_entries_node != 0x0000) {
-			DbgPrint( "%d ", connection_entries_node);
+			DbgPrint( "0x%x ", connection_entries_node);
 			connection_entries_number++;
 			connection_entries_node = hda_get_node_connection_entries(node, connection_entries_number);
 		}
@@ -516,7 +516,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    DOUT (DBG_PRINT, ("[HDA_Codec::hda_initialize_output_pin] %d", pin_node_number));
+    DOUT (DBG_PRINT, ("[HDA_Codec::hda_initialize_output_pin] 0x%x", pin_node_number));
 	//reset variables of first path
 	path.audio_output_node_number = 0;
 	path.audio_output_node_sample_capabilities = 0;
@@ -570,13 +570,14 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 		hda_initialize_audio_selector(first_connected_node_number, path);
 	}
 	else {
-		DOUT (DBG_PRINT, ("\nHDA ERROR: PIN have connection %d", first_connected_node_number));
+		DOUT (DBG_PRINT, ("HDA CODEC ERROR: PIN 0x%x connects to invalid node 0x%x type 0x%x", 
+			pin_node_number, first_connected_node_number, type_of_first_connected_node));
 	}
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path) {
 	PAGED_CODE ();
-	DOUT (DBG_PRINT, ("Initializing Audio Output %d", output_node_number));
+	DOUT (DBG_PRINT, ("Initializing Audio Output 0x%x", output_node_number));
 	path.audio_output_node_number = output_node_number;
 
 	if(isRealtek){
@@ -635,17 +636,17 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 	//because we are at end of node path, log all gathered info
 	DOUT (DBG_PRINT, ("Sample Capabilites: 0x%x", path.audio_output_node_sample_capabilities));
 	DOUT (DBG_PRINT, ("Stream Format Capabilites: 0x%x", path.audio_output_node_stream_format_capabilities));
-	DOUT (DBG_PRINT, ("Volume node: %d", path.output_amp_node_number));
+	DOUT (DBG_PRINT, ("Volume node: 0x%x", path.output_amp_node_number));
 	DOUT (DBG_PRINT, ("Volume capabilities: 0x%x", path.output_amp_node_capabilities));
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path) {
 	PAGED_CODE ();
 	if(length_of_node_path>=10) {
-		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
+		DOUT (DBG_PRINT,("HDA CODEC ERROR: node connection path too long"));
 		return;
 	}
-	DOUT (DBG_PRINT,("Initializing Audio Mixer %d", audio_mixer_node_number));
+	DOUT (DBG_PRINT,("Initializing Audio Mixer 0x%x", audio_mixer_node_number));
 
 	if(isRealtek){
 		//set 16-bit stereo format before turning on power so it sticks
@@ -686,7 +687,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 		hda_initialize_audio_selector(first_connected_node_number, path);
 	}
 	else {
-		DOUT (DBG_PRINT,("HDA ERROR: Mixer have connection %d", first_connected_node_number));
+		DOUT (DBG_PRINT,("HDA ERROR: Mixer 0x%x connects to invalid node 0x%x type 0x%x", 
+			audio_mixer_node_number, first_connected_node_number, type_of_first_connected_node));
 	}
 }
 
@@ -696,7 +698,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 	return;
 	}
-	DOUT (DBG_PRINT,("Initializing Audio Selector %d", audio_selector_node_number));
+	DOUT (DBG_PRINT,("Initializing Audio Selector 0x%x", audio_selector_node_number));
 
 	if(isRealtek){
 		//set 16-bit stereo format before turning on power so it sticks
@@ -742,7 +744,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 		hda_initialize_audio_selector(first_connected_node_number, path);
 	}
 	else {
-		DOUT (DBG_PRINT,("HDA ERROR: Selector bad connection %d", first_connected_node_number));
+		DOUT (DBG_PRINT,("HDA ERROR: Selector 0x%x connects to invalid node 0x%x type 0x%x",
+			audio_selector_node_number, first_connected_node_number, type_of_first_connected_node));			
 	}
 }
 
@@ -784,7 +787,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 
 	if (!hda_is_supported_sample_rate(dwSampleRate)) {
 		// Not a supported sample rate
-		DOUT (DBG_VSR, ("Sample rate %d not supported by HDA", dwSampleRate));
+		DOUT (DBG_VSR, ("Sample rate %d hz not supported by HDA", dwSampleRate));
 		return STATUS_NOT_SUPPORTED;
 	}
 
@@ -795,14 +798,16 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 	for (ULONG i = 0; i < out_paths.count; ++i){
 		status = hda_send_verb(out_paths.paths[i].audio_output_node_number, 0x200, format);
 		if (status == 0xFFFFFFFF) {
-			DOUT (DBG_ERROR, ("Path %d Node %d rejected audio format 0x%X", i, out_paths.paths[i].audio_output_node_number, format));
+			DOUT (DBG_ERROR, ("Path %d Node 0x%x rejected audio format 0x%X", 
+				i, out_paths.paths[i].audio_output_node_number, format));
 		}
 		//read it back to confirm
 		status = hda_send_verb(out_paths.paths[i].audio_output_node_number, 0xA00, 0x0);
 		if(status == format){
 			++successes;		
 		} else{
-			DOUT (DBG_ERROR, ("Path %d Node %d set format 0x%X expected 0x%X", i, out_paths.paths[i].audio_output_node_number, status, format));
+			DOUT (DBG_ERROR, ("Path %d Node 0x%x read back format 0x%X, expected 0x%X",
+				i, out_paths.paths[i].audio_output_node_number, status, format));
 		}
 	}
 	if(successes == 0){

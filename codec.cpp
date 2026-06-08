@@ -23,7 +23,6 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       useSpdif(spdif),
       useAltOut(altOut),
       codec_id(0),
-      is_initialized_useful_output(0),
       selected_output_node(0),
       length_of_node_path(0),
       afg_node_sample_capabilities(0),
@@ -146,6 +145,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	pin_headphone_node_number = 0;
 
 	//For all nodes in this AFG
+	//very simple one-shot topology parser, inits as it goes
 	for (ULONG node = ((subordinate_node_count_reponse>>16) & 0xFF), 
 		last_node = (node+(subordinate_node_count_reponse & 0xFF)), 
 		type_of_node = 0; node < last_node; node++) {
@@ -384,7 +384,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	//because i want any other output format support list to override spdif's
 	if (pin_spdif_node_number != 0) { //codec has SPDIF output (display audio?)
 		DbgPrint("\nSPDIF output ");
-		//is_initialized_useful_output = FALSE;
 		hda_initialize_output_pin(pin_spdif_node_number, path); //initialize SPDIF output
 		pin_output_node_number = pin_spdif_node_number; //save SPDIF output node number
 
@@ -396,7 +395,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	if (pin_speaker_default_node_number != 0) {
 		//initialize speaker
-		is_initialized_useful_output = TRUE;
+
 		if (pin_speaker_node_number != 0) {
 			DbgPrint("\nSpeaker output ");
 			hda_initialize_output_pin(pin_speaker_node_number, path); //initialize speaker with connected output device
@@ -443,14 +442,14 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	}
 	else if(pin_headphone_node_number != 0) { //codec do not have speaker, but only headphone output
 		DbgPrint("\nHeadphone output selected ");
-		is_initialized_useful_output = TRUE;
+
 		hda_initialize_output_pin(pin_headphone_node_number, path); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
 	}
 
 	if (pin_alternative_output_node_number != 0) { //codec has alternative output
 		DbgPrint("\nAlternative output selected ");
-		//is_initialized_useful_output = FALSE;
+
 		hda_initialize_output_pin(pin_alternative_output_node_number, path); //initialize alternative output
 		pin_output_node_number = pin_alternative_output_node_number; //save alternative output node number
 		//add path to paths list
@@ -493,28 +492,15 @@ STDMETHODIMP_(ULONG) HDA_Codec::hda_get_node_connection_entries (ULONG node, ULO
 	}
 }
 
-STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node) {
-	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) | 0x40));
-}
 
-STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
-	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) & ~0x40));
-}
-
-STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
-	if (headphone_node_number != 0
-    && (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
-		return TRUE;
-	}
-	else {
-		return FALSE;
-	}
-}
-
-STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number, HDA_NODE_PATH& path) {
+STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number, HDA_NODE_PATH& path) {
     PAGED_CODE ();
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
+	
+	//save type of path so we can find which is headphone and which is speaker later
+	ULONG pin_config = hda_send_verb(pin_node_number, 0xF1C, 0x00);
+	path.path_type = (pin_config >> 20) & 0xF;	
 
     DOUT (DBG_PRINT, ("[HDA_Codec::hda_initialize_output_pin] 0x%x", pin_node_number));
 	//reset variables of first path
@@ -524,7 +510,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 	path.output_amp_node_number = 0;
 	path.output_amp_node_capabilities = 0;
 	
-	if(!isRealtek){
+	if (!isRealtek){
 		//turn on power for PIN First
 		hda_send_verb(pin_node_number, 0x705, 0x00);
 	}
@@ -536,14 +522,14 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 	//set 16-bit stereo format
 	hda_send_verb(pin_node_number, 0x200, 0x11);
 
-	if(isRealtek){
+	if (isRealtek){
 		//turn on power for PIN Last
 		hda_send_verb(pin_node_number, 0x705, 0x00);
 	}
 
-	//enable PIN
+	//enable PIN amp, output buffers
 	hda_send_verb(pin_node_number, 0x707, (hda_send_verb(pin_node_number, 0xF07, 0x00) | 0x80 | 0x40));
-	//enable EAPD. do not enable L-R swap, why were we doing that, the channel order is correct
+	//enable EAPD. do not enable L-R swap, the channel order is correct
 	hda_send_verb(pin_node_number, 0x70C, 0x0002);
 
 	//set maximal volume for PIN
@@ -573,6 +559,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number
 		DOUT (DBG_PRINT, ("HDA CODEC ERROR: PIN 0x%x connects to invalid node 0x%x type 0x%x", 
 			pin_node_number, first_connected_node_number, type_of_first_connected_node));
 	}
+	return ntStatus;
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path) {
@@ -694,7 +681,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path) {
 	PAGED_CODE ();
-	if(length_of_node_path>=10) {
+	if(length_of_node_path >= 10) {
 		DOUT (DBG_PRINT,("HDA ERROR: too long path"));
 	return;
 	}
@@ -770,16 +757,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 
     DOUT (DBG_PRINT, ("[HDA_Codec::ProgramSampleRate]"));
 
-    //
-    // Check what sample rates we support based on
-	// audio_output_node_sample_capabilities
-    //
-	// if either is zero, give up as nothing has been inited yet?
-	// TODO: at least one real codec is getting a 0 here
-	if (!afg_node_sample_capabilities){
-		    DOUT (DBG_ERROR, ("AFG node reports no sample rates supported"));
-			//expected on VIA codecs at least
-	}
 	if (out_paths.count == 0){
 			DOUT (DBG_ERROR, ("No output paths inited yet!"));
             return STATUS_UNSUCCESSFUL;
@@ -790,6 +767,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 		DOUT (DBG_VSR, ("Sample rate %d hz not supported by HDA", dwSampleRate));
 		return STATUS_NOT_SUPPORTED;
 	}
+
+	//TODO: Skip setting the format if it's already been set
+	//to save on unneeded message traffic and avoid delays on system sound starts
 
 	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
 	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
@@ -863,6 +843,16 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 	ULONG mask=0x0000001;
 
 	ULONG caps = 0x7ff; //i don't think win98 will actually ask for anything > 96khz though
+
+	//
+    // Check what sample rates we support based on
+	// audio_output_node_sample_capabilities
+    //
+
+	//if (!afg_node_sample_capabilities){
+	//	    DOUT (DBG_SYSINFO, ("AFG node reports no sample rates supported"));
+	//		//VIA codecs report 0 here, must defer to the pin sample rate support
+	//}
 	
 	//find the union of capabilities of all connected output paths
 	for (ULONG i = 0; i < out_paths.count; ++i){
@@ -897,7 +887,7 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch) {
 
 	//go through list of output paths and set same volume on all of them
-	for( ULONG i = 0; i < out_paths.count; ++i){
+	for (ULONG i = 0; i < out_paths.count; ++i){
 		hda_set_node_gain( 
 			out_paths.paths[i].output_amp_node_number, 
 			HDA_OUTPUT_NODE, 
@@ -942,6 +932,27 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, UL
 STDMETHODIMP_(ULONG) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
 {
 	return pAdapter->hda_send_verb(codec_address, node, verb, command);
+}
+
+STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node) {
+	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) | 0x40));
+}
+
+STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
+	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) & ~0x40));
+}
+
+STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
+	//loop through all inited output paths
+	//return true if at least one headphone output is connected
+	for (ULONG i = 0; i < out_paths.count; ++i) {
+		if (out_paths.paths[i].path_type == HDA_PIN_HEADPHONE_OUT){
+			if ( (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
 }
 
 

@@ -20,6 +20,57 @@ struct IAdapterCommon;
  */
 typedef ULONG (*HDA_SEND_VERB_FUNC)(IAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 
+#define MAX_OUTPUT_PATHS 8
+
+typedef struct
+{	
+	ULONG path_type;
+	ULONG audio_output_node_number;
+    ULONG audio_output_node_sample_capabilities;
+    ULONG audio_output_node_stream_format_capabilities;
+    ULONG output_amp_node_number;
+    ULONG output_amp_node_capabilities;
+} HDA_NODE_PATH, *PHDA_NODE_PATH;
+
+typedef struct _HDA_OUTPUT_LIST {
+    ULONG count;
+    HDA_NODE_PATH paths[MAX_OUTPUT_PATHS];
+} HDA_OUTPUT_LIST;
+
+/*****************************************************************************
+ * Constants
+ */
+
+// Widget types
+#define HDA_WIDGET_AUDIO_OUTPUT 0x0
+#define HDA_WIDGET_AUDIO_INPUT 0x1
+#define HDA_WIDGET_AUDIO_MIXER 0x2
+#define HDA_WIDGET_AUDIO_SELECTOR 0x3
+#define HDA_WIDGET_PIN_COMPLEX 0x4
+#define HDA_WIDGET_POWER_WIDGET 0x5
+#define HDA_WIDGET_VOLUME_KNOB 0x6
+#define HDA_WIDGET_BEEP_GENERATOR 0x7
+#define HDA_WIDGET_VENDOR_DEFINED 0xF
+
+// Pin definitions
+#define HDA_PIN_LINE_OUT 0x0
+#define HDA_PIN_SPEAKER 0x1
+#define HDA_PIN_HEADPHONE_OUT 0x2
+#define HDA_PIN_CD 0x3
+#define HDA_PIN_SPDIF_OUT 0x4
+#define HDA_PIN_DIGITAL_OTHER_OUT 0x5
+#define HDA_PIN_MODEM_LINE_SIDE 0x6
+#define HDA_PIN_MODEM_HANDSET_SIDE 0x7
+#define HDA_PIN_LINE_IN 0x8
+#define HDA_PIN_AUX 0x9
+#define HDA_PIN_MIC_IN 0xA
+#define HDA_PIN_TELEPHONY 0xB
+#define HDA_PIN_SPDIF_IN 0xC
+#define HDA_PIN_DIGITAL_OTHER_IN 0xD
+#define HDA_PIN_RESERVED 0xE
+#define HDA_PIN_OTHER 0xF
+#define HDA_PIN_INVALID 0x10
+
 /*****************************************************************************
  * HDA_Codec
  *****************************************************************************
@@ -39,7 +90,6 @@ private:
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag
     
-    ULONG is_initialized_useful_output;
     ULONG selected_output_node;
     ULONG length_of_node_path;
 
@@ -70,7 +120,7 @@ public:
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
 	STDMETHODIMP_(ULONG) hda_get_node_connection_entries(ULONG node, ULONG connection_entries_number);
-	STDMETHODIMP_(void) hda_initialize_output_pin(ULONG pin_node_number, HDA_NODE_PATH& path);
+	STDMETHODIMP_(NTSTATUS) hda_initialize_output_pin(ULONG pin_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
@@ -88,7 +138,7 @@ public:
     // Accessors
     UCHAR GetCodecAddress() const { return codec_address; }
     ULONG GetCodecId() const { return codec_id; }
-    BOOLEAN IsInitialized() const { return (BOOLEAN)is_initialized_useful_output; }
+    BOOLEAN IsInitialized() const { return (BOOLEAN) (out_paths.count > 0); }
 };
 
 typedef HDA_Codec *PHDACODEC;

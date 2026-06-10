@@ -26,14 +26,22 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       useSpdif(spdif),
       useAltOut(altOut),
       codec_id(0),
+	  codec_ven(0),
+	  codec_dev(0),
+	  isRealtek(FALSE),
       selected_output_node(0),
       length_of_node_path(0),
       afg_node_sample_capabilities(0),
       afg_node_stream_format_capabilities(0),
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
+
       pin_output_node_number(0),
-      headphone_node_number(0)
+      headphone_node_number(0),
+	  HpPollingEnabled(0),
+	  InShutdown(0),
+	  HpPrev(FALSE),
+	  HpTimerStarted(FALSE)
 {
 
 }
@@ -61,7 +69,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	RtlZeroMemory(&out_paths, sizeof(HDA_OUTPUT_LIST));
 
 	//test if this codec exists
-	ULONG codec_id = hda_send_verb(0, 0xF00, 0);
+	codec_id = hda_send_verb(0, 0xF00, 0);
 	if(codec_id == 0x00000000) {
 		return STATUS_NOT_FOUND;
 	}
@@ -429,12 +437,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			}
 
 			//check once for now
-			hda_check_headphone_connection_change();
-
-			//TODO: add task for checking headphone connection
-			// this will have to be a DPC
-
-			//create_task(hda_check_headphone_connection_change, TASK_TYPE_USER_INPUT, 50);
+			hda_check_headphone_connection_change();		
 
 			//add path to paths list
 			if (out_paths.count < MAX_OUTPUT_PATHS) {
@@ -486,6 +489,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	}
 	
 	//ApplyEeeInit(); 
+
+	//Add DPC callback for checking headphone connection
 
 	if (!HpTimerStarted)
 	{
@@ -840,7 +845,12 @@ void HDA_Codec::ForcePinOut(ULONG pinNid, BOOLEAN enable)
 
     ULONG v = enable ? PINCTL_OUT_EN : 0x00;
     hda_log("WDMHDA: ForcePinOut nid=%lu enable=%lu val=0x%02lX\n", pinNid, enable ? 1UL : 0UL, v);
-    hda_send_verb(pinNid, VERB_SET_PIN_WIDGET_CONTROL, v);
+    //hda_send_verb(pinNid, VERB_SET_PIN_WIDGET_CONTROL, v);
+	if(enable) {
+		hda_enable_pin_output(pinNid);
+	} else {
+		hda_disable_pin_output(pinNid);
+	}
 }
 
 void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
@@ -853,15 +863,10 @@ void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
     hda_send_verb(pinNid, VERB_SET_EAPD_BTLENABLE, v);
 }
 
-//TODO: remove hardcoded pin numbers!
-// should call hda_is_headphone_connected
 BOOLEAN HDA_Codec::IsHpPresent()
 {
 	if (InShutdown) return FALSE;
-
-    ULONG psense = hda_send_verb(27, VERB_GET_PIN_SENSE, 0);
-    // bit31 = presence detect
-    return (psense & 0x80000000UL) ? TRUE : FALSE;
+	return hda_is_headphone_connected();
 }
 
 //
@@ -871,51 +876,12 @@ void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
 {
 	if (InShutdown) return;
 
-    const ULONG speakerPin = 20; 
-    const ULONG hpPin      = 27;
+	hda_check_headphone_connection_change();
 
-    if (hpPresent)
-    {
-        hda_log("WDMHDA: SwitchOutput -> HEADPHONES\n");
-
-		ForcePlaybackChain();
-
-		ForcePinOut(speakerPin, FALSE);
-		ForcePinOut(hpPin, TRUE);
-		
-		MutePinOutAmp(speakerPin);
-		UnmutePinOutAmp(hpPin);
-
-        pin_output_node_number = hpPin;
-        selected_output_node = hpPin;
-    }
-    else
-    {
-        hda_log("WDMHDA: SwitchOutput -> SPEAKERS\n");
-
-		ForcePlaybackChain();
-
-		ForcePinOut(hpPin, FALSE);
-		ForcePinOut(speakerPin, TRUE);
-		
-		ForceEapd(speakerPin, TRUE);
-		
-		MutePinOutAmp(hpPin);
-		SetOutAmpLR(2, FALSE, 0x00);
-		UnmutePinOutAmp(speakerPin);
-
-        pin_output_node_number = speakerPin;
-        selected_output_node = speakerPin;
-    }
 }
 
-void HDA_Codec::ForcePlaybackChain() 
-{
-    SetOutAmpLR(2, FALSE, 0x00);
-    UnmuteInAmp(12, 0, 0x00);
-    UnmuteOutAmp(12, 0x00);
-    ForceConnSel(12, 0);
-}
+//TODO: remove hardcoded pin numbers!
+//DEADCODE removed ForcePlaybackChain
 
 void HDA_Codec::StartHpPolling()
 {
@@ -999,6 +965,7 @@ static ULONG make_amp_cmd(BOOLEAN output, UCHAR index, BOOLEAN mute, UCHAR gainS
     return cmd;
 }
 
+//DEADCODE
 static ULONG amp_get_cmd(BOOLEAN output, BOOLEAN right, UCHAR index)
 {
     ULONG cmd = 0;
@@ -1058,6 +1025,7 @@ void HDA_Codec::SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain)
 void HDA_Codec::UnmutePinOutAmp(ULONG nid) { SetOutAmpLR(nid, FALSE, 0x10); }
 void HDA_Codec::MutePinOutAmp(ULONG nid)   { SetOutAmpLR(nid, TRUE,  0x00); }
 
+//DEADCODE
 void HDA_Codec::UnmutePinInAmp(ULONG pinNid, UCHAR inIndex)
 {
 	if (InShutdown) return;
@@ -1067,6 +1035,7 @@ void HDA_Codec::UnmutePinInAmp(ULONG pinNid, UCHAR inIndex)
     hda_send_verb(pinNid, VERB_SET_AMP_GAIN_MUTE, cmd);
 }
 
+//DEADCODE
 void HDA_Codec::MutePinInAmp(ULONG pinNid, UCHAR inIndex)
 {
 	if (InShutdown) return;
@@ -1076,6 +1045,7 @@ void HDA_Codec::MutePinInAmp(ULONG pinNid, UCHAR inIndex)
     hda_send_verb(pinNid, VERB_SET_AMP_GAIN_MUTE, cmd);
 }
 
+//DEADCODE
 void HDA_Codec::ForceConnSel(ULONG nid, UCHAR sel)
 {
 	if (InShutdown) return;
@@ -1085,46 +1055,17 @@ void HDA_Codec::ForceConnSel(ULONG nid, UCHAR sel)
     hda_send_verb(nid, VERB_SET_CONNECT_SEL, sel);
 }
 
-//
-//TODO: remove hardcoded pin numbers!
-//DEADCODE ?
-//
-void HDA_Codec::WakeSpeakerPath()
-{
-	if (InShutdown) return;
+//DEADCODE removed WakeSpeakerPath
 
-    const ULONG speakerPin = 20;
-    const ULONG mix12      = 12;
+//DEADCODE removed ReadCoef
 
-    ForceConnSel(mix12, 0);
-    UnmutePinInAmp(mix12, 0);
-    UnmutePinOutAmp(mix12);
-    UnmutePinOutAmp(speakerPin);
-
-    hda_send_verb(speakerPin, VERB_SET_EAPD_BTLENABLE, 0x03);
-}
-
-//DEADCODE ?
-ULONG HDA_Codec::ReadCoef(ULONG node, USHORT idx)
-{
-	if (InShutdown) return 0;
-
-    hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
-    return hda_send_verb(node, VERB_GET_PROC_COEF, 0);
-}
-
-//DEADCODE ?
-void HDA_Codec::WriteCoef(ULONG node, USHORT idx, USHORT val)
-{
-	if (InShutdown) return;
-
-    hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
-    hda_send_verb(node, VERB_SET_PROC_COEF, val);
-}
+//DEADCODE removed WriteCoef
 
 //needed extra verbs for EEE PC 701
 //Realtek ALC662 with what subsystem ID?
 //can't apply this generally.
+
+/*
 void HDA_Codec::ApplyEeeInit()
 {
     hda_log("WDMHDA: ApplyEeeInit\n");
@@ -1142,21 +1083,26 @@ void HDA_Codec::ApplyEeeInit()
     SetOutAmpLR(3, FALSE, 0x00);
     SetOutAmpLR(4, FALSE, 0x00);
 }
+*/
 
 // Scht. <<<
 
+//TODO: multiple headphone & speaker nodes
 
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
-	//TODO: schedule as a periodic task 
-	//and make sure to clean up correctly on driver unload!
+	//scheduled as a periodic task 
+	//make sure to clean up correctly on driver unload!
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
+		hda_log("WDMHDA: SwitchOutput -> HEADPHONES\n");
 		hda_disable_pin_output(pin_output_node_number);
 		selected_output_node = headphone_node_number;
 	}
 	else if(selected_output_node == headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+		hda_log("WDMHDA: SwitchOutput -> SPEAKERS\n");
 		hda_enable_pin_output(pin_output_node_number);
 		selected_output_node = pin_output_node_number;
 	}
+	//TODO: mute & unmute outputs as well?
 }
 
 //only using 16 bit stereo channels so this is unnecessary
@@ -1305,7 +1251,8 @@ STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	//return true if at least one headphone output is connected
 	for (ULONG i = 0; i < out_paths.count; ++i) {
 		if (out_paths.paths[i].path_type == HDA_PIN_HEADPHONE_OUT){
-			if ( (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+			if ( (hda_send_verb(out_paths.paths[i].audio_output_node_number, 0xF09, 0x00)
+					& 0x80000000) == 0x80000000) {
 				return TRUE;
 			}
 		}

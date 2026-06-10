@@ -170,12 +170,12 @@ private:
     void UnmutePinInAmp(ULONG pinNid, UCHAR inIndex);
     void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
     void ForceConnSel(ULONG nid, UCHAR sel);
-    void WakeSpeakerPath();
-    ULONG ReadCoef(ULONG node, USHORT idx);
-    void WriteCoef(ULONG node, USHORT idx, USHORT val);
+    //void WakeSpeakerPath();
+    //ULONG ReadCoef(ULONG node, USHORT idx);
+    //void WriteCoef(ULONG node, USHORT idx, USHORT val);
     void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
-    void ApplyEeeInit();
-    void ForcePlaybackChain();
+    //void ApplyEeeInit();
+    //void ForcePlaybackChain();
     void UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain);
     void UnmuteOutAmp(ULONG nid, UCHAR gain);
 

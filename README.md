@@ -38,7 +38,7 @@ For Redbook CD Audio to work:
 - Single audio stream, no hardware mixing
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
-- Jack detection and retasking is not supported
+- Jack retasking is not supported, all jacks will be set as outputs if they can be. (You may only get audio through the Surround jack on your motherboard.)
 - Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
 - DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
 DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).

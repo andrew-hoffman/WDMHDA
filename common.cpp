@@ -217,7 +217,7 @@ private:
 	//Jack Polling state
 	KTIMER JackPollTimer;
 	KDPC JackPollDpc;
-	PIO_WORKITEM JackPollWorkItem;
+	PWORK_QUEUE_ITEM JackPollWorkItem;
 
 	LONG JackPollingEnabled;
 	LONG JackPollingStopping;
@@ -3133,9 +3133,8 @@ STDMETHODIMP_(void) CAdapterCommon::JackPollDpcRoutine(
     );
 	*/
 
-	PWORK_QUEUE_ITEM item = (PWORK_QUEUE_ITEM) self->JackPollWorkItem;
-	ExInitializeWorkItem(item, (PWORKER_THREAD_ROUTINE) JackPollWorker, (PVOID) self);
-	ExQueueWorkItem(item, DelayedWorkQueue);
+
+	ExQueueWorkItem(self->JackPollWorkItem, DelayedWorkQueue);
 }
 
 STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PDEVICE_OBJECT, PVOID Context)
@@ -3162,6 +3161,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::StartJackPolling()
 
     KeInitializeTimer(&JackPollTimer);
     KeInitializeDpc(&JackPollDpc, JackPollDpcRoutine, this);
+
+	ExInitializeWorkItem(JackPollWorkItem, (PWORKER_THREAD_ROUTINE) JackPollWorker, (PVOID) this);
 
 	hda_check_headphone_connection_change();
 

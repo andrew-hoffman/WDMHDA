@@ -35,6 +35,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       afg_node_stream_format_capabilities(0),
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
+	  prev_data_format(0),
 
       pin_output_node_number(0),
       headphone_node_number(0),
@@ -54,7 +55,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
 HDA_Codec::~HDA_Codec()
 {
 	// Cleanup if needed
-	StopHpPolling();		// Scht.
+	//StopHpPolling();		// Scht.
 }
 
 /*****************************************************************************
@@ -437,7 +438,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			}
 
 			//check once for now
-			hda_check_headphone_connection_change();		
+			//hda_check_headphone_connection_change();		
 
 			//add path to paths list
 			if (out_paths.count < MAX_OUTPUT_PATHS) {
@@ -492,6 +493,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	//Add DPC callback for checking headphone connection
 
+	/*
 	if (!HpTimerStarted)
 	{
 		StartHpPolling();
@@ -499,6 +501,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		HpTimerStarted = TRUE;
 		hda_log("WDMHDA: HP polling timer started (250ms)\n");
 	}
+	*/
+	
 	// Scht. <<<<<
 
 	return STATUS_SUCCESS;
@@ -804,11 +808,18 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 		return STATUS_NOT_SUPPORTED;
 	}
 
-	//TODO: Skip setting the format if it's already been set
-	//to save on unneeded message traffic and avoid delays on system sound starts
+
 
 	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
+
+
 	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
+
+	//Skip setting the format if it's already been set
+	//to save on unneeded message traffic and avoid delays on system sound starts
+	if (format == prev_data_format){
+		return STATUS_SUCCESS;
+	}
 
 	//set Audio Output nodes data format for all paths
 	for (ULONG i = 0; i < out_paths.count; ++i){
@@ -819,18 +830,22 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 		}
 		//read it back to confirm
 		status = hda_send_verb(out_paths.paths[i].audio_output_node_number, 0xA00, 0x0);
-		if(status == format){
+		if (status == format){
 			++successes;		
 		} else{
 			DOUT (DBG_ERROR, ("Path %d Node 0x%x read back format 0x%X, expected 0x%X",
 				i, out_paths.paths[i].audio_output_node_number, status, format));
 		}
 	}
-	if(successes == 0){
+	if (successes == 0){
 		DOUT (DBG_ERROR, ("No codec paths accepted that sample rate"));
 		return STATUS_UNSUCCESSFUL;
+	} else {
+		DOUT (DBG_VSR, ("Set format successfully"));
+		prev_data_format = format;
+		return STATUS_SUCCESS;
 	}
-    return STATUS_SUCCESS;
+
 }
 
 //***End of pageable code!***
@@ -869,9 +884,6 @@ BOOLEAN HDA_Codec::IsHpPresent()
 	return hda_is_headphone_connected();
 }
 
-//
-//TODO: remove hardcoded pin numbers!
-//
 void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
 {
 	if (InShutdown) return;
@@ -880,9 +892,9 @@ void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
 
 }
 
-//TODO: remove hardcoded pin numbers!
 //DEADCODE removed ForcePlaybackChain
 
+/*
 void HDA_Codec::StartHpPolling()
 {
     if (InterlockedExchange(&HpPollingEnabled, 1) == 1)
@@ -922,6 +934,7 @@ void HDA_Codec::StopHpPolling()
 
     hda_log("WDMHDA: HP polling STOP (wasSet=%lu wait=0x%08lX)\n", wasSet ? 1UL : 0UL, st);
 }
+*/
 
 VOID HDA_Codec::HpDpcRoutine(KDPC* /*Dpc*/, PVOID DeferredContext, PVOID /*a1*/, PVOID /*a2*/)
 {
@@ -948,6 +961,7 @@ VOID HDA_Codec::HpDpcRoutine(KDPC* /*Dpc*/, PVOID DeferredContext, PVOID /*a1*/,
 		KeSetEvent(&self->HpDpcIdleEvent, IO_NO_INCREMENT, FALSE);
 	}
 }
+
 
 static ULONG make_amp_cmd(BOOLEAN output, UCHAR index, BOOLEAN mute, UCHAR gainSteps)
 {
@@ -1092,6 +1106,7 @@ void HDA_Codec::ApplyEeeInit()
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 
 	//make sure to clean up correctly on driver unload!
+	hda_log("*");
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
 		hda_log("WDMHDA: SwitchOutput -> HEADPHONES\n");
 		hda_disable_pin_output(pin_output_node_number);
@@ -1105,7 +1120,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//TODO: mute & unmute outputs as well?
 }
 
-//only using 16 bit stereo channels so this is unnecessary
+//only using 16 bit stereo channels which are always required in spec, so this is unnecessary
 /*
 STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};

@@ -136,6 +136,8 @@ private:
     ULONG afg_node_input_amp_capabilities;
     ULONG afg_node_output_amp_capabilities;
 
+	USHORT prev_data_format;
+
 	//Codec output paths
 	HDA_OUTPUT_LIST out_paths;
 
@@ -191,7 +193,7 @@ public:
         ULONG Payload
     );
 
-	 STDMETHODIMP_(ULONG) SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag);
+	STDMETHODIMP_(ULONG) SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag);
 
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);

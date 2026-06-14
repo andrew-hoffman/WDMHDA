@@ -69,7 +69,45 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDA_PIN_DIGITAL_OTHER_IN 0xD
 #define HDA_PIN_RESERVED 0xE
 #define HDA_PIN_OTHER 0xF
-#define HDA_PIN_INVALID 0x10
+
+// Node types
+#define HDA_OUTPUT_NODE 0x1
+#define HDA_INPUT_NODE 0x2
+
+// HDA verbs
+#define VERB_GET_PARAMETER            0xF00
+#define VERB_GET_CONN_LIST_ENTRY      0xF02
+#define VERB_GET_CONFIG_DEFAULT       0xF1C
+#define VERB_GET_PIN_SENSE            0xF09
+#define VERB_SET_PIN_WIDGET_CONTROL   0x707
+#define VERB_SET_EAPD_BTLENABLE       0x70C
+#define VERB_GET_CONN_LIST_LEN		0xF00
+#define AC_PAR_CONNLIST_LEN      0x0E
+#define VERB_SET_CONNECT_SEL 0x701
+#define VERB_GET_CONNECT_SEL 0xF01
+#define VERB_SET_COEF_INDEX   0x500
+#define VERB_GET_COEF_INDEX   0xD00
+#define VERB_SET_PROC_COEF    0x400
+#define VERB_GET_PROC_COEF    0xC00
+#define VERB_GET_PIN_WIDGET_CONTROL 0xF07
+#define VERB_GET_EAPD_BTLENABLE     0xF0C
+#define VERB_GET_AMP_GAIN_MUTE      0xB00
+#define VERB_SET_AMP_GAIN_MUTE      0x300
+
+// Pin Widget Control bits
+#define PINCTL_OUT_EN                 0x40
+#define PINCTL_IN_EN                  0x20
+
+// GET_PARAMETER id's
+#define AC_PAR_AUDIO_WIDGET_CAP       0x09
+#define AC_PAR_PIN_CAP                0x0C
+
+// Widget caps helpers
+#define AC_WCAP_TYPE_SHIFT 20
+#define AC_WCAP_TYPE_MASK  (0xF << AC_WCAP_TYPE_SHIFT)
+#define AC_WCAP_TYPE_PIN   (0x4 << AC_WCAP_TYPE_SHIFT)
+
+
 
 /*****************************************************************************
  * HDA_Codec
@@ -98,12 +136,34 @@ private:
     ULONG afg_node_input_amp_capabilities;
     ULONG afg_node_output_amp_capabilities;
 
+	USHORT prev_data_format;
+
 	//Codec output paths
 	HDA_OUTPUT_LIST out_paths;
 
     ULONG pin_output_node_number;
     ULONG headphone_node_number;
+	
+	LONG HpPollingEnabled;
+    LONG InShutdown;
 
+    void ForcePinOut(ULONG pinNid, BOOLEAN enable);
+    void ForceEapd(ULONG pinNid, BOOLEAN enable);
+    BOOLEAN IsHpPresent();
+    void SwitchOutput(BOOLEAN hpPresent);
+    void UnmutePinOutAmp(ULONG pinNid);
+    void MutePinOutAmp(ULONG pinNid);   
+    void UnmutePinInAmp(ULONG pinNid, UCHAR inIndex);
+    void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
+    void ForceConnSel(ULONG nid, UCHAR sel);
+    //void WakeSpeakerPath();
+    //ULONG ReadCoef(ULONG node, USHORT idx);
+    //void WriteCoef(ULONG node, USHORT idx, USHORT val);
+    void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
+    //void ApplyEeeInit();
+    //void ForcePlaybackChain();
+    void UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain);
+    void UnmuteOutAmp(ULONG nid, UCHAR gain);
 
 
 public:
@@ -116,6 +176,8 @@ public:
         ULONG Verb,
         ULONG Payload
     );
+
+	STDMETHODIMP_(ULONG) SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag);
 
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);

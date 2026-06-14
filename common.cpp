@@ -214,6 +214,17 @@ private:
     BOOL                    m_bCaptureActive;
     BYTE                    MixerSettings[DSP_MIX_MAXREGS];
 
+	//Jack Polling state
+	KTIMER JackPollTimer;
+	KDPC JackPollDpc;
+	WORK_QUEUE_ITEM JackPollWorkItem;
+
+	LONG JackPollingEnabled;
+	LONG JackPollingStopping;
+	LONG JackPollWorkQueued;
+	KEVENT JackPollWorkerIdleEvent;
+	BOOLEAN JackPollTimerStarted;
+
     HDA_INTERRUPT_TYPE AcknowledgeIRQ
     (   void
     );
@@ -237,6 +248,17 @@ private:
 		IN UCHAR codec_number,
 		IN PCSTR interfaceName
 	);
+	STDMETHODIMP_(NTSTATUS) StartJackPolling (void);
+	STDMETHODIMP_(VOID) StopJackPolling (void);
+
+	static STDMETHODIMP_(VOID) JackPollDpcRoutine(
+		KDPC*,
+		PVOID DeferredContext,
+		PVOID,
+		PVOID
+	);
+	static STDMETHODIMP_(VOID) JackPollWorker(PVOID Context);
+
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -476,6 +498,10 @@ Init
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::Init]"));
 	ULONG i;
+	JackPollingEnabled = 0;
+	JackPollingStopping = 0;
+	JackPollWorkQueued = 0;
+	JackPollTimerStarted = FALSE;
 
 	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
     DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
@@ -1044,6 +1070,11 @@ Init
 		m_pInterruptSync = NULL;
 		return ntStatus;
 	}
+
+	ntStatus = StartJackPolling();
+	if (!NT_SUCCESS(ntStatus)) {
+		DbgPrint("Headphone polling failed: 0x%X\n", ntStatus);
+	}
 	
 
 	DbgPrint("Init Finished Successfully!\n");
@@ -1066,7 +1097,7 @@ CAdapterCommon::
 
 	//At least try to stop the stream before destruction
 	hda_stop_stream ();
-
+	StopJackPolling();
 	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
 	for (UCHAR i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
@@ -3049,7 +3080,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceWord(UCHAR offset, USHOR
 		);
 }
 
-STDMETHODIMP_(void)CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteCount){
+STDMETHODIMP_(void) CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteCount){
 	// Manual Cache Invalidation for AMD 6xx-9xx Coherency..
 	if (g_bHasClFlush) {        
         // We use a 64-byte stride (standard x86 cache line size)
@@ -3072,5 +3103,101 @@ STDMETHODIMP_(void)CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteC
 		}
 	}
 }
+
+//
+// Headphone jack polling: schedules a DPC that creates a kernel work item
+//
+
+STDMETHODIMP_(void) CAdapterCommon::JackPollDpcRoutine(
+    KDPC*,
+    PVOID DeferredContext,
+    PVOID,
+    PVOID
+)
+{
+    CAdapterCommon* self = (CAdapterCommon*)DeferredContext;
+    if (!self)
+        return;
+
+    if (self->JackPollingStopping || !self->JackPollingEnabled)
+        return;
+
+    if (InterlockedCompareExchange(&self->JackPollWorkQueued, 1, 0) != 0)
+        return;
+
+    KeClearEvent(&self->JackPollWorkerIdleEvent);
+	
+	//This function is missing from Win98
+    /*
+	IoQueueWorkItem(
+        self->JackPollWorkItem,
+        CAdapterCommon::JackPollWorker,
+        DelayedWorkQueue,
+        self
+    );
+	*/
+
+
+	ExQueueWorkItem(&self->JackPollWorkItem, DelayedWorkQueue);
+}
+
+STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PVOID Context)
+{
+    CAdapterCommon* self = (CAdapterCommon*)Context;
+
+    if (!self->JackPollingStopping) {
+        self->hda_check_headphone_connection_change();
+    }
+
+    InterlockedExchange(&self->JackPollWorkQueued, 0);
+	KeSetEvent(&self->JackPollWorkerIdleEvent, IO_NO_INCREMENT, FALSE);
+	
+}
+
+
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::StartJackPolling()
+{
+    if (InterlockedExchange(&JackPollingEnabled, 1) == 1)
+        return STATUS_UNSUCCESSFUL;
+
+    JackPollingStopping = 0;
+    KeInitializeEvent(&JackPollWorkerIdleEvent, NotificationEvent, TRUE);
+
+    KeInitializeTimer(&JackPollTimer);
+    KeInitializeDpc(&JackPollDpc, JackPollDpcRoutine, this);
+
+	ExInitializeWorkItem(&JackPollWorkItem, JackPollWorker, (PVOID) this);
+
+	hda_check_headphone_connection_change();
+
+    LARGE_INTEGER due;
+    due.QuadPart = -2500000;
+
+    KeSetTimerEx(&JackPollTimer, due, 250, &JackPollDpc);
+
+    DbgPrint("WDMHDA: HP polling START\n");
+	return STATUS_SUCCESS;
+}
+
+STDMETHODIMP_(VOID) CAdapterCommon::StopJackPolling()
+{
+    if (InterlockedExchange(&JackPollingEnabled, 0) == 0)
+        return;
+
+    InterlockedExchange(&JackPollingStopping, 1);
+
+    BOOLEAN wasSet = KeCancelTimer(&JackPollTimer);
+    KeRemoveQueueDpc(&JackPollDpc);
+
+    LARGE_INTEGER timeout;
+    timeout.QuadPart = -10 * 1000 * 1000; // 1 sec
+
+    NTSTATUS st = KeWaitForSingleObject(&JackPollWorkerIdleEvent, Executive, KernelMode, FALSE, &timeout);
+
+    DbgPrint("WDMHDA: HP polling STOP (wasSet=%lu wait=0x%08lX)\n", wasSet ? 1UL : 0UL, st);
+
+	//delete the work queue item??
+}
+
 
 

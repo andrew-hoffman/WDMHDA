@@ -430,7 +430,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			}
 
 			//check once for now
-			//hda_check_headphone_connection_change();		
+			hda_check_headphone_connection_change();		
 
 			//add path to paths list
 			if (out_paths.count < MAX_OUTPUT_PATHS) {
@@ -635,7 +635,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 	else {
 		path.audio_output_node_stream_format_capabilities = audio_output_stream_format_capabilities;
 	}
-	if(path.output_amp_node_number==0) { //if nodes in path do not have output amp capabilities, volume will be controlled by Audio Output node with capabilities taken from AFG node
+	if(path.output_amp_node_number==0) {
+		//if nodes in path do not have output amp capabilities, volume will be controlled by Audio Output node with capabilities taken from AFG node
 		path.output_amp_node_number = output_node_number;
 		path.output_amp_node_capabilities = afg_node_output_amp_capabilities;
 	}
@@ -1174,6 +1175,17 @@ STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
 }
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
+	if (headphone_node_number != 0
+    && (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+		return TRUE;
+	}
+	else {
+		return FALSE;
+	}
+}
+
+/*
+STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	//loop through all inited output paths
 	//return true if at least one headphone output is connected
 	for (ULONG i = 0; i < out_paths.count; ++i) {
@@ -1186,6 +1198,7 @@ STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	}
 	return FALSE;
 }
+*/
 
 STDMETHODIMP_(USHORT) HDA_Codec::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
 	USHORT data_format = 0;

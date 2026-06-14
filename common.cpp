@@ -217,7 +217,7 @@ private:
 	//Jack Polling state
 	KTIMER JackPollTimer;
 	KDPC JackPollDpc;
-	PWORK_QUEUE_ITEM JackPollWorkItem;
+	WORK_QUEUE_ITEM JackPollWorkItem;
 
 	LONG JackPollingEnabled;
 	LONG JackPollingStopping;
@@ -257,7 +257,7 @@ private:
 		PVOID,
 		PVOID
 	);
-	static STDMETHODIMP_(VOID) JackPollWorker(PDEVICE_OBJECT, PVOID Context);
+	static STDMETHODIMP_(VOID) JackPollWorker(PVOID Context);
 
 
 public:
@@ -498,6 +498,10 @@ Init
 
     DOUT (DBG_PRINT, ("[CAdapterCommon::Init]"));
 	ULONG i;
+	JackPollingEnabled = 0;
+	JackPollingStopping = 0;
+	JackPollWorkQueued = 0;
+	JackPollTimerStarted = FALSE;
 
 	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
     DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
@@ -3134,10 +3138,10 @@ STDMETHODIMP_(void) CAdapterCommon::JackPollDpcRoutine(
 	*/
 
 
-	ExQueueWorkItem(self->JackPollWorkItem, DelayedWorkQueue);
+	ExQueueWorkItem(&self->JackPollWorkItem, DelayedWorkQueue);
 }
 
-STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PDEVICE_OBJECT, PVOID Context)
+STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PVOID Context)
 {
     CAdapterCommon* self = (CAdapterCommon*)Context;
 
@@ -3162,7 +3166,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::StartJackPolling()
     KeInitializeTimer(&JackPollTimer);
     KeInitializeDpc(&JackPollDpc, JackPollDpcRoutine, this);
 
-	ExInitializeWorkItem(JackPollWorkItem, (PWORKER_THREAD_ROUTINE) JackPollWorker, (PVOID) this);
+	ExInitializeWorkItem(&JackPollWorkItem, JackPollWorker, (PVOID) this);
 
 	hda_check_headphone_connection_change();
 

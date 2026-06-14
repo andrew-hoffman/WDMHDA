@@ -147,22 +147,6 @@ private:
 	LONG HpPollingEnabled;
     LONG InShutdown;
 
-    KTIMER HpTimer;
-    KDPC   HpDpc;
-    BOOLEAN HpPrev;
-    BOOLEAN HpTimerStarted;
-    KEVENT HpDpcIdleEvent;
-
-    void StartHpPolling();
-    void StopHpPolling();
-
-    static VOID HpDpcRoutine(
-        KDPC* Dpc,
-        PVOID DeferredContext,
-        PVOID SystemArgument1,
-        PVOID SystemArgument2
-    );
-
     void ForcePinOut(ULONG pinNid, BOOLEAN enable);
     void ForceEapd(ULONG pinNid, BOOLEAN enable);
     BOOLEAN IsHpPresent();

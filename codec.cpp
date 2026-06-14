@@ -35,14 +35,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       afg_node_stream_format_capabilities(0),
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
-	  prev_data_format(0),
-
-      pin_output_node_number(0),
-      headphone_node_number(0),
-	  HpPollingEnabled(0),
-	  InShutdown(0),
-	  HpPrev(FALSE),
-	  HpTimerStarted(FALSE)
+	  prev_data_format(0)
 {
 
 }
@@ -55,7 +48,6 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
 HDA_Codec::~HDA_Codec()
 {
 	// Cleanup if needed
-	//StopHpPolling();		// Scht.
 }
 
 /*****************************************************************************
@@ -490,18 +482,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	}
 	
 	//ApplyEeeInit(); 
-
-	//Add DPC callback for checking headphone connection
-
-	/*
-	if (!HpTimerStarted)
-	{
-		StartHpPolling();
-
-		HpTimerStarted = TRUE;
-		hda_log("WDMHDA: HP polling timer started (250ms)\n");
-	}
-	*/
 	
 	// Scht. <<<<<
 
@@ -893,74 +873,6 @@ void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
 }
 
 //DEADCODE removed ForcePlaybackChain
-
-/*
-void HDA_Codec::StartHpPolling()
-{
-    if (InterlockedExchange(&HpPollingEnabled, 1) == 1)
-        return;
-
-    InShutdown = 0;
-    KeInitializeEvent(&HpDpcIdleEvent, NotificationEvent, TRUE);
-
-    KeInitializeTimer(&HpTimer);
-    KeInitializeDpc(&HpDpc, HpDpcRoutine, this);
-
-    HpPrev = IsHpPresent();
-    SwitchOutput(HpPrev);
-
-    LARGE_INTEGER due;
-    due.QuadPart = -2500000;
-
-    KeSetTimerEx(&HpTimer, due, 250, &HpDpc);
-
-    hda_log("WDMHDA: HP polling START\n");
-}
-
-void HDA_Codec::StopHpPolling()
-{
-    if (InterlockedExchange(&HpPollingEnabled, 0) == 0)
-        return;
-
-    InterlockedExchange(&InShutdown, 1);
-
-    BOOLEAN wasSet = KeCancelTimer(&HpTimer);
-    KeRemoveQueueDpc(&HpDpc);
-
-    LARGE_INTEGER timeout;
-    timeout.QuadPart = -10 * 1000 * 1000; // 1 sec
-
-    NTSTATUS st = KeWaitForSingleObject(&HpDpcIdleEvent, Executive, KernelMode, FALSE, &timeout);
-
-    hda_log("WDMHDA: HP polling STOP (wasSet=%lu wait=0x%08lX)\n", wasSet ? 1UL : 0UL, st);
-}
-*/
-
-VOID HDA_Codec::HpDpcRoutine(KDPC* /*Dpc*/, PVOID DeferredContext, PVOID /*a1*/, PVOID /*a2*/)
-{
-    HDA_Codec* self = (HDA_Codec*)DeferredContext;
-    if (!self) return;
-
-    KeClearEvent(&self->HpDpcIdleEvent);
-
-	__try
-	{
-	if (self->InShutdown || !self->HpPollingEnabled)
-    	return;
-
-    BOOLEAN hp = self->IsHpPresent();
-    if (hp != self->HpPrev)
-    {
-        hda_log("WDMHDA: HP state changed -> %lu\n", hp ? 1UL : 0UL);
-        self->HpPrev = hp;
-        self->SwitchOutput(hp);
-    }
-	}
-	__finally
-	{
-		KeSetEvent(&self->HpDpcIdleEvent, IO_NO_INCREMENT, FALSE);
-	}
-}
 
 
 static ULONG make_amp_cmd(BOOLEAN output, UCHAR index, BOOLEAN mute, UCHAR gainSteps)

@@ -23,7 +23,7 @@
 #include "DMusicKS.h"
 
 //get less debug prints
-#define DEBUG_LEVEL DEBUGLVL_VERBOSE
+#define DEBUG_LEVEL DEBUGLVL_TERSE
 #include "ksdebug.h"
 #include "debug.h"
 
@@ -34,7 +34,7 @@
 //
 // DSP/DMA constants
 // 
-#define MAXLEN_DMA_BUFFER       0x20000 //128k
+#define MAXLEN_DMA_BUFFER       0x40000
 
 
 //

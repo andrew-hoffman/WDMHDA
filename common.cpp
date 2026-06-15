@@ -469,8 +469,7 @@ NewAdapterCommon
         PADAPTERCOMMON
     );
 }   
-	//100ms of 2ch 16 bit audio 4410 * 2 * 2
-	ULONG audBufSize = MAXLEN_DMA_BUFFER; 
+ 
 	ULONG BdlSize = 256 * 16; //256 entries, 16 bytes each
 
 /*****************************************************************************
@@ -2823,7 +2822,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	//get the physical and virtual address pointers from the dma channel object
 	BufLogicalAddress = DmaChannel->PhysicalAddress();
 	BufVirtualAddress = DmaChannel->SystemAddress();
-	audBufSize = DmaChannel->BufferSize();
+	ULONG audBufSize = DmaChannel->BufferSize();
 
 	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress));

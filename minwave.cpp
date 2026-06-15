@@ -1342,7 +1342,9 @@ GetPosition
 		if (State == KSSTATE_RUN){
 			//bias the stream position forward when in Run mode
 			//to account for the DMA engine block size and the codec's buffer.
-			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() + 128 + 16 )
+			//or don't? may be causing a wraparound problem starting short sounds in the last ~4k of the buffer
+			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() //+ 128 + 16 
+				)
 				% DmaChannel->BufferSize()
 				; 
 		}

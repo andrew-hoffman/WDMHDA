@@ -1019,14 +1019,13 @@ void HDA_Codec::ApplyEeeInit()
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 
 	//make sure to clean up correctly on driver unload!
-	hda_log("*");
 	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
-		hda_log("WDMHDA: SwitchOutput -> HEADPHONES\n");
+		hda_log("HDA_Codec: SwitchOutput -> HEADPHONES\n");
 		hda_disable_pin_output(pin_output_node_number);
 		selected_output_node = headphone_node_number;
 	}
 	else if(selected_output_node == headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
-		hda_log("WDMHDA: SwitchOutput -> SPEAKERS\n");
+		hda_log("HDA_Codec: SwitchOutput -> SPEAKERS\n");
 		hda_enable_pin_output(pin_output_node_number);
 		selected_output_node = pin_output_node_number;
 	}

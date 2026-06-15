@@ -1,13 +1,13 @@
 # WDMHDA
 HD Audio driver for Windows 98SE / ME
 
-This project is a High Definition Audio aka Azalia codec and controller driver. It's for Intel 915 and later chipsets motherboard onboard audio that's not AC97.
+This project is a High Definition Audio aka Azalia codec and controller driver. It supports the motherboard onboard audio for Intel 915 and later chipsets as well as other manufacturers that conform to the HD Audio standard.
 
-It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows 98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. Windows 98 First Edition may work but there are known issues with sample rate and but depth conversion not working, and because Microsoft doesn't recommend WDM audio drivers for this version it will be unsupported.
+It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows 98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. The driver may load on Windows 98 First Edition but this is not supported due to known issues with sample rate and but depth conversion not working. Microsoft doesn't recommend the use of WDM audio drivers for this version of Windows. 
 
-As of Version Alpha-019 the driver functions on Windows 2000/XP, though as these OSes already have the oficial KB888111 HDA Bus driver update, they are not the primary target.
+As Windows 2000/XP already has official HD Audio support through the KB888111 HDA Bus driver update, these versions of Windows will be supported but are not the intended primary target.
 
-Current status of this driver is an Alpha. It is known to function well in VMware, VirtualBox, Intel, AMD & VIA chipset HD Audio controllers with Realtek codecs; further development and testing is needed to support more real hardware. Nvidia chipsets, and IDT, Analog Devices, Cirrus Logic and VIA codecs, are not well supported yet.
+Current status of this driver is an Alpha. It is known to function well in VMware, VirtualBox, Intel, Nvidia, AMD & VIA chipset HD Audio controllers with Realtek and VIA codecs; IDT, Analog Devices, Cirrus Logic and VIA codecs are not well supported yet. Further testing is needed to improve support on all real hardware. 
 
 This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
 
@@ -27,18 +27,18 @@ It is recommended but not strictly necessary to install DirectX 8.1 or newer aft
 
 For best sound quality: go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
 
-For Redbook CD Audio to work:
+To allow playback of Redbook CD Audio, Digital CD Audio must be enabled:
 - On Windows 98SE: go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
 - On Windows Me/2000/XP: Go to the properties of your CD-ROM drive in Device Manager, the Properties tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
 
 ## Current Limitations:
 
-- Only supports 16-bit stereo audio at 22-48khz sample rates (up to 96khz 32-bit could technically be added but 9x doesn't make the best choices about resampling)
+- Only supports 16-bit stereo audio at 22-48khz sample rates (formats up to 96khz 32-bit could technically be added but 9x doesn't make the best choices about resampling)
 - Playback only, recording is not supported
 - Single audio stream, no hardware mixing
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
-- Jack retasking is not supported, all jacks will be set as outputs if they can be. (You may only get audio through the Surround jack on your motherboard.)
+- Jack retasking is not supported, all jacks will be set as outputs if they can be. (Try all outputs, the audio output may only play through the Surround output on your motherboard.)
 - Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
 - DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
 DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
@@ -50,9 +50,9 @@ Source Code from [Microsoft's driver samples](https://github.com/microsoftarchiv
 and [BleskOS](https://github.com/VendelinSlezak/BleskOS/blob/master/source/drivers/sound/hda.c)
 used under MIT license.
 
-See also [Dogbert's open source CMI driver](https://codesite-archive.appspot.com/archive/p/cmediadrivers/).
+See also [Dogbert's open source CMI 8738 driver](https://codesite-archive.appspot.com/archive/p/cmediadrivers/).
 
-For build instructions, see the file Build Instructions.txt
+For build instructions, see the file `Build Instructions.txt`
 
 Testing and feedback from anyone who can run this on bare metal with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) will be appreciated. 
 
@@ -60,7 +60,7 @@ The release build of the driver is in the buildfre\i386 folder, the debug build 
 
 ## If the driver will not start for you or has other issues here's how you can get a debug log:
  
-- Find and install Sysinternals Debug View. I think a version that works on Win98 is here https://www.digiater.nl/openvms/decus/vmslt00a/nt/dbgview.htm
+- Find and install Sysinternals Debug View. A version that works on Win98 is here https://www.digiater.nl/openvms/decus/vmslt00a/nt/dbgview.htm
 - Install the debug version of my driver by using the HDA.sys which is in the objchk\i386 folder. you can just copy this into C:\Windows\System32\Drivers if the driver was already installed 
 - Disable the HD audio controller device in Device Manager
 - Restart

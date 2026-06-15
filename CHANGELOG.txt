@@ -1,3 +1,15 @@
+## WDMHDA Alpha-021 2026-06-15
+- Fixed codec communication by PIO on NForce chipsets
+- When using PIO, tries the listed codecs first before probing all slots blindly
+- Cleaned up codec & controller initialization logic
+- Messages sent to the codec don't block all interrupts for up to 6ms anymore
+- Reduce lag when creating or tearing down a stream
+- Add jack hotplug detection
+	- Plugging in a jack to the headphone out will properly mute the speaker out.
+- Cache the last format sent to the codec to avoid a click at start of system sounds
+- Add note in readme that Digital Audio Extraction is required for CD audio playback, and how to enable that
+- Increased max audio buffer size to 256k
+
 ## WDMHDA Alpha-020 2026-05-08
 - Fixes choppy audio after stopping a stream and starting a new one. This can still happen when pausing and unpausing rapidly.
 - Try to fix inf to make installation more reliable on 98Lite Micro

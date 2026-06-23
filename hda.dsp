@@ -8,12 +8,12 @@ CFG=HDA - Win32 Debug
 !MESSAGE This is not a valid makefile. To build this project using NMAKE,
 !MESSAGE use the Export Makefile command and run
 !MESSAGE 
-!MESSAGE NMAKE /f "hda.mak".
+!MESSAGE NMAKE /f "HDA.mak".
 !MESSAGE 
 !MESSAGE You can specify a configuration when running NMAKE
 !MESSAGE by defining the macro CFG on the command line. For example:
 !MESSAGE 
-!MESSAGE NMAKE /f "hda.mak" CFG="HDA - Win32 Debug"
+!MESSAGE NMAKE /f "HDA.mak" CFG="HDA - Win32 Debug"
 !MESSAGE 
 !MESSAGE Possible choices for configuration are:
 !MESSAGE 
@@ -106,14 +106,6 @@ SOURCE=.\debug.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\guids.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\hdaudio.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\ioctls.h
 # End Source File
 # Begin Source File
@@ -134,11 +126,11 @@ SOURCE=.\minwave.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\resource.h
+SOURCE=.\mydma.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\shared.h
+SOURCE=.\resource.h
 # End Source File
 # Begin Source File
 

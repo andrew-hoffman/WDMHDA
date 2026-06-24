@@ -1,0 +1,88 @@
+# Sources
+*.c     text diff=cpp eol=crlf
+*.cc    text diff=cpp eol=crlf
+*.cxx   text diff=cpp eol=crlf
+*.cpp   text diff=cpp eol=crlf
+*.cpi   text diff=cpp eol=crlf
+*.c++   text diff=cpp eol=crlf
+*.hpp   text diff=cpp eol=crlf
+*.h     text diff=cpp eol=crlf
+*.h++   text diff=cpp eol=crlf
+*.hh    text diff=cpp eol=crlf
+
+# Scripts
+*.bat text eol=crlf
+
+# Config
+*.inf text eol=crlf
+*.ini text eol=crlf
+
+# Build
+makefile text eol=crlf
+sources text eol=crlf
+*.def text eol=crlf
+*.log text eol=crlf
+*.err text eol=crlf
+
+# Debug symbols
+*.map text eol=crlf
+*.mac text eol=crlf
+*.pdb binary
+*.res binary
+*.sym binary
+
+# Documentation
+*.txt           text
+*.md            text
+License         text
+*.html          text diff=html
+*.htm           text diff=html
+*.html          text diff=html
+
+# Executables
+*.exe   binary
+*.sys   binary
+*.dll   binary
+
+# Compiled Object files
+*.o     binary
+*.obj   binary
+
+# VC++ project files
+*.aps binary
+*.def text eol=crlf
+*.dsp text eol=crlf
+*.dsw text eol=crlf
+*.ncb binary
+*.opt binary
+*.rc  binary
+
+# Graphics
+*.ai              binary
+*.bmp             binary
+*.eps             binary
+*.gif             binary
+*.gifv            binary
+*.ico             binary
+*.jng             binary
+*.jp2             binary
+*.jpg             binary
+*.jpeg            binary
+*.jpx             binary
+*.jxr             binary
+*.pdf             binary
+*.png             binary
+*.psb             binary
+*.psd             binary
+# SVG treated as an asset (binary) by default.
+*.svg             text
+# If you want to treat it as binary,
+# use the following line instead.
+# *.svg           binary
+*.svgz            binary
+*.tif             binary
+*.tiff            binary
+*.wbmp            binary
+*.webp            binary
+
+

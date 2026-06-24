@@ -1,19 +1,23 @@
 Build Instructions
 
-1. Create a Windows 98se or 2000 VM in VMWare or Virtualbox
-	Real hardware will work too but this is easier
-2. Install Visual C++ 6.0 (No service packs) with all options
-3. Install Windows 2000 DDK with all options except Alpha code selected
-4. Copy the source tree to any folder under C:\NTDDK\src\wdm\audio\
-	I use C:\NTDDK\src\wdm\audio\hdac
+This project must be built with Visual C++ 6.0 in a 32-bit Windows environment. Use a Virtual Machine if needed
+The source tree MUST be checked out with CRLF line endings or the Visual Studio workspace and project files will break.
+
+1. Create a Windows 98se, 2000 or XP VM in VMWare or Virtualbox
+	Real hardware will work too if you have an older system with these OSes
+2. Install Visual C++ 6.0 Enterprise or Professional (No service packs) with all options
+3. Install the Windows 2000 DDK (Driver Development Kit). 
+	Include at least the Audio samples, General Driver samples and General WDM samples but you might as well install everything
+4. Copy the source tree to any folder under `C:\NTDDK\src\wdm\audio\`
+	I use `C:\NTDDK\src\wdm\audio\WDMHDA.git`
 5. Open a "Checked Build Environment" or "Free Build Environment" command prompt 
 	(Start > Programs > Development Kits > Windows 2000 DDK)
-	checked builds include debug prints and extra memory bounds checking.
-6. CD to the C:\NTDDK\src\wdm\audio directory and run "build -cZ"
-	this will build all the sample audio drivers because we need stdunk.cpp and the headers from them
-	After the first build, you can build in the subdirectory.
+	checked builds include debug prints, asserts and extra memory bounds checking.
+6. CD to the `C:\NTDDK\src\wdm\audio\` directory and run `build -cZ`
+	This will build all the sample audio drivers because this project needs stdunk and the headers from it (for the CUnknown class and IUnknown interface).
+	After the first build, you can build in the WDMHDA subdirectory.
 
-HDA.SYS will be built in the "objfre" or "objchk" folders. Install it with hda.inf
+HDA.SYS will be built in the `objfre\i386` or `objchk\i386` folders. Install it in Device Manager with hda.inf
 
 To set up a kernel debugger see https://bikodbg.com/blog/2021/08/win98-ddk/
 
@@ -24,7 +28,7 @@ File		Description
 ---------------------------
 
 Adapter.cpp	Connects the driver with the system
-Codec.cpp 	Object for each Codec on HDA link
+Codec.cpp 	Object for each Codec device on HDA link
 codec.h 	Codec object header
 Common.cpp	Common object used by all miniports, and HDA controller setup
 Common.h 	Header file for the common object

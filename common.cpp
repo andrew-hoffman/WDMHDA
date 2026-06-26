@@ -5,7 +5,7 @@
  * Released under MIT License
  * Code from BleskOS and Microsoft's driver samples used under MIT license. 
  *
- * Implmentation of the common code object.  This class deals with interrupts
+ * Implementation of the common code object.  This class deals with interrupts
  * for the device, and is a collection of common code used by all the
  * miniports.
  */
@@ -1028,12 +1028,17 @@ Init
 	ntStatus = InitHDAController ();
 
     if (!NT_SUCCESS (ntStatus)){
-		DbgPrint( "\nResetController Failed! 0x%X\n", ntStatus);
+		DbgPrint( "\nInit Controller Failed! 0x%X\n", ntStatus);
         return ntStatus;
 	} else {
-		DbgPrint( "\nResetController Succeeded! 0x%X\n", ntStatus);
+		DbgPrint( "\nInit Controller Succeeded! 0x%X\n", ntStatus);
 	}
-    
+
+	//
+    // Initialize the device power state.
+    //
+    m_PowerState = PowerDeviceD0;
+  
     //
     // Hook up the interrupt.
     //
@@ -2819,6 +2824,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_setup_stream_descriptor]"));
 
+	if( m_PowerState > PowerDeviceD1 ) {
+		DOUT (DBG_ERROR, ("Device in low power state D%d, not ok to touch it", m_PowerState));
+		return STATUS_POWER_STATE_INVALID;
+	}
+
 	//get the physical and virtual address pointers from the dma channel object
 	BufLogicalAddress = DmaChannel->PhysicalAddress();
 	BufVirtualAddress = DmaChannel->SystemAddress();
@@ -2827,19 +2837,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
-
-    //
-    // Initialize the device state.
-    //
-    m_PowerState = PowerDeviceD0;
-
-	DOUT(DBG_SYSINFO, ("reset streams"));
-
-	ntStatus = hda_stop_stream ();
-	if (!NT_SUCCESS (ntStatus)){
-        DOUT (DBG_ERROR, ("Can't reset stream"));
-        return ntStatus;
-    }
 	
 	//divide the buffer into <entries> chunks (buffer must be an integer multiple of chunk size)
 	

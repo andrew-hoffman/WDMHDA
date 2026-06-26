@@ -1151,7 +1151,11 @@ CMiniportWaveCyclicStreamHDA::
         {
             Miniport->Allocated8Bit = FALSE;
         }
-
+		
+		//stop hw stream before destruction
+		//probably unnecessary since hw stream should have been stopped
+		//when it entered Pause state
+		//but just to be sure
 		Miniport->AdapterCommon->hda_stop_stream();
 
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
@@ -1308,9 +1312,10 @@ SetFormat
 
             Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;   
 
-			Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
-
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
+			
+			//don't actually set the sample rate on the controller, this is done right when going into Run
+			//Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
         }
 
         KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
@@ -1412,7 +1417,7 @@ SetState
 
     PAGED_CODE();
 
-    _DbgPrintF(DEBUGLVL_VERBOSE,("CMiniportWaveCyclicStreamHDA[%p]::SetState(%d)", this, NewState));
+    _DbgPrintF(DEBUGLVL_TERSE,("CMiniportWaveCyclicStreamHDA[%p]::SetState(%d)", this, NewState));
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
@@ -1425,26 +1430,50 @@ SetState
         NewState = KSSTATE_PAUSE;
     }
 
-    if (State != NewState)
-    {
+    if (State != NewState) {
         switch (NewState)
         {
         case KSSTATE_PAUSE:
-            if (State == KSSTATE_RUN)
-            {
-                Miniport->AdapterCommon->hda_stop_sound();
+            if (State == KSSTATE_RUN) {
+				//stop DMA & destroy hw stream
+                Miniport->AdapterCommon->hda_stop_stream();
+            }
+			if (DmaChannel) {
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
             }
             break;
 
         case KSSTATE_RUN:
             {
+				// (Re)program the hw stream descriptor always here
+				// We only want the stream descriptor set up while it's
+				// actively playing.
+
+                // hda_stop_sound() only clears RUN and leaves the stream
+                // descriptor/LPIB state intact;
+				// if we pause the SD near the end of the cyclic buffer then
+				// resume with the hardware pointer near the end of the cyclic buffer
+				// the DMA engine can wrap into stale data before PortCls refills it,
+				// which presents as choppy or silent playback. 
+				// Recreating the descriptor every time avoids this.
+                
+				if (State == KSSTATE_PAUSE && DmaChannel) {
+                    ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+
+					Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
+
+                    if (!NT_SUCCESS(ntStatus)) {
+                        break;
+                    }
+                }
+				
                 // Start DMA.
 				Miniport->AdapterCommon->hda_start_sound();
             }
             break;
 
         case KSSTATE_STOP:
-			// fill buffer with silence
+			// nothing additional to do since the stream is stopped and cleared when entering Pause
             break;
         }
 

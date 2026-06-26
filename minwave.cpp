@@ -1434,10 +1434,30 @@ SetState
             {
                 Miniport->AdapterCommon->hda_stop_sound();
             }
+            if (DmaChannel)
+            {
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+            }
             break;
 
         case KSSTATE_RUN:
             {
+                // Reprogram the stream descriptor before resuming from pause.
+                // hda_stop_sound() only clears RUN and leaves the stream
+                // descriptor/LPIB state intact; resuming with the hardware
+                // pointer near the end of the cyclic buffer can let the DMA
+                // engine wrap into stale data before PortCls refills it, which
+                // presents as choppy or silent playback.  Recreating the
+                // descriptor mirrors the stop/start path that avoids this.
+                if (State == KSSTATE_PAUSE && DmaChannel)
+                {
+                    ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                    if (!NT_SUCCESS(ntStatus))
+                    {
+                        break;
+                    }
+                }
+
                 // Start DMA.
 				Miniport->AdapterCommon->hda_start_sound();
             }
@@ -1445,6 +1465,10 @@ SetState
 
         case KSSTATE_STOP:
 			// fill buffer with silence
+            if (DmaChannel)
+            {
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+            }
             break;
         }
 

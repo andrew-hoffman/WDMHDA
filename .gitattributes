@@ -1,14 +1,14 @@
 # Sources
-*.c     text diff=cpp eol=crlf
-*.cc    text diff=cpp eol=crlf
-*.cxx   text diff=cpp eol=crlf
-*.cpp   text diff=cpp eol=crlf
-*.cpi   text diff=cpp eol=crlf
-*.c++   text diff=cpp eol=crlf
-*.hpp   text diff=cpp eol=crlf
-*.h     text diff=cpp eol=crlf
-*.h++   text diff=cpp eol=crlf
-*.hh    text diff=cpp eol=crlf
+*.c     text diff=cpp
+*.cc    text diff=cpp
+*.cxx   text diff=cpp
+*.cpp   text diff=cpp
+*.cpi   text diff=cpp
+*.c++   text diff=cpp
+*.hpp   text diff=cpp
+*.h     text diff=cpp
+*.h++   text diff=cpp
+*.hh    text diff=cpp
 
 # Scripts
 *.bat text eol=crlf
@@ -25,7 +25,7 @@ sources text eol=crlf
 *.err text eol=crlf
 
 # Debug symbols
-*.map text eol=crlf
+*.map text
 *.mac text eol=crlf
 *.pdb binary
 *.res binary

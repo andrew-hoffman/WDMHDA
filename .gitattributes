@@ -1,3 +1,12 @@
+# 1. Default behavior for all text files:
+# Normalize to LF in the repo. On checkout, Git will automatically 
+# convert them to the OS native ending (CRLF on Windows, LF on Linux/Containers).
+* text=auto
+
+# 2. Source and documentation files:
+# Explicitly ensure these normalize to LF in the repo and match the OS on checkout.
+# This ensures AI tools see pure LF inside the Git database/containers.
+
 # Sources
 *.c     text diff=cpp
 *.cc    text diff=cpp
@@ -10,27 +19,6 @@
 *.h++   text diff=cpp
 *.hh    text diff=cpp
 
-# Scripts
-*.bat text eol=crlf
-
-# Config
-*.inf text eol=crlf
-*.ini text eol=crlf
-
-# Build
-makefile text eol=crlf
-sources text eol=crlf
-*.def text eol=crlf
-*.log text eol=crlf
-*.err text eol=crlf
-
-# Debug symbols
-*.map text
-*.mac text eol=crlf
-*.pdb binary
-*.res binary
-*.sym binary
-
 # Documentation
 *.txt           text
 *.md            text
@@ -38,6 +26,29 @@ License         text
 *.html          text diff=html
 *.htm           text diff=html
 *.html          text diff=html
+
+# Scripts
+*.bat text eol=crlf
+
+# Config
+*.inf text eol=crlf
+*.ini text eol=crlf
+
+# Build - All VC++ project files must always be CRLF
+# as well as build artifacts
+
+makefile text eol=crlf
+sources text eol=crlf
+*.def text eol=crlf
+*.log text eol=crlf
+*.err text eol=crlf
+
+# Debug symbols
+*.map text eol=crlf
+*.mac text eol=crlf
+*.pdb binary
+*.res binary
+*.sym binary
 
 # Executables
 *.exe   binary

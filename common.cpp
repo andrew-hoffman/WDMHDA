@@ -800,14 +800,19 @@ Init
 	} else {
         DOUT(DBG_SYSINFO, ("Virt Addr = 0x%X, Mem Length = 0x%X", m_pHDARegisters, memLength));
     }
+
 	Base = (PUCHAR)m_pHDARegisters;
 
-#if (DBG)
-	//try reading something from the mapped memory and see if it makes sense as hda registers
-	//for (i = 0; i < 16; i++) {
-	//	DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
-	//}
-#endif
+	
+	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
+
+	//check Version word, if this is anything other than 0100h bail out
+	if(readUSHORT(0x02) != 0x0100){
+		DOUT (DBG_ERROR, ("Invalid Version, HDA Registers are Garbage, giving up"));
+		return STATUS_NO_MEMORY;
+	}
+
+
 	//read capabilities
 	USHORT caps = readUSHORT(0x00);
 
@@ -815,8 +820,6 @@ Init
 	is64OK = caps & 1;
 
 	//TODO check that we have at least 1 output or bidirectional stream engine
-
-	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
 
 	//offsets for stream engines
 	InputStreamBase = (0x80);
@@ -1323,8 +1326,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	statests = readUSHORT(0x0E);
 	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
 
+	if(statests & 0x8000){
+		//clear statests if the top bit is set, idk what that could mean
+		writeUSHORT(0x0E, 0xffff);
+	}
+
 	//maybe skip controller reset if flag is set and there's
-	//already a codec in statests
+	//already codecs enumerated in statests
 
 	if ((statests != 0) && skipControllerReset) {
 		DOUT(DBG_SYSINFO, ("Skipping reset"));

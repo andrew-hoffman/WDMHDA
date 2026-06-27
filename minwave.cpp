@@ -1205,7 +1205,7 @@ Init
     FormatStereo    = (waveFormat->nChannels == 2);
     Format16Bit     = (waveFormat->wBitsPerSample == 16);
     State           = KSSTATE_STOP;
-
+	StreamDescriptorValid = FALSE;
     RestoreInputMixer = FALSE;
 
     KeWaitForSingleObject
@@ -1222,6 +1222,9 @@ Init
 	if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, set up the stream
 			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+			if (NT_SUCCESS(ntStatus)) {
+				StreamDescriptorValid = TRUE;
+			}
 	}
     
     SetFormat( DataFormat );
@@ -1422,7 +1425,7 @@ SetState
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
     //
-    // The acquire state is not distinguishable from the stop state for our
+    // The acquire state is not distinguishable from the pause state for our
     // purposes.
     //
     if (NewState == KSSTATE_ACQUIRE)
@@ -1435,45 +1438,79 @@ SetState
         {
         case KSSTATE_PAUSE:
             if (State == KSSTATE_RUN) {
-				//stop DMA & destroy hw stream
-                Miniport->AdapterCommon->hda_stop_stream();
-            }
-			if (DmaChannel) {
-                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
-            }
-            break;
 
-        case KSSTATE_RUN:
-            {
-				// (Re)program the hw stream descriptor always here
-				// We only want the stream descriptor set up while it's
-				// actively playing.
+				BOOLEAN recreateDescriptor = FALSE;
 
-                // hda_stop_sound() only clears RUN and leaves the stream
-                // descriptor/LPIB state intact;
-				// if we pause the SD near the end of the cyclic buffer then
-				// resume with the hardware pointer near the end of the cyclic buffer
-				// the DMA engine can wrap into stale data before PortCls refills it,
-				// which presents as choppy or silent playback. 
-				// Recreating the descriptor every time avoids this.
-                
-				if (State == KSSTATE_PAUSE && DmaChannel) {
-                    ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                if (DmaChannel) {
+                    ULONG bufferSize = DmaChannel->BufferSize();
+                    ULONG position = bufferSize ?
+                        (Miniport->AdapterCommon->hda_get_actual_stream_position() % bufferSize) :
+                        0;
 
-					Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
+                    // If playback pauses with the hardware pointer in the
+                    // final 20% of the cyclic buffer, reset the stream and
+                    // rebuild the descriptor now.  Doing this work while
+                    // entering Pause keeps the later transition back to Run
+                    // lightweight enough for short system sounds.
+                    recreateDescriptor = (!bufferSize ||
+                        (position >= (bufferSize - (bufferSize / 5))));
+                }
+
+                if (recreateDescriptor) {
+                    ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+                    StreamDescriptorValid = FALSE;
+
+                    if (NT_SUCCESS(ntStatus) && DmaChannel) {
+                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                        if (NT_SUCCESS(ntStatus)) {
+                            StreamDescriptorValid = TRUE;
+                        }
+                    }
 
                     if (!NT_SUCCESS(ntStatus)) {
                         break;
                     }
+                } else {
+                    // Stop DMA but keep the programmed descriptor when the
+                    // pointer is safely away from the buffer wrap point.
+                    Miniport->AdapterCommon->hda_stop_sound();
                 }
-				
+            } else if (DmaChannel && !StreamDescriptorValid) {
+                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                if (NT_SUCCESS(ntStatus)) {				
+                    StreamDescriptorValid = TRUE;					
+                } else {
+                    break;
+                }
+            }
+
+
+            break;
+
+        case KSSTATE_RUN:
+            {    
+				if (DmaChannel) {
+					Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
+				}
                 // Start DMA.
 				Miniport->AdapterCommon->hda_start_sound();
             }
             break;
 
         case KSSTATE_STOP:
-			// nothing additional to do since the stream is stopped and cleared when entering Pause
+			/*
+			if (StreamDescriptorValid) {
+                ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+                if (NT_SUCCESS(ntStatus)) {
+                    StreamDescriptorValid = FALSE;
+                }
+            }
+			*/
+
+			if (DmaChannel) {
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+            }
+
             break;
         }
 

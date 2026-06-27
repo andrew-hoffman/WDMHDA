@@ -1,0 +1,1 @@
+copy obj%BUILD_ALT_DIR%\i386\hda.sys c:\windows\system32\drivers

@@ -1444,7 +1444,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	
 	//wait for bit to change to 1 to indicate reset start
 
-	//note: VMWare never returns a 1 here and so uses PIO
+	//note: VMWare and Nforce chipsets
+	//never return a 1 here and so uses PIO
 	//Could skip this check for VEN_15AD
 	//but VMWare also doesn't work well in corb/rirb mode
 	//(choppy audio after skipping tracks)
@@ -1459,8 +1460,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		//fall back to PIO.
 		//still turn off the reset line
 		writeUSHORT(0x4A, 0x0000);
-		DOUT(DBG_ERROR, ("CORB Reset 1 timeout, Falling back to PIO"));
-		goto hda_use_pio_interface;
+		DOUT(DBG_ERROR, ("CORB Reset 1 timeout"));
+		//goto hda_use_pio_interface;
 	}
 
 	//then write a 0 and read back the 0 to verify a clear

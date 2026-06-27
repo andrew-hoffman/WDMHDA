@@ -119,6 +119,7 @@ private:
     BOOLEAN                     FormatStereo;   // Two or one channel.
     KSSTATE                     State;          // Stop, pause, run.
     PDMACHANNEL		            DmaChannel;     // DMA channel to use.
+	BOOLEAN                     StreamDescriptorValid; // Hardware stream descriptor is programmed.
     BOOLEAN                     RestoreInputMixer;  // Restore input mixer.
     UCHAR                       InputMixerLeft; // Cache for left input mixer.
 

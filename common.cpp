@@ -2564,9 +2564,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
     
-	//turn off IRQs for stream 1
-	
-	//stop output DMA engine
+	//for first output stream: turn off IOC IRQs, disable the Run bit
 	writeUCHAR(OutputStreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
 	while(ticks++ < 40) {
@@ -2622,8 +2620,11 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
     if (m_pPortWave) {
         // Tell it it needs to do some work.
         m_pPortWave->Notify(m_pServiceGroupWave);
-		//then start playing output stream 1. With interrupts
+		
+		//Stream tag #1, stream is an output
 		writeUCHAR(OutputStreamBase + 0x02, 0x14);
+
+		//start playing output stream 1 with BDL IOC interrupts
 		writeUCHAR(OutputStreamBase + 0x00, 0x06);
     } else {
 		DOUT (DBG_ERROR, ("Can't start playback with no wave port!"));
@@ -2846,7 +2847,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	//to be sure controller will read correct data.
 	//KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 
-	CacheLineFlush(BufVirtualAddress, audBufSize);
+	//CacheLineFlush(BufVirtualAddress, audBufSize);
 	CacheLineFlush(BdlBuffer.RawVirtualAddress, BdlBuffer.RawLength);
 
 	//set buffer registers
@@ -3075,17 +3076,8 @@ STDMETHODIMP_(void) CAdapterCommon::JackPollDpcRoutine(
 
     KeClearEvent(&self->JackPollWorkerIdleEvent);
 	
-	//This function is missing from Win98
-    /*
-	IoQueueWorkItem(
-        self->JackPollWorkItem,
-        CAdapterCommon::JackPollWorker,
-        DelayedWorkQueue,
-        self
-    );
-	*/
-
-
+	//IoQueueWorkItem is missing from Win98
+	//so we must use ExQueueWorkItem which isn't safe if the device unloads under it
 	ExQueueWorkItem(&self->JackPollWorkItem, DelayedWorkQueue);
 }
 

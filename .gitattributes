@@ -1,7 +1,6 @@
-# 1. Default behavior for all text files:
-# Normalize to LF in the repo. On checkout, Git will automatically 
-# convert them to the OS native ending (CRLF on Windows, LF on Linux/Containers).
-* text=auto
+# 1. Default fallback for all text files:
+# Forces GitHub ZIP downloads to use CRLF, and forces Windows checkouts to CRLF.
+* text=auto eol=crlf
 
 # 2. Source and documentation files:
 # Explicitly ensure these normalize to LF in the repo and match the OS on checkout.

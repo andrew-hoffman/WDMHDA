@@ -34,7 +34,7 @@
 //
 // DSP/DMA constants
 // 
-#define MAXLEN_DMA_BUFFER       0x40000
+#define MAXLEN_DMA_BUFFER       0x20000 //128kb
 
 
 //
@@ -138,7 +138,7 @@
 /* Defines for ATI HD Audio support in SB450 south bridge */
 #define ATI_SB450_HDAUDIO_MISC_CNTR2_ADDR 0x42
 //disable non-snoop on ALL transactions
-//see p.230 of AMD SB600 Register Reference Giude
+//see p.230 of AMD SB600 Register Reference Guide
 #define ATI_SB450_HDAUDIO_ENABLE_SNOOP 0x03 
 
 /* Defines for Nvidia HDA support */

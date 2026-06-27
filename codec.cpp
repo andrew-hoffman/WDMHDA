@@ -359,6 +359,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		//if it's not a PIN then what other type of node is it?
 		else if(type_of_node == HDA_WIDGET_POWER_WIDGET) {
 			DbgPrint( ("Power Widget"));
+			//try to power up the power widget
+			hda_send_verb(node, 0x705, 0x00);
 		} else if(type_of_node == HDA_WIDGET_VOLUME_KNOB) {
 			DbgPrint( ("Volume Knob"));
 		} else if(type_of_node == HDA_WIDGET_BEEP_GENERATOR) {
@@ -578,6 +580,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	else {
 		DOUT (DBG_PRINT, ("HDA CODEC ERROR: PIN 0x%x connects to invalid node 0x%x type 0x%x", 
 			pin_node_number, first_connected_node_number, type_of_first_connected_node));
+		return STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return ntStatus;
 }

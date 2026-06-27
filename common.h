@@ -215,15 +215,6 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      PSERVICEGROUP   ServiceGroup
     )   PURE;
 
-    STDMETHOD_(BYTE,ReadController)
-    (   THIS
-    )   PURE;
-
-    STDMETHOD_(BOOLEAN,WriteController)
-    (   THIS_
-        IN      BYTE    Value
-    )   PURE;
-
     STDMETHOD_(NTSTATUS,ResetController)
     (   THIS
     )   PURE;

@@ -290,13 +290,6 @@ public:
     (
         IN      PSERVICEGROUP   ServiceGroup
     );
-    STDMETHODIMP_(BYTE) ReadController
-    (   void
-    );
-    STDMETHODIMP_(BOOLEAN) WriteController
-    (
-        IN      BYTE    Value
-    );
     STDMETHODIMP_(NTSTATUS) ResetController
     (   void
     );
@@ -1968,47 +1961,6 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_send_verb(ULONG codec, ULONG node, ULON
 	}
 	//return response whatever it is. single point of exit
 	return response;
-}
-
-
-/*****************************************************************************
- * CAdapterCommon::ReadController()
- *****************************************************************************
- * Read a byte from the controller.
- * TODO: delete these entirely, nothing else uses them
- */
-STDMETHODIMP_(BYTE)
-CAdapterCommon::
-ReadController
-(   void
-)
-{
-	DOUT (DBG_PRINT, ("[CAdapterCommon::ReadController]"));
-    BYTE returnValue = BYTE(-1);
-
-    return returnValue;
-}
-
-
-/*****************************************************************************
- * CAdapterCommon::WriteController()
- *****************************************************************************
- * Write a byte to the controller.
- * TODO: remove from interface
- */
-STDMETHODIMP_(BOOLEAN)
-CAdapterCommon::
-WriteController
-(
-    IN      BYTE    Value
-)
-{
-	DOUT (DBG_PRINT, ("[CAdapterCommon::WriteController]"));\
-	DOUT (DBG_PRINT, ("trying to write %d", Value));
-
-	BYTE returnValue = BYTE(-1);
-
-    return returnValue;
 }
 
 /*****************************************************************************

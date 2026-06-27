@@ -330,8 +330,8 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(BOOLEAN)	hda_is_headphone_connected (void);
-	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
-	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch);
+	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
 	STDMETHODIMP_(void)		hda_start_sound (void);
 	STDMETHODIMP_(void)		hda_stop_sound (void);
 
@@ -1985,7 +1985,7 @@ MixerRegWrite
     if( m_PowerState <= PowerDeviceD1 ) {
 		if (index == 0 || index == 1) { //left or right channel respectively
 			DOUT (DBG_PRINT, ("set volume of %d to %d", index, Value));
-			hda_set_volume(Value, index + 1); //supposed to be 0-255 range
+			hda_set_volume(Value, index + 1, FALSE); //supposed to be 0-255 range
 		}
 #if (DBG)
 		if ((index == 20) && (debug_kludge == 1)){
@@ -2684,15 +2684,15 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
 
 // Note: hda_set_volume has been moved to HDA_Codec class
 // For backward compatibility, delegate to all codecs
-STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {
+STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
 	for (int i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
-			pCodecs[i]->hda_set_volume(volume, ch);
+			pCodecs[i]->hda_set_volume(volume, ch, mute);
 		}
 	}
 }
 
-STDMETHODIMP_(void) CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch) {
+STDMETHODIMP_(void) CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute) {
 	//ch bit 0: left channel bit 1: right channel
 	ch &= 3;
 	ULONG payload = ch << 12;
@@ -2705,12 +2705,10 @@ STDMETHODIMP_(void) CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, U
 		payload |= 0x4000;
 	}
 
-	//set number of gain
-	if(gain == 0 && (capabilities & 0x80000000) == 0x80000000) {
+	//set number of gain, preserving the codec mute bit separately
+	payload |= (((capabilities>>8) & 0x7F)*gain/256); //recalculate range
+	if(mute || (gain == 0 && (capabilities & 0x80000000) == 0x80000000)) {
 		payload |= 0x80; //mute
-	}
-	else {
-		payload |= (((capabilities>>8) & 0x7F)*gain/256); //recalculate range
 	}
 
 	//change gain

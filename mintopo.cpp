@@ -13,6 +13,9 @@
 #define CHAN_RIGHT      1
 #define CHAN_MASTER     (-1)
 
+static BOOL MasterMuteCache = FALSE;
+
+
 
 #pragma code_seg("PAGE")
 
@@ -237,6 +240,13 @@ GetDescription
     return STATUS_SUCCESS;
 }
 
+static
+BYTE
+VolumeLevelToMixerCount
+(
+    IN      LONG    Level
+);
+
 /*****************************************************************************
  * PropertyHandler_OnOff()
  *****************************************************************************
@@ -307,6 +317,16 @@ PropertyHandler_OnOff
                                 ntStatus = STATUS_SUCCESS;
                             }
                             break;
+
+                        case LINEOUT_MUTE:  // Master Lineout Mute Control (stereo)
+                            if( ( PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE ) &&
+                                ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) )
+                            {
+                                *OnOff = MasterMuteCache;
+                                PropertyRequest->ValueSize = sizeof(BOOL);
+                                ntStatus = STATUS_SUCCESS;
+                            }
+                            break;
                     }
                 }
             }
@@ -351,13 +371,58 @@ PropertyHandler_OnOff
                                 ntStatus = STATUS_SUCCESS;
                             }
                             break;
+
+                        case LINEOUT_MUTE:  // Master Lineout Mute Control (stereo)
+                            if( ( PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE ) &&
+                                ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) )
+                            {
+                                MasterMuteCache = *(PBOOL(PropertyRequest->Value));
+
+                                if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
+                                {
+                                    if (MasterMuteCache)
+                                    {
+                                        that->AdapterCommon->hda_set_volume(
+                                            that->AdapterCommon->MixerRegRead(DSP_MIX_MASTERVOLIDX_L),
+                                            1,
+                                            TRUE);
+                                    }
+                                    else
+                                    {
+                                        that->WriteBitsToMixer( DSP_MIX_MASTERVOLIDX_L,
+                                                          5,
+                                                          3,
+                                                          VolumeLevelToMixerCount(ControlValueCache[ AccessParams[LINEOUT_VOL].CacheOffset + CHAN_LEFT ]) );
+                                    }
+                                }
+                                if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
+                                {
+                                    if (MasterMuteCache)
+                                    {
+                                        that->AdapterCommon->hda_set_volume(
+                                            that->AdapterCommon->MixerRegRead(DSP_MIX_MASTERVOLIDX_R),
+                                            2,
+                                            TRUE);
+                                    }
+                                    else
+                                    {
+                                        that->WriteBitsToMixer( DSP_MIX_MASTERVOLIDX_R,
+                                                          5,
+                                                          3,
+                                                          VolumeLevelToMixerCount(ControlValueCache[ AccessParams[LINEOUT_VOL].CacheOffset + CHAN_RIGHT ]) );
+                                    }
+                                }
+                                ntStatus = STATUS_SUCCESS;
+                            }
+                            break;
                     }
                 }
             }
         } else if(PropertyRequest->Verb & KSPROPERTY_TYPE_BASICSUPPORT)
         {
             if ( ( (PropertyRequest->Node == MIC_AGC) && (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_AGC) ) ||
-                 ( (PropertyRequest->Node == MIC_LINEOUT_MUTE) && (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE) ) )
+                 ( (PropertyRequest->Node == MIC_LINEOUT_MUTE) && (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE) ) ||
+                 ( (PropertyRequest->Node == LINEOUT_MUTE) && (PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE) ) )
             {
                 if(PropertyRequest->ValueSize >= (sizeof(KSPROPERTY_DESCRIPTION)))
                 {
@@ -1031,6 +1096,25 @@ PropertyHandler_CpuResources
 
 #pragma code_seg()
 
+static
+BYTE
+VolumeLevelToMixerCount
+(
+    IN      LONG    Level
+)
+{
+    if(Level <= (-62 << 16))
+    {
+        return 0;
+    }
+    if(Level >= 0)
+    {
+        return 0x1F;
+    }
+
+    return BYTE((((Level >> 16) + 62) >> 1) & 0x1F);
+}
+
 /*****************************************************************************
  * PropertyHandler_Level()
  *****************************************************************************
@@ -1151,16 +1235,7 @@ PropertyHandler_Level
                                 if(PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_VOLUMELEVEL)
                                 {
                                     // convert the level to register bits
-                                    if(*Level <= (-62 << 16))
-                                    {
-                                        count = 0;
-                                    } else if(*Level >= 0)
-                                    {
-                                        count = 0x1F;
-                                    } else
-                                    {
-                                        count = (((*Level >> 16) + 62) >> 1) & 0x1F;
-                                    }
+                                    count = VolumeLevelToMixerCount(*Level);
 
                                     // set right channel if channel requested is right or master
                                     // and node is not mic volume (mono)
@@ -1170,10 +1245,13 @@ PropertyHandler_Level
                                         // cache the commanded control value
                                         ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
 
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
-                                                          5,
-                                                          3,
-                                                          BYTE(count) );
+                                        if( (PropertyRequest->Node != LINEOUT_VOL) || !MasterMuteCache )
+                                        {
+                                            that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
+                                                              5,
+                                                              3,
+                                                              BYTE(count) );
+                                        }
                                         ntStatus = STATUS_SUCCESS;
                                     }
                                     // set the left channel if channel requested is left or master
@@ -1182,10 +1260,13 @@ PropertyHandler_Level
                                         // cache the commanded control value
                                         ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
                                         
-                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
-                                                          5,
-                                                          3,
-                                                          BYTE(count) );
+                                        if( (PropertyRequest->Node != LINEOUT_VOL) || !MasterMuteCache )
+                                        {
+                                            that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                              5,
+                                                              3,
+                                                              BYTE(count) );
+                                        }
                                         ntStatus = STATUS_SUCCESS;
                                     }
                                 }

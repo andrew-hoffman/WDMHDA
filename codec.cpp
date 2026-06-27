@@ -556,7 +556,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(pin_node_number, 0xF00, 0x12);
-	hda_set_node_gain(pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250, 3);
+	hda_set_node_gain(pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250, 3, FALSE);
 	if(pin_output_amp_capabilities != 0) {
 		//we will control volume by PIN node
 		path.output_amp_node_number = pin_node_number;
@@ -616,7 +616,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 
 	//set maximum volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(output_node_number, 0xF00, 0x12);
-	hda_set_node_gain(output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250, 3);
+	hda_set_node_gain(output_node_number, HDA_OUTPUT_NODE, audio_output_amp_capabilities, 250, 3, FALSE);
 	if(audio_output_amp_capabilities != 0) {
 		//we will control volume by Audio Output node
 		path.output_amp_node_number = output_node_number;
@@ -677,7 +677,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 
 	//set maximal volume for Audio Mixer
 	ULONG audio_mixer_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x12);
-	hda_set_node_gain(audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 250, 3);
+	hda_set_node_gain(audio_mixer_node_number, HDA_OUTPUT_NODE, audio_mixer_amp_capabilities, 250, 3, FALSE);
 	if(audio_mixer_amp_capabilities != 0) {
 		//we will control volume by Audio Mixer node
 		path.output_amp_node_number = audio_mixer_node_number;
@@ -733,7 +733,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 
 	//set maximum volume for Audio Selector
 	ULONG audio_selector_amp_capabilities = hda_send_verb(audio_selector_node_number, 0xF00, 0x12);
-	hda_set_node_gain(audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250, 3);
+	hda_set_node_gain(audio_selector_node_number, HDA_OUTPUT_NODE, audio_selector_amp_capabilities, 250, 3, FALSE);
 	if(audio_selector_amp_capabilities != 0) {
 		//we will control volume by Audio Selector node
 		path.output_amp_node_number = audio_selector_node_number;
@@ -1105,7 +1105,7 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 }
 
 
-STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch) {
+STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
 
 	//go through list of output paths and set same volume on all of them
 	for (ULONG i = 0; i < out_paths.count; ++i){
@@ -1114,12 +1114,13 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch) {
 			HDA_OUTPUT_NODE, 
 			out_paths.paths[i].output_amp_node_capabilities, 
 			volume, 
-			ch
+			ch,
+			mute
 		);
 	}
 }
 
-STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch) {
+STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute) {
 	//ch bit 0: left channel bit 1: right channel
 	ch &= 3;
 	ULONG payload = ch << 12;
@@ -1132,12 +1133,10 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, UL
 		payload |= 0x4000;
 	}
 
-	//set number of gain
-	if(gain == 0 && (capabilities & 0x80000000) == 0x80000000) {
+	//set number of gain, preserving the codec mute bit separately
+	payload |= (((capabilities>>8) & 0x7F) * gain/256); //recalculate range
+	if(mute || (gain == 0 && (capabilities & 0x80000000) == 0x80000000)) {
 		payload |= 0x80; //mute
-	}
-	else {
-		payload |= (((capabilities>>8) & 0x7F) * gain/256); //recalculate range
 	}
 
 	//change gain

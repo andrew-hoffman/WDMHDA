@@ -2889,7 +2889,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
     return ntStatus;
 }
 
-STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
+inline STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
  USHORT data_format = 0;
 
  //channels
@@ -3095,7 +3095,9 @@ STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PVOID Context)
     CAdapterCommon* self = (CAdapterCommon*)Context;
 
     if (!self->JackPollingStopping) {
+		if( self->m_PowerState <= PowerDeviceD1 ) {
         self->hda_check_headphone_connection_change();
+		}
     }
 
     InterlockedExchange(&self->JackPollWorkQueued, 0);

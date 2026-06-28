@@ -330,8 +330,7 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(BOOLEAN)	hda_is_headphone_connected (void);
-	STDMETHODIMP_(void)		hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
-	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch);
+	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
 	STDMETHODIMP_(void)		hda_start_sound (void);
 	STDMETHODIMP_(void)		hda_stop_sound (void);
 
@@ -1827,8 +1826,7 @@ Exit:
 //everything above this must have PAGED_CODE ();
 #pragma code_seg() 
 
-// Note: hda_check_headphone_connection_change has been moved to HDA_Codec class
-// For backward compatibility, delegate to all codecs
+// Check headphone connection status for all codecs
 STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) {
 	//TODO: schedule as a periodic task DPC
 	//and make sure to clean up correctly on driver unload!
@@ -1840,8 +1838,7 @@ STDMETHODIMP_(void) CAdapterCommon::hda_check_headphone_connection_change(void) 
 }
 
 
-// Note: This function has been moved to HDA_Codec class
-// For backward compatibility, check all codecs - only return TRUE if ALL support it
+// Check if (all) codecs support the requested sample rate
 STDMETHODIMP_(UCHAR) CAdapterCommon::hda_is_supported_sample_rate(ULONG sample_rate) {
 	if (codecCount == 0) {
 		return FALSE;
@@ -1992,8 +1989,10 @@ MixerRegWrite
     // only hit the hardware if we're in an acceptable power state
     if( m_PowerState <= PowerDeviceD1 ) {
 		if (index == 0 || index == 1) { //left or right channel respectively
-			DOUT (DBG_PRINT, ("set volume of %d to %d", index, Value));
-			hda_set_volume(Value, index + 1); //supposed to be 0-255 range
+			DOUT (DBG_PRINT, ("Set volume of %d to 0x%x", index, Value));
+			//volume values for the master channels are 5-bit (<< by 3)
+			//and mute in the LSB
+			hda_set_volume(Value & 0xF8, index + 1, Value & 1);
 		}
 #if (DBG)
 		if ((index == 20) && (debug_kludge == 1)){
@@ -2690,41 +2689,14 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
 	}
 }
 
-// Note: hda_set_volume has been moved to HDA_Codec class
-// For backward compatibility, delegate to all codecs
-STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch) {
+// Set volume & mute for all audio codecs
+STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
 	for (int i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
-			pCodecs[i]->hda_set_volume(volume, ch);
+			pCodecs[i]->hda_set_volume(volume, ch, mute);
 		}
 	}
 }
-
-STDMETHODIMP_(void) CAdapterCommon::hda_set_node_gain(ULONG codec, ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch) {
-	//ch bit 0: left channel bit 1: right channel
-	ch &= 3;
-	ULONG payload = ch << 12;
-
-	//set type of node
-	if((node_type & HDA_OUTPUT_NODE) == HDA_OUTPUT_NODE) {
-		payload |= 0x8000;
-	}
-	if((node_type & HDA_INPUT_NODE) == HDA_INPUT_NODE) {
-		payload |= 0x4000;
-	}
-
-	//set number of gain
-	if(gain == 0 && (capabilities & 0x80000000) == 0x80000000) {
-		payload |= 0x80; //mute
-	}
-	else {
-		payload |= (((capabilities>>8) & 0x7F)*gain/256); //recalculate range
-	}
-
-	//change gain
-	hda_send_verb(codec, node, 0x300, payload);
-}
-
 
 //HDA controller register read and write functions
 

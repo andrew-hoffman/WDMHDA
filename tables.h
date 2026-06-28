@@ -502,6 +502,14 @@ PCNODE_DESCRIPTOR TopologyNodes[] =
         &KSAUDFNAME_MASTER_VOLUME // Name
     },
 
+    // LINEOUT_MUTE
+    {
+        0,                      // Flags
+        &AutomationMute,        // AutomationTable
+        &KSNODETYPE_MUTE,       // Type
+        &KSAUDFNAME_MASTER_MUTE // Name
+    },
+
     // LINEOUT_BASS
     {
         0,                      // Flags
@@ -596,6 +604,7 @@ ACCESS_PARM AccessParams[] =
 
     { 0,                            ULONG(-1)   },      // LINEOUT_MIX
     { DSP_MIX_MASTERVOLIDX_L,       10          },      // LINEOUT_VOL
+    { 0,                            ULONG(-1)   },      // LINEOUT_MUTE
     { DSP_MIX_BASSIDX_L,            12          },      // LINEOUT_BASS
     { DSP_MIX_TREBLEIDX_L,          14          },      // LINEOUT_TREBLE
     { DSP_MIX_OUTGAINIDX_L,         16          },      // LINEOUT_GAIN
@@ -621,6 +630,7 @@ enum
     MIC_WAVEIN_SUPERMIX,
     LINEOUT_MIX,
     LINEOUT_VOL,
+    LINEOUT_MUTE,
     LINEOUT_BASS,
     LINEOUT_TREBLE,
     LINEOUT_GAIN,
@@ -688,7 +698,8 @@ PCCONNECTION_DESCRIPTOR MiniportConnections[] =
     {   MIC_WAVEIN_SUPERMIX,    0,                WAVEIN_MIX,             4             },
 
     {   LINEOUT_MIX,            0,                LINEOUT_VOL,            1             },
-    {   LINEOUT_VOL,            0,                LINEOUT_BASS,           1             },
+    {   LINEOUT_VOL,            0,                LINEOUT_MUTE,           1             },
+    {   LINEOUT_MUTE,           0,                LINEOUT_BASS,           1             },
     {   LINEOUT_BASS,           0,                LINEOUT_TREBLE,         1             },
     {   LINEOUT_TREBLE,         0,                LINEOUT_GAIN,           1             },
     {   LINEOUT_GAIN,           0,                PCFILTER_NODE,          LINEOUT_DEST  },

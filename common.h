@@ -255,6 +255,13 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      BYTE    Index,
         IN      BYTE    Value
     )   PURE;
+
+    STDMETHOD_(void,hda_set_volume)
+    (   THIS_
+        IN      ULONG   Volume,
+        IN      UCHAR   Channel,
+        IN      BOOLEAN Mute
+    )   PURE;
     
     STDMETHOD_(BYTE,MixerRegRead)
     (   THIS_

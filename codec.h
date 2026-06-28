@@ -187,8 +187,8 @@ public:
 	STDMETHODIMP_(void) hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(BOOLEAN) hda_is_headphone_connected(void);
-	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch);
-	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch);
+	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
 
 	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);

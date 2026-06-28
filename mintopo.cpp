@@ -377,41 +377,19 @@ PropertyHandler_OnOff
                                 ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) )
                             {
                                 MasterMuteCache = *(PBOOL(PropertyRequest->Value));
-
-                                if ( (channel == CHAN_LEFT) || (channel == CHAN_MASTER) )
-                                {
-                                    if (MasterMuteCache)
-                                    {
-                                        that->AdapterCommon->hda_set_volume(
-                                            that->AdapterCommon->MixerRegRead(DSP_MIX_MASTERVOLIDX_L),
-                                            1,
-                                            TRUE);
-                                    }
-                                    else
-                                    {
-                                        that->WriteBitsToMixer( DSP_MIX_MASTERVOLIDX_L,
-                                                          5,
-                                                          3,
-                                                          VolumeLevelToMixerCount(ControlValueCache[ AccessParams[LINEOUT_VOL].CacheOffset + CHAN_LEFT ]) );
-                                    }
-                                }
-                                if ( (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) )
-                                {
-                                    if (MasterMuteCache)
-                                    {
-                                        that->AdapterCommon->hda_set_volume(
-                                            that->AdapterCommon->MixerRegRead(DSP_MIX_MASTERVOLIDX_R),
-                                            2,
-                                            TRUE);
-                                    }
-                                    else
-                                    {
-                                        that->WriteBitsToMixer( DSP_MIX_MASTERVOLIDX_R,
-                                                          5,
-                                                          3,
-                                                          VolumeLevelToMixerCount(ControlValueCache[ AccessParams[LINEOUT_VOL].CacheOffset + CHAN_RIGHT ]) );
-                                    }
-                                }
+									
+								//mute bit is the LSB of the Master Volume L & R mixer registers
+								//always set both
+								that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
+                                                              1,
+                                                              0,
+                                                              MasterMuteCache ? 1 : 0 );
+															  
+								that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                              1,
+                                                              0,
+                                                              MasterMuteCache ? 1 : 0 );
+                                
                                 ntStatus = STATUS_SUCCESS;
                             }
                             break;
@@ -1245,13 +1223,10 @@ PropertyHandler_Level
                                         // cache the commanded control value
                                         ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_RIGHT ] = *Level;
 
-                                        if( (PropertyRequest->Node != LINEOUT_VOL) || !MasterMuteCache )
-                                        {
-                                            that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
                                                               5,
                                                               3,
                                                               BYTE(count) );
-                                        }
                                         ntStatus = STATUS_SUCCESS;
                                     }
                                     // set the left channel if channel requested is left or master
@@ -1260,13 +1235,10 @@ PropertyHandler_Level
                                         // cache the commanded control value
                                         ControlValueCache[ AccessParams[PropertyRequest->Node].CacheOffset + CHAN_LEFT ] = *Level;
                                         
-                                        if( (PropertyRequest->Node != LINEOUT_VOL) || !MasterMuteCache )
-                                        {
-                                            that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                        that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
                                                               5,
                                                               3,
                                                               BYTE(count) );
-                                        }
                                         ntStatus = STATUS_SUCCESS;
                                     }
                                 }

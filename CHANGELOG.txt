@@ -1,3 +1,12 @@
+#WDMHDA Alpha-022 2026-07-11
+
+## Changes:
+- Fix choppy playback/silence if stream is paused and resumed near the end of the audio buffer
+- add Mute for the main output (doesn't work on all codecs yet)
+- Fix CORB/RIRB on NForce chipsets
+- Send a power-up command to all Power Widgets on the codec just in case that is needed.
+- Reduced max audio buffer size to 128k again, too much buffer can cause significant lag
+
 ## WDMHDA Alpha-021 2026-06-15
 - Fixed codec communication by PIO on NForce chipsets
 - When using PIO, tries the listed codecs first before probing all slots blindly

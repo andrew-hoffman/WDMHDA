@@ -420,6 +420,7 @@ static BOOLEAN useAltOut;
 static BOOLEAN useSPDIF;
 static BOOLEAN useDisabledPins;
 static BOOLEAN useDmaPos;
+static BOOLEAN forcePioMode;
 
 static REG_BOOL_SETTING g_BooleanSettings[] =
 {
@@ -429,6 +430,7 @@ static REG_BOOL_SETTING g_BooleanSettings[] =
     { L"UseSPDIF",            &useSPDIF,            TRUE  },
     { L"UseDisabledPins",     &useDisabledPins,     FALSE },
     { L"UseDmaPos",           &useDmaPos,           FALSE },
+	{ L"ForcePioMode",        &forcePioMode,        FALSE },
 };
 
 
@@ -585,6 +587,8 @@ Init
 	switch (pci_ven){
 		case 0x15AD: //VMWare
 			DbgPrint( "VMWare\n");
+			//force PIO mode because VMWare works better like this
+			forcePioMode = true;
 			break;
 		case 0x1002: //ATI
 		case 0x1022: //AMD
@@ -689,6 +693,7 @@ Init
 				case 0x5a98:
 				case 0x1a98:
 				case 0x3198:
+				case 0x7a50: //Raptor Lake
 
 				//HDMI
 				case 0x0a0c: 
@@ -703,6 +708,9 @@ Init
 				case 0x0f04:
 				case 0x2284:
 
+				//just in case
+				default:
+
 					DbgPrint( "Intel PCH/SCH/SKL/HDMI\n");
 					//disable no-snoop transaction feature (clear bit 11) if it is set
 					tmp = *((PUSHORT)(pConfigMem + INTEL_SCH_HDA_DEVC));
@@ -714,8 +722,6 @@ Init
 						DbgPrint( "0x%X - snoop already ok\n", tmp);
 					}
 					break;
-				default:
-					DbgPrint( "Unknown intel chipset PID %X\n", pci_dev);
 
 			}
 			break;
@@ -799,19 +805,14 @@ Init
 	} else {
         DOUT(DBG_SYSINFO, ("Virt Addr = 0x%X, Mem Length = 0x%X", m_pHDARegisters, memLength));
     }
-
 	Base = (PUCHAR)m_pHDARegisters;
 
-	
-	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
-
-	//check Version word, if this is anything other than 0100h bail out
-	if(readUSHORT(0x02) != 0x0100){
-		DOUT (DBG_ERROR, ("Invalid Version, HDA Registers are Garbage, giving up"));
-		return STATUS_NO_MEMORY;
-	}
-
-
+#if (DBG)
+	//try reading something from the mapped memory and see if it makes sense as hda registers
+	//for (i = 0; i < 16; i++) {
+	//	DOUT(DBG_SYSINFO, ("Reg %d 0x%X", i, ((PUCHAR)m_pHDARegisters)[i]  ));
+	//}
+#endif
 	//read capabilities
 	USHORT caps = readUSHORT(0x00);
 
@@ -819,6 +820,8 @@ Init
 	is64OK = caps & 1;
 
 	//TODO check that we have at least 1 output or bidirectional stream engine
+
+	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
 
 	//offsets for stream engines
 	InputStreamBase = (0x80);
@@ -1325,13 +1328,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	statests = readUSHORT(0x0E);
 	DOUT(DBG_SYSINFO, ("STATESTS = %X", statests ));
 
-	if(statests & 0x8000){
-		//clear statests if the top bit is set, idk what that could mean
-		writeUSHORT(0x0E, 0xffff);
-	}
-
 	//maybe skip controller reset if flag is set and there's
-	//already codecs enumerated in statests
+	//already a codec in statests
 
 	if ((statests != 0) && skipControllerReset) {
 		DOUT(DBG_SYSINFO, ("Skipping reset"));
@@ -1408,6 +1406,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//this may read zero and will have to search blind
 	//also other codecs can show up later with docking.
 	//would need to enable WAKEEN interrupts (register 0x0C) to handle later additions
+
+	if (forcePioMode){
+		goto hda_use_pio_interface;
+	}
  
 	//Setup CORB:
 
@@ -1452,10 +1454,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//wait for bit to change to 1 to indicate reset start
 
 	//note: VMWare and Nforce chipsets
-	//never return a 1 here and so uses PIO
-	//Could skip this check for VEN_15AD
-	//but VMWare also doesn't work well in corb/rirb mode
-	//(choppy audio after skipping tracks)
+	//never return a 1 here
+	//VMWare is forced to PIO by the vendor ID.
 
 	for (timeout = 10000; timeout > 0; timeout--) {
 		KeStallExecutionProcessor(1);
@@ -1464,10 +1464,10 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 	}
 	if (timeout <= 0) {
-		//fall back to PIO.
 		//still turn off the reset line
 		writeUSHORT(0x4A, 0x0000);
 		DOUT(DBG_ERROR, ("CORB Reset 1 timeout"));
+		//don't fall back to PIO.
 		//goto hda_use_pio_interface;
 	}
 
@@ -3067,9 +3067,7 @@ STDMETHODIMP_(void) CAdapterCommon::JackPollWorker(PVOID Context)
     CAdapterCommon* self = (CAdapterCommon*)Context;
 
     if (!self->JackPollingStopping) {
-		if( self->m_PowerState <= PowerDeviceD1 ) {
         self->hda_check_headphone_connection_change();
-		}
     }
 
     InterlockedExchange(&self->JackPollWorkQueued, 0);

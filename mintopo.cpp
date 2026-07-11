@@ -321,8 +321,11 @@ PropertyHandler_OnOff
                         case LINEOUT_MUTE:  // Master Lineout Mute Control (stereo)
                             if( ( PropertyRequest->PropertyItem->Id == KSPROPERTY_AUDIO_MUTE ) &&
                                 ( (channel == CHAN_LEFT) || (channel == CHAN_RIGHT) || (channel == CHAN_MASTER) ) )
-                            {
-                                *OnOff = MasterMuteCache;
+                            {	
+								MasterMuteCache = that->ReadBitsFromMixer( AccessParams[PropertyRequest->Node].BaseRegister,
+                                                          1,
+                                                          0 );
+                                *OnOff = MasterMuteCache ? TRUE : FALSE;
                                 PropertyRequest->ValueSize = sizeof(BOOL);
                                 ntStatus = STATUS_SUCCESS;
                             }
@@ -378,13 +381,14 @@ PropertyHandler_OnOff
                             {
                                 MasterMuteCache = *(PBOOL(PropertyRequest->Value));
 									
-								//mute bit is the LSB of the Master Volume L & R mixer registers
-								//always set both
+									//mute bit is now the LSB of the Master Volume L & R registers
+									//TODO do it here
 								that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister+1,
                                                               1,
                                                               0,
                                                               MasterMuteCache ? 1 : 0 );
-															  
+
+									//AND here
 								that->WriteBitsToMixer( AccessParams[PropertyRequest->Node].BaseRegister,
                                                               1,
                                                               0,

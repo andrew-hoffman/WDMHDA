@@ -11,7 +11,7 @@ Signature="$CHICAGO$"
 Class=MEDIA
 ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
 provider=%MSFT%
-DriverVer=6/15/2026,5.00.2195.21
+DriverVer=7/11/2026,5.00.2195.22
 
 [SourceDisksNames]
 222=%DiskDescription%,,,

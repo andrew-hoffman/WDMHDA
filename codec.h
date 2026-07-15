@@ -149,6 +149,7 @@ private:
 
     ULONG pin_output_node_number;
     ULONG headphone_node_number;
+	ULONG dock_lineout_node_number;
 	
 	LONG HpPollingEnabled;
     LONG InShutdown;
@@ -166,6 +167,7 @@ private:
     ULONG ReadCoef(USHORT idx);
     void WriteCoef(USHORT idx, USHORT val);
     void ApplyAlc292HeadphoneMode();
+	BOOLEAN IsDockLineoutPresent();
     void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
     //void ApplyEeeInit();
     //void ForcePlaybackChain();

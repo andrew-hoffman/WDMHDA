@@ -578,6 +578,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	path.audio_output_node_stream_format_capabilities = 0;
 	path.output_amp_node_number = 0;
 	path.output_amp_node_capabilities = 0;
+	path.mute_amp_node_number = 0;
+	path.mute_amp_node_capabilities = 0;
 	
 	if (!isRealtek){
 		//turn on power for PIN First
@@ -615,6 +617,12 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 		//we will control volume by PIN node
 		path.output_amp_node_number = pin_node_number;
 		path.output_amp_node_capabilities = pin_output_amp_capabilities;
+	}
+	if((pin_output_amp_capabilities & 0x80000000UL) != 0) {
+		//Keep the first amp nearest the physical output that supports mute.
+		//A codec may use a different upstream amp for volume control.
+		path.mute_amp_node_number = pin_node_number;
+		path.mute_amp_node_capabilities = pin_output_amp_capabilities;
 	}
 
 	//start enabling path of nodes backwards from the output pin
@@ -688,6 +696,11 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 		path.output_amp_node_number = output_node_number;
 		path.output_amp_node_capabilities = audio_output_amp_capabilities;
 	}
+	if(path.mute_amp_node_number == 0 &&
+		(audio_output_amp_capabilities & 0x80000000UL) != 0) {
+		path.mute_amp_node_number = output_node_number;
+		path.mute_amp_node_capabilities = audio_output_amp_capabilities;
+	}
 
 	//read info, if something is not present, take it from AFG node
 	ULONG audio_output_sample_capabilities = hda_send_verb(output_node_number, 0xF00, 0x0A);
@@ -708,6 +721,11 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 		//if nodes in path do not have output amp capabilities, volume will be controlled by Audio Output node with capabilities taken from AFG node
 		path.output_amp_node_number = output_node_number;
 		path.output_amp_node_capabilities = afg_node_output_amp_capabilities;
+	}
+	if(path.mute_amp_node_number == 0 &&
+		(afg_node_output_amp_capabilities & 0x80000000UL) != 0) {
+		path.mute_amp_node_number = output_node_number;
+		path.mute_amp_node_capabilities = afg_node_output_amp_capabilities;
 	}
 
 	//because we are at end of node path, log all gathered info
@@ -748,6 +766,11 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 		//we will control volume by Audio Mixer node
 		path.output_amp_node_number = audio_mixer_node_number;
 		path.output_amp_node_capabilities = audio_mixer_amp_capabilities;
+	}
+	if(path.mute_amp_node_number == 0 &&
+		(audio_mixer_amp_capabilities & 0x80000000UL) != 0) {
+		path.mute_amp_node_number = audio_mixer_node_number;
+		path.mute_amp_node_capabilities = audio_mixer_amp_capabilities;
 	}
 
 	// The M4800 output mixers reset with input amp 0 muted.
@@ -813,6 +836,11 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 		//we will control volume by Audio Selector node
 		path.output_amp_node_number = audio_selector_node_number;
 		path.output_amp_node_capabilities = audio_selector_amp_capabilities;
+	}
+	if(path.mute_amp_node_number == 0 &&
+		(audio_selector_amp_capabilities & 0x80000000UL) != 0) {
+		path.mute_amp_node_number = audio_selector_node_number;
+		path.mute_amp_node_capabilities = audio_selector_amp_capabilities;
 	}
 	
 	//continue in path
@@ -1249,16 +1277,30 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 
 STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
 
-	//go through list of output paths and set same volume on all of them
+	//Set volume on the selected gain amp and mute on a separate mute-capable
+	//amp when the codec path uses different widgets for those controls.
 	for (ULONG i = 0; i < out_paths.count; ++i){
-		hda_set_node_gain( 
-			out_paths.paths[i].output_amp_node_number, 
-			HDA_OUTPUT_NODE, 
-			out_paths.paths[i].output_amp_node_capabilities, 
-			volume, 
+		HDA_NODE_PATH& path = out_paths.paths[i];
+		hda_set_node_gain(
+			path.output_amp_node_number,
+			HDA_OUTPUT_NODE,
+			path.output_amp_node_capabilities,
+			volume,
 			ch,
 			mute
 		);
+
+		if(path.mute_amp_node_number != 0 &&
+			path.mute_amp_node_number != path.output_amp_node_number) {
+			hda_set_node_gain(
+				path.mute_amp_node_number,
+				HDA_OUTPUT_NODE,
+				path.mute_amp_node_capabilities,
+				250,
+				ch,
+				mute
+			);
+		}
 	}
 }
 

@@ -30,6 +30,8 @@ typedef struct
     ULONG audio_output_node_stream_format_capabilities;
     ULONG output_amp_node_number;
     ULONG output_amp_node_capabilities;
+    ULONG mute_amp_node_number;
+    ULONG mute_amp_node_capabilities;
 } HDA_NODE_PATH, *PHDA_NODE_PATH;
 
 typedef struct _HDA_OUTPUT_LIST {

@@ -14,6 +14,29 @@
 #define STR_MODULENAME "HDA_Codec: "
 
 #define hda_log DbgPrint
+#define REALTEK_COEF_NODE 0x20
+
+typedef struct _HDA_CODEC_QUIRK_ENTRY {
+	ULONG codec_id;
+	ULONG subsystem_id;
+	ULONG quirks;
+} HDA_CODEC_QUIRK_ENTRY;
+
+static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
+{
+	static const HDA_CODEC_QUIRK_ENTRY quirk_table[] = {
+		{ 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800 },
+		{ 0, 0, 0 }
+	};
+
+	for (ULONG i = 0; quirk_table[i].codec_id != 0; ++i) {
+		if (quirk_table[i].codec_id == codec_id &&
+			quirk_table[i].subsystem_id == subsystem_id)
+			return quirk_table[i].quirks;
+	}
+
+	return 0;
+}
 
 /*****************************************************************************
  * HDA_Codec::HDA_Codec()
@@ -26,6 +49,8 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       useSpdif(spdif),
       useAltOut(altOut),
       codec_id(0),
+	  codec_subsystem_id(0),
+	  codec_quirks(0),
 	  codec_ven(0),
 	  codec_dev(0),
 	  isRealtek(FALSE),
@@ -35,7 +60,8 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
       afg_node_stream_format_capabilities(0),
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
-	  prev_data_format(0)
+	  prev_data_format(0),
+	  dock_lineout_node_number(0)
 {
 
 }
@@ -125,6 +151,20 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	//enable power for AFG
 	hda_send_verb(afg_node_number, 0x705, 0x00);
 
+	codec_subsystem_id = hda_send_verb(afg_node_number, VERB_GET_SUBSYSTEM_ID, 0x00);
+	codec_quirks = hda_lookup_codec_quirks(codec_id, codec_subsystem_id);
+	DOUT (DBG_SYSINFO, ("Codec subsystem ID: 0x%08x", codec_subsystem_id));
+	DOUT (DBG_SYSINFO, ("Codec quirks: 0x%08x", codec_quirks));
+
+	if (codec_id == 0x10EC0292) {
+		// Linux leaves EAPD under standard verb control on all ALC292 codecs.
+		ULONG coef4 = ReadCoef(0x04);
+		WriteCoef(0x04, (USHORT)(coef4 & ~0x8000));
+	}
+
+	if (codec_quirks & HDA_QUIRK_ALC292_DELL_M4800)
+		ApplyAlc292HeadphoneMode();
+
 	//read available info
 	afg_node_sample_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x0A);
 	afg_node_stream_format_capabilities = hda_send_verb(afg_node_number, 0xF00, 0x0B);
@@ -146,6 +186,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
+	dock_lineout_node_number = 0;
 
 	//For all nodes in this AFG
 	//very simple one-shot topology parser, inits as it goes
@@ -244,6 +285,12 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 			if(pin_node_type == HDA_PIN_LINE_OUT) {
 				DbgPrint( ("Line Out"));
+
+				if ((codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) &&
+					node == 0x16 && pin_config == 0x01014020) {
+					dock_lineout_node_number = node;
+					DbgPrint( (" (dock)"));
+				}
 	
 				//try to init ALL line-outs now, not worrying about jack detect yet
 				hda_initialize_output_pin(node, path); //initialize line out
@@ -549,8 +596,15 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 		hda_send_verb(pin_node_number, 0x705, 0x00);
 	}
 
-	//enable PIN amp, output buffers
-	hda_send_verb(pin_node_number, 0x707, (hda_send_verb(pin_node_number, 0xF07, 0x00) | 0x80 | 0x40));
+	//enable PIN amp and output buffers; the dock is a line out, not a headphone pin
+	ULONG pin_control = hda_send_verb(pin_node_number, VERB_GET_PIN_WIDGET_CONTROL, 0x00);
+	if ((codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) &&
+		pin_node_number == dock_lineout_node_number) {
+		pin_control = (pin_control & ~0x80) | PINCTL_OUT_EN;
+	} else {
+		pin_control |= 0x80 | PINCTL_OUT_EN;
+	}
+	hda_send_verb(pin_node_number, VERB_SET_PIN_WIDGET_CONTROL, pin_control);
 	//enable EAPD. do not enable L-R swap, the channel order is correct
 	hda_send_verb(pin_node_number, 0x70C, 0x0002);
 
@@ -565,8 +619,20 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 
 	//start enabling path of nodes backwards from the output pin
 	length_of_node_path = 0;
-	hda_send_verb(pin_node_number, 0x701, 0x00); //select first node
-	ULONG first_connected_node_number = hda_get_node_connection_entries(pin_node_number, 0); //get first node number
+	ULONG connection_index = 0;
+
+	// Dell Precision M4800: ALC292/ALC3226 headphone pin 0x15 must use
+	// its second connection (0x0d -> DAC 0x03). The first is the speaker path.
+	if ((codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) &&
+		path.path_type == HDA_PIN_HEADPHONE_OUT &&
+		pin_node_number == 0x15 &&
+		hda_get_node_connection_entries(pin_node_number, 0) == 0x0c &&
+		hda_get_node_connection_entries(pin_node_number, 1) == 0x0d) {
+		connection_index = 1;
+	}
+
+	hda_send_verb(pin_node_number, 0x701, connection_index);
+	ULONG first_connected_node_number = hda_get_node_connection_entries(pin_node_number, connection_index);
 	ULONG type_of_first_connected_node = hda_get_node_type(first_connected_node_number); //get type of first node
 	if(type_of_first_connected_node==HDA_WIDGET_AUDIO_OUTPUT) {
 		hda_initialize_audio_output(first_connected_node_number, path);
@@ -682,6 +748,15 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 		//we will control volume by Audio Mixer node
 		path.output_amp_node_number = audio_mixer_node_number;
 		path.output_amp_node_capabilities = audio_mixer_amp_capabilities;
+	}
+
+	// The M4800 output mixers reset with input amp 0 muted.
+	if (codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) {
+		ULONG input_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x0D);
+		if (input_amp_capabilities != 0) {
+			hda_set_node_gain(audio_mixer_node_number, HDA_INPUT_NODE,
+				input_amp_capabilities, 250, 3, FALSE);
+		}
 	}
 
 	//continue in path
@@ -987,9 +1062,30 @@ void HDA_Codec::ForceConnSel(ULONG nid, UCHAR sel)
 
 //DEADCODE removed WakeSpeakerPath
 
-//DEADCODE removed ReadCoef
+ULONG HDA_Codec::ReadCoef(USHORT idx)
+{
+	hda_send_verb(REALTEK_COEF_NODE, VERB_SET_COEF_INDEX, idx);
+	return hda_send_verb(REALTEK_COEF_NODE, VERB_GET_PROC_COEF, 0);
+}
 
-//DEADCODE removed WriteCoef
+void HDA_Codec::WriteCoef(USHORT idx, USHORT val)
+{
+	hda_send_verb(REALTEK_COEF_NODE, VERB_SET_COEF_INDEX, idx);
+	hda_send_verb(REALTEK_COEF_NODE, VERB_SET_PROC_COEF, val);
+}
+
+void HDA_Codec::ApplyAlc292HeadphoneMode()
+{
+	if (!(codec_quirks & HDA_QUIRK_ALC292_DELL_M4800))
+		return;
+
+	// Realtek ALC292 normal-headphone mode, as used by Linux's Dell fixup.
+	WriteCoef(0x0a, 0x0f81);
+	WriteCoef(0x76, 0x000e);
+	WriteCoef(0x6c, 0x2400);
+	WriteCoef(0x6b, 0xc429);
+	WriteCoef(0x18, 0x7308);
+}
 
 //needed extra verbs for EEE PC 701
 //Realtek ALC662 with what subsystem ID?
@@ -1022,17 +1118,63 @@ void HDA_Codec::ApplyEeeInit()
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 
 	//make sure to clean up correctly on driver unload!
-	if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
+	if (!(codec_quirks & HDA_QUIRK_ALC292_DELL_M4800)) {
+		if(selected_output_node == pin_output_node_number && hda_is_headphone_connected() == TRUE) { //headphone was connected
+			hda_log("HDA_Codec: SwitchOutput -> HEADPHONES\n");
+			ApplyAlc292HeadphoneMode();
+			hda_enable_pin_output(headphone_node_number);
+			hda_send_verb(headphone_node_number, 0x70C, 0x02);
+			hda_disable_pin_output(pin_output_node_number);
+			selected_output_node = headphone_node_number;
+		}
+		else if(selected_output_node == headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+			hda_log("HDA_Codec: SwitchOutput -> SPEAKERS\n");
+			hda_enable_pin_output(pin_output_node_number);
+			selected_output_node = pin_output_node_number;
+		}
+		//TODO: mute & unmute outputs as well?
+		return;
+	}
+
+	BOOLEAN headphone_present = hda_is_headphone_connected();
+	BOOLEAN dock_present = IsDockLineoutPresent();
+	ULONG desired_output_node = pin_output_node_number;
+
+	if (headphone_present)
+		desired_output_node = headphone_node_number;
+	if (dock_present)
+		desired_output_node = dock_lineout_node_number;
+
+	if (desired_output_node == selected_output_node)
+		return;
+
+	if (desired_output_node == dock_lineout_node_number && dock_lineout_node_number != 0) {
+		hda_log("HDA_Codec: SwitchOutput -> DOCK LINE OUT\n");
+		WriteCoef(0x0a, 0x0f81);
+		hda_enable_pin_output(dock_lineout_node_number);
+		hda_send_verb(dock_lineout_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
+		hda_disable_pin_output(pin_output_node_number);
+		selected_output_node = dock_lineout_node_number;
+	}
+	else if (desired_output_node == headphone_node_number && headphone_node_number != 0) {
 		hda_log("HDA_Codec: SwitchOutput -> HEADPHONES\n");
+		ApplyAlc292HeadphoneMode();
+		hda_enable_pin_output(headphone_node_number);
+		hda_send_verb(headphone_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
 		hda_disable_pin_output(pin_output_node_number);
 		selected_output_node = headphone_node_number;
 	}
-	else if(selected_output_node == headphone_node_number && hda_is_headphone_connected()==FALSE) { //headphone was disconnected
+	else {
 		hda_log("HDA_Codec: SwitchOutput -> SPEAKERS\n");
 		hda_enable_pin_output(pin_output_node_number);
 		selected_output_node = pin_output_node_number;
 	}
-	//TODO: mute & unmute outputs as well?
+}
+
+BOOLEAN HDA_Codec::IsDockLineoutPresent()
+{
+	return dock_lineout_node_number != 0 &&
+		(hda_send_verb(dock_lineout_node_number, VERB_GET_PIN_SENSE, 0x00) & 0x80000000) != 0;
 }
 
 //only using 16 bit stereo channels which are always required in spec, so this is unnecessary

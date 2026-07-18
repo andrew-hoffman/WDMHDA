@@ -74,10 +74,14 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
 
+// Codec quirks
+#define HDA_QUIRK_ALC292_DELL_M4800 0x00000001
+
 // HDA verbs
 #define VERB_GET_PARAMETER            0xF00
 #define VERB_GET_CONN_LIST_ENTRY      0xF02
 #define VERB_GET_CONFIG_DEFAULT       0xF1C
+#define VERB_GET_SUBSYSTEM_ID         0xF20
 #define VERB_GET_PIN_SENSE            0xF09
 #define VERB_SET_PIN_WIDGET_CONTROL   0x707
 #define VERB_SET_EAPD_BTLENABLE       0x70C
@@ -121,6 +125,8 @@ private:
     IAdapterCommon* pAdapter;           // Reference to parent adapter
     UCHAR codec_address;                // Codec address on the link (0-15)
     ULONG codec_id;                     // Codec vendor ID and device ID
+	ULONG codec_subsystem_id;             // Codec subsystem ID reported by the AFG
+	ULONG codec_quirks;                   // Hardware-specific initialization flags
 	USHORT codec_ven;
 	USHORT codec_dev;
 	BOOLEAN isRealtek;					// Realtek codecs need different init order
@@ -143,6 +149,7 @@ private:
 
     ULONG pin_output_node_number;
     ULONG headphone_node_number;
+	ULONG dock_lineout_node_number;
 	
 	LONG HpPollingEnabled;
     LONG InShutdown;
@@ -157,8 +164,10 @@ private:
     void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
     void ForceConnSel(ULONG nid, UCHAR sel);
     //void WakeSpeakerPath();
-    //ULONG ReadCoef(ULONG node, USHORT idx);
-    //void WriteCoef(ULONG node, USHORT idx, USHORT val);
+    ULONG ReadCoef(USHORT idx);
+    void WriteCoef(USHORT idx, USHORT val);
+    void ApplyAlc292HeadphoneMode();
+	BOOLEAN IsDockLineoutPresent();
     void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
     //void ApplyEeeInit();
     //void ForcePlaybackChain();

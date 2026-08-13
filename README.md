@@ -1,5 +1,4 @@
-# WDMHDA
-HD Audio driver for Windows 98SE / ME
+# HD Audio driver for Windows 98SE / ME
 
 This project is a High Definition Audio aka Azalia codec and controller driver. It supports the motherboard onboard audio for Intel 915 and later chipsets as well as other manufacturers that conform to the HD Audio standard.
 

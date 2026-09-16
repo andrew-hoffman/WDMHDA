@@ -166,12 +166,12 @@ private:
     void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
     void ForceConnSel(ULONG nid, UCHAR sel);
     //void WakeSpeakerPath();
-    ULONG ReadCoef(USHORT idx);
-    void WriteCoef(USHORT idx, USHORT val);
+    ULONG ReadCoef(USHORT node, USHORT idx);
+    void WriteCoef(USHORT node, USHORT idx, USHORT val);
     void ApplyAlc292HeadphoneMode();
 	BOOLEAN IsDockLineoutPresent();
     void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
-    //void ApplyEeeInit();
+    void ApplyEeeInit();
     //void ForcePlaybackChain();
     void UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain);
     void UnmuteOutAmp(ULONG nid, UCHAR gain);
@@ -193,18 +193,24 @@ public:
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
 	STDMETHODIMP_(ULONG) hda_get_node_connection_entries(ULONG node, ULONG connection_entries_number);
+
 	STDMETHODIMP_(NTSTATUS) hda_initialize_output_pin(ULONG pin_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
+
 	STDMETHODIMP_(BOOLEAN) hda_is_headphone_connected(void);
+	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
+
 	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
 	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
 
-	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
+	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
+
 	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node);
 	STDMETHODIMP_(void) hda_disable_pin_output(ULONG pin_node);
+
 	STDMETHODIMP_(USHORT) hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	STDMETHODIMP_(NTSTATUS) ProgramSampleRate(DWORD dwSampleRate);
     

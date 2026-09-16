@@ -1,4 +1,7 @@
-#WDMHDA Alpha-022 2026-07-11
+# WDMHDA 0.23 2026-09-21
+Change version numbering schema, Alpha is no longer appropriate
+
+# WDMHDA Alpha-022 2026-07-11
 
 ## Changes:
 - Fix choppy playback/silence if stream is paused and resumed near the end of the audio buffer

@@ -28,6 +28,7 @@ License         text
 
 # Scripts
 *.bat text eol=crlf
+*.BAT text eol=crlf
 
 # Config
 *.inf text eol=crlf

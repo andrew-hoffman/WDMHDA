@@ -100,18 +100,14 @@ AllocateAlignedCommonBuffer(
 	return STATUS_SUCCESS;
 }
 
-static
-VOID
-ResetCommonBufferDescriptor(
+static VOID ResetCommonBufferDescriptor(
 	OUT PHDA_DMA_COMMON_BUFFER Buffer
 )
 {
 	RtlZeroMemory(Buffer, sizeof(HDA_DMA_COMMON_BUFFER));
 }
 
-static
-VOID
-FreeAlignedCommonBuffer(
+static VOID FreeAlignedCommonBuffer(
 	IN PDMA_ADAPTER DmaAdapter,
 	IN OUT PHDA_DMA_COMMON_BUFFER Buffer
 )
@@ -152,8 +148,14 @@ private:
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	
 	//PCI IDs
+	ULONG pci_id;
 	USHORT pci_ven;
 	USHORT pci_dev;
+	
+	ULONG pci_sid;
+	USHORT pci_ssid;
+	USHORT pci_svid;
+
 	PUCHAR pConfigMem;
 	USHORT codec_ven;
 	USHORT codec_dev;
@@ -552,11 +554,8 @@ Init
 
 	//send an IRP asking the bus driver to read all of configspace
 	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
-	
-	ULONG pci_ven = 0;
-	ULONG pci_dev = 0;
-	memLength = 0;
 
+	memLength = 0;
 	
 	pConfigMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
 	if (!pConfigMem) {
@@ -573,13 +572,23 @@ Init
 	if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
         return ntStatus;
-	} else {
-		PUSHORT pConfigMemS = (PUSHORT)pConfigMem;
-		//VID and PID are first 2 words of configspace
-		pci_ven = (USHORT)pConfigMemS[0];
-		pci_dev = (USHORT)pConfigMemS[1];
-		DbgPrint( "\nHDA Controller: VID:0x%04X PID:0x%04X : ", pci_ven, pci_dev);
 	}
+
+	PUSHORT pConfigMemS = (PUSHORT)pConfigMem;
+	PULONG  pConfigMemD = (PULONG) pConfigMem;
+
+	//VID and PID are first 2 words of configspace
+	pci_id = (ULONG) pConfigMemD[0];
+	pci_ven = (USHORT) pConfigMemS[0];
+	pci_dev = (USHORT) pConfigMemS[1];
+	
+	//Subsystem and Sybsystem Vendor are at 0xB(Dword) or 0x2c(Byte)
+	pci_sid = (ULONG) pConfigMemD[0xB];
+	pci_ssid = (USHORT)(pci_sid >> 16);
+	pci_svid = (USHORT)(pci_sid & 0xFFFF);
+
+	DbgPrint( "\nHDA Controller: VID:0x%04X  PID:0x%04X : ", pci_ven, pci_dev);
+	DbgPrint( "\n     Subsystem: SSID:0x%04X SVID:0x%04X : ", pci_ssid, pci_svid);
 
 	USHORT tmp;
 	
@@ -1731,7 +1740,10 @@ CAdapterCommon::TryInitializeCodecSlot(
 
 	//create and initialize codec object and pack into array
 	if (codecCount < ARRAY_COUNT(pCodecs)) {
-		HDA_Codec* pCodec = new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, this);
+
+		HDA_Codec* pCodec = 
+			new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, pci_sid, this);
+
 		if (pCodec) {
 			pCodecs[codecCount++] = pCodec;
 			NTSTATUS status = pCodec->InitializeCodec();

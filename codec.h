@@ -186,11 +186,15 @@ class HDA_Codec
 private:
     IAdapterCommon* pAdapter;           // Reference to parent adapter
     UCHAR codec_address;                // Codec address on the link (0-15)
+
     ULONG codec_id;                     // Codec vendor ID and device ID
-	ULONG codec_subsystem_id;             // Codec subsystem ID reported by the AFG
-	ULONG codec_quirks;                   // Hardware-specific initialization flags
+	ULONG codec_subsystem_id;           // Codec subsystem ID reported by the AFG
+	ULONG controller_subsystem_id;		// Controller subsys ID from PCI cfg space
+	ULONG codec_quirks;                 // Hardware-specific initialization flags
+
 	USHORT codec_ven;
 	USHORT codec_dev;
+
 	BOOLEAN isRealtek;					// Realtek codecs need different init order
     
     BOOLEAN useSpdif;                   // Use SPDIF flag
@@ -238,7 +242,7 @@ private:
 
 
 public:
-    explicit HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, IAdapterCommon* adapter);
+    explicit HDA_Codec(BOOLEAN useSpdif, BOOLEAN useAltOut, UCHAR num, ULONG pci_sid, IAdapterCommon* adapter);
     ~HDA_Codec();
 
 	STDMETHODIMP_(NTSTATUS) InitializeCodec();

@@ -1,5 +1,5 @@
 /*****************************************************************************
- * codec.h - Audio Codec object.
+ * codec.cpp - Audio Codec object.
  *****************************************************************************
  * Copyright (c) 2026 Drew Hoffman
  * Released under MIT License, see LICENSE file
@@ -45,31 +45,36 @@
 #define REALTEK_COEF_NODE 0x20
 
 typedef struct _HDA_CODEC_QUIRK_ENTRY {
-	ULONG controller_svid;
+	ULONG controller_subsystem_id;
 	ULONG codec_id;
 	ULONG subsystem_id;
 	ULONG quirk_on, quirk_off;
 	ULONG gpio;
 } HDA_CODEC_QUIRK_ENTRY;
 
-static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
+static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG controller_subsystem_id)
 {
 	static const HDA_CODEC_QUIRK_ENTRY quirk_table[] = {
 		
-	{ 0, 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800, 0, 0},
+	{ HDA_MATCH_ALL, 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800, 0, 0},
 
-	//TODO: need SVID for EEE PC 701
-	//{ ???, 0x10EC0662, ???, HDA_QUIRK_EEEPC_701, 0, 0},
+	//TODO: need Controller and/or Codec SVID for EEE PC 701
+	//{ HDA_MATCH_ALL, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
 
 	//Remainder of list taken from FreeBSD.
+
 	/*
 	 * XXX Force stereo quirk. Monoural recording / playback
 	 *     on few codecs (especially ALC880) seems broken or
 	 *     perhaps unsupported.
+	 *
+	 *	(not needed by me at the moment but FYI for the future)
 	 */
+
 	{ HDA_MATCH_ALL, HDA_MATCH_ALL, HDA_MATCH_ALL,
 	    HDAA_QUIRK_FORCESTEREO | HDAA_QUIRK_IVREF, 0,
 	    0 },
+
 	{ ACER_ALL_SUBVENDOR, HDA_MATCH_ALL, HDA_MATCH_ALL,
 	    0, 0,
 	    HDAA_GPIO_SET(0) },
@@ -98,7 +103,7 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
 	    HDAA_QUIRK_OVREF, 0,
 	    0 },
 	{ UNIWILL_9075_SUBVENDOR, HDA_CODEC_ALC861, HDA_MATCH_ALL,
-	    HDAA_QUIRK_OVREF, 0,
+	    HDAA_QUIRK_OVREF, 0, 
 	    0 },
 	/*{ ASUS_M2N_SUBVENDOR, HDA_CODEC_AD1988, HDA_MATCH_ALL,
 	    HDAA_QUIRK_IVREF80, HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF100,
@@ -155,21 +160,39 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
 	    0, HDAA_QUIRK_FORCESTEREO,
 	    0 },
 	/* Mac Pro 1,1 requires ovref for proper volume level. */
-	{ 0x00000000, HDA_CODEC_ALC885, 0x106b0c00,
+	{ HDA_MATCH_ALL, HDA_CODEC_ALC885, 0x106b0c00,
 	    0, HDAA_QUIRK_OVREF,
 	    0 },
 
-	{ 0, 0, 0, 0, 0 } //End of list
+	{ 0, 0, 0, 0, 0 } //End of list sentinel
 
 	};
 
+	ULONG quirks_sum = 0;
+
 	for (ULONG i = 0; quirk_table[i].codec_id != 0; ++i) {
-		if (quirk_table[i].codec_id == codec_id &&
-			quirk_table[i].subsystem_id == subsystem_id)
-			return quirk_table[i].quirk_on;
+
+		BOOLEAN match_codec		 = (codec_id     == quirk_table[i].codec_id 
+								|| HDA_MATCH_ALL == quirk_table[i].codec_id
+								   );
+
+		BOOLEAN match_subsystem  = (subsystem_id == quirk_table[i].subsystem_id 
+								|| HDA_MATCH_ALL == quirk_table[i].subsystem_id
+								   );
+
+		BOOLEAN match_controller = (controller_subsystem_id == quirk_table[i].controller_subsystem_id
+								|| HDA_MATCH_ALL            == quirk_table[i].controller_subsystem_id
+								   );
+
+		if (match_codec && match_controller && match_subsystem) {
+			//apply codec quirks from list
+			hda_log("\n Applying codec quirk %d\n", i);
+			quirks_sum |= quirk_table[i].quirk_on;
+			quirks_sum &= ~quirk_table[i].quirk_off;
+		}
 	}
 
-	return 0;
+	return quirks_sum;
 }
 
 /*****************************************************************************
@@ -177,13 +200,14 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
  *****************************************************************************
  * Constructor - Initializes a codec object
  */
-HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommon* adapter)
+HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, ULONG pci_sid, IAdapterCommon* adapter)
     : pAdapter(adapter),
       codec_address(address),
       useSpdif(spdif),
       useAltOut(altOut),
       codec_id(0),
 	  codec_subsystem_id(0),
+	  controller_subsystem_id(pci_sid),
 	  codec_quirks(0),
 	  codec_ven(0),
 	  codec_dev(0),
@@ -291,7 +315,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	hda_send_verb(afg_node_number, 0x705, 0x00);
 
 	codec_subsystem_id = hda_send_verb(afg_node_number, VERB_GET_SUBSYSTEM_ID, 0x00);
-	codec_quirks = hda_lookup_codec_quirks(codec_id, codec_subsystem_id);
+	codec_quirks = hda_lookup_codec_quirks(codec_id, codec_subsystem_id, controller_subsystem_id);
 	DOUT (DBG_SYSINFO, ("Codec subsystem ID: 0x%08x", codec_subsystem_id));
 	DOUT (DBG_SYSINFO, ("Codec quirks: 0x%08x", codec_quirks));
 
@@ -740,8 +764,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 		pin_control |= 0x80 | PINCTL_OUT_EN;
 	}
 	hda_send_verb(pin_node_number, VERB_SET_PIN_WIDGET_CONTROL, pin_control);
+
 	//enable EAPD. do not enable L-R swap, the channel order is correct
-	hda_send_verb(pin_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
+	ForceEapd(pin_node_number, TRUE);
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(pin_node_number, 0xF00, 0x12);
@@ -1079,7 +1104,8 @@ void HDA_Codec::ForcePinOut(ULONG pinNid, BOOLEAN enable)
 	if (InShutdown) return;
 
     ULONG v = enable ? PINCTL_OUT_EN : 0x00;
-    hda_log("WDMHDA: ForcePinOut nid=%lu enable=%lu val=0x%02lX\n", pinNid, enable ? 1UL : 0UL, v);
+    hda_log("WDMHDA: ForcePinOut nid=%lu enable=%lu val=0x%02lX\n",
+		pinNid, enable ? 1UL : 0UL, v);
     //hda_send_verb(pinNid, VERB_SET_PIN_WIDGET_CONTROL, v);
 	if(enable) {
 		hda_enable_pin_output(pinNid);
@@ -1088,13 +1114,20 @@ void HDA_Codec::ForcePinOut(ULONG pinNid, BOOLEAN enable)
 	}
 }
 
+//Set EAPD state for a pin accounting for Quirks
 void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
 {
 	if (InShutdown) return;
 
+	hda_log("WDMHDA: ForceEAPD nid=%lu enable=%lu inveapd=%lu\n", 
+		pinNid, enable ? 1UL : 0UL, (codec_quirks & HDAA_QUIRK_EAPDINV)? 1UL : 0UL);
+
     // 0x02 (EAPD) or 0x03 (EAPD+BTL) - 0x02 is safe for ALC662
+	if ( codec_quirks & HDAA_QUIRK_EAPDINV){
+		enable = !enable;
+	}
     ULONG v = enable ? 0x02 : 0x00;
-    hda_log("WDMHDA: ForceEAPD nid=%lu enable=%lu val=0x%02lX\n", pinNid, enable ? 1UL : 0UL, v);
+
     hda_send_verb(pinNid, VERB_SET_EAPD_BTLENABLE, v);
 }
 
@@ -1320,7 +1353,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
         }
 
         hda_enable_pin_output(dock_lineout_node_number);
-        hda_send_verb(dock_lineout_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
+        ForceEapd(dock_lineout_node_number, TRUE);
         hda_disable_pin_output(pin_output_node_number);
     } 
     else if (desired_output_node == headphone_node_number) {
@@ -1331,7 +1364,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
         }
 
         hda_enable_pin_output(headphone_node_number);
-        hda_send_verb(headphone_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
+        ForceEapd(headphone_node_number, TRUE);
         hda_disable_pin_output(pin_output_node_number);
     } 
     else {

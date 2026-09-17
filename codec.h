@@ -213,6 +213,8 @@ public:
 
 	STDMETHODIMP_(USHORT) hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	STDMETHODIMP_(NTSTATUS) ProgramSampleRate(DWORD dwSampleRate);
+
+	STDMETHODIMP_(void) shutdown(BOOLEAN down);
     
     // Accessors
     UCHAR GetCodecAddress() const { return codec_address; }

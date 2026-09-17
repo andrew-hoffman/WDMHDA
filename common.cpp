@@ -1099,9 +1099,18 @@ CAdapterCommon::
 
 	//At least try to stop the stream before destruction
 	hda_stop_stream ();
-	StopJackPolling();
-	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
+	
+	//put all codecs in shutdown
 	for (UCHAR i = 0; i < codecCount; i++) {
+		if(pCodecs[i] != NULL){
+			pCodecs[i]->shutdown(TRUE);
+		}
+	}
+
+	StopJackPolling();
+
+	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
+	for (i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
 			delete pCodecs[i];
 			pCodecs[i] = NULL;
@@ -2431,7 +2440,16 @@ PowerChangeState
                 // property accesses and when to permit the driver from accessing the hardware.
 
 				//Re-init the codec if coming from D2 or D3
+
 				if((ULONG(m_PowerState)-ULONG(PowerDeviceD0)) >= 2){
+
+					//take codecs out of shutdown
+					for (i = 0; i < codecCount; i++) {
+						if(pCodecs[i] != NULL){
+							pCodecs[i]->shutdown(FALSE);
+						}
+					}
+
 					InitHDAController();
 				}
 
@@ -2444,17 +2462,26 @@ PowerChangeState
                     }
                 }
 
+				m_PowerState = NewState.DeviceState;
+                break;
+
             case PowerDeviceD1:
                 // This sleep state is the lowest latency sleep state with respect to the
                 // latency time required to return to D0.  The driver can still access
                 // the hardware in this state if desired.  If the driver is not being used
                 // an inactivity timer in portcls will place the driver in this state after
                 // a timeout period controllable via the registry.
+				m_PowerState = NewState.DeviceState;
+				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D%d",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
+                break;
                 
             case PowerDeviceD2:
                 // This is a medium latency sleep state.  In this state the device driver
                 // cannot assume that it can touch the hardware so any accesses need to be
                 // cached and the hardware restored upon entering D0 (or D1 conceivably).
+				m_PowerState = NewState.DeviceState;
+				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D%d",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
+				break;
                 
             case PowerDeviceD3:
                 // This is a full hibernation state and is the longest latency sleep state.
@@ -2463,6 +2490,13 @@ PowerChangeState
                 
                 // Save the new state.
                 m_PowerState = NewState.DeviceState;
+
+				//put all codecs in shutdown (not ok to touch the hardware)
+				for (i = 0; i < codecCount; i++) {
+					if(pCodecs[i] != NULL){
+						pCodecs[i]->shutdown(TRUE);
+					}
+				}
 
                 _DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D%d",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
                 break;

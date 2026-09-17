@@ -55,6 +55,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
 	  codec_ven(0),
 	  codec_dev(0),
 	  isRealtek(FALSE),
+	  InShutdown(FALSE),
       selected_output_node(0),
       length_of_node_path(0),
       afg_node_sample_capabilities(0),
@@ -74,6 +75,7 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, IAdapterCommo
  */
 HDA_Codec::~HDA_Codec()
 {
+	InShutdown = TRUE;
 	// Cleanup if needed
 }
 
@@ -85,6 +87,9 @@ HDA_Codec::~HDA_Codec()
 STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 {
     PAGED_CODE ();
+
+	if (InShutdown) return STATUS_UNSUCCESSFUL;
+
 	// Initialize output paths
 	RtlZeroMemory(&out_paths, sizeof(HDA_OUTPUT_LIST));
 
@@ -471,17 +476,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			hda_initialize_output_pin(pin_headphone_node_number, path); //initialize headphone output
 			headphone_node_number = pin_headphone_node_number; //save headphone node number
 
-			//find headphone connection status
-			if(hda_is_headphone_connected() == TRUE) {
-				hda_disable_pin_output(pin_output_node_number);
-				selected_output_node = pin_headphone_node_number;
-			} else {
-				selected_output_node = pin_output_node_number;
-			}
-
-			//check once for now
-			hda_check_headphone_connection_change();		
-
 			//add path to paths list
 			if (out_paths.count < MAX_OUTPUT_PATHS) {
 				out_paths.paths[out_paths.count++] = path;
@@ -493,6 +487,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 		hda_initialize_output_pin(pin_headphone_node_number, path); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
+
 	}
 
 	if (pin_alternative_output_node_number != 0) { //codec has alternative output
@@ -504,10 +499,12 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		if (out_paths.count < MAX_OUTPUT_PATHS) {
 			out_paths.paths[out_paths.count++] = path;
 		}
+		
 	}
 
+	selected_output_node = pin_output_node_number;
 
-	DbgPrint("\n%d Output paths found", out_paths.count);
+	DbgPrint("\n%d Output paths found, Node %X selected\n", out_paths.count, selected_output_node);
 	if(out_paths.count == 0) {
 		//no usable output paths have been found
 		DbgPrint("\nCodec does not have any usable output PINs");
@@ -534,8 +531,10 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	//TODO move this to quirks
 	//ApplyEeeInit(); 
 	
+    // hda_check_headphone_connection_change() always performs initial pin configuration.
+    hda_check_headphone_connection_change();
 
-	return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 STDMETHODIMP_(UCHAR) HDA_Codec::hda_get_node_type (ULONG node){
@@ -609,7 +608,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	}
 	hda_send_verb(pin_node_number, VERB_SET_PIN_WIDGET_CONTROL, pin_control);
 	//enable EAPD. do not enable L-R swap, the channel order is correct
-	hda_send_verb(pin_node_number, 0x70C, 0x0002);
+	hda_send_verb(pin_node_number, VERB_SET_EAPD_BTLENABLE, 0x02);
 
 	//set maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(pin_node_number, 0xF00, 0x12);
@@ -783,15 +782,6 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 		}
 	}
 
-	// The M4800 output mixers reset with input amp 0 muted.
-	if (codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) {
-		ULONG input_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x0D);
-		if (input_amp_capabilities != 0) {
-			hda_set_node_gain(audio_mixer_node_number, HDA_INPUT_NODE,
-				input_amp_capabilities, 250, 3, FALSE);
-		}
-	}
-
 	//continue in path
 	length_of_node_path++;
 	ULONG first_connected_node_number = hda_get_node_connection_entries(audio_mixer_node_number, 0); //get first node number
@@ -888,6 +878,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 {
     PAGED_CODE ();
 
+	if (InShutdown) return STATUS_UNSUCCESSFUL;
+
     WORD     wOldRateReg, wCodecReg;
 	ULONG status = 0;
 	ULONG successes = 0;
@@ -976,6 +968,7 @@ void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
 BOOLEAN HDA_Codec::IsHpPresent()
 {
 	if (InShutdown) return FALSE;
+
 	return hda_is_headphone_connected();
 }
 
@@ -1028,7 +1021,9 @@ static ULONG amp_set_cmd(BOOLEAN output, BOOLEAN right, UCHAR index, BOOLEAN mut
 }
 
 void HDA_Codec::UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain)
-{
+{	
+	if (InShutdown) return;
+
     ULONG left  = amp_set_cmd(FALSE, FALSE, inIndex, FALSE, gain); // INPUT, LEFT
     ULONG right = amp_set_cmd(FALSE, TRUE,  inIndex, FALSE, gain); // INPUT, RIGHT
 
@@ -1040,7 +1035,9 @@ void HDA_Codec::UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain)
 }
 
 void HDA_Codec::UnmuteOutAmp(ULONG nid, UCHAR gain)
-{
+{	
+	if (InShutdown) return;
+
     ULONG left  = amp_set_cmd(TRUE, FALSE, 0, FALSE, gain); // OUTPUT, LEFT, index=0
     ULONG right = amp_set_cmd(TRUE, TRUE,  0, FALSE, gain); // OUTPUT, RIGHT
 
@@ -1052,7 +1049,9 @@ void HDA_Codec::UnmuteOutAmp(ULONG nid, UCHAR gain)
 }
 
 void HDA_Codec::SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain)
-{
+{	
+	if (InShutdown) return;
+
     ULONG left  = amp_set_cmd(TRUE,  FALSE, 0, mute, gain);
     ULONG right = amp_set_cmd(TRUE,  TRUE,  0, mute, gain);
 
@@ -1101,19 +1100,25 @@ void HDA_Codec::ForceConnSel(ULONG nid, UCHAR sel)
 
 // Read/Write DSP coefficients from codec
 ULONG HDA_Codec::ReadCoef(USHORT node, USHORT idx)
-{
+{	
+	if (InShutdown) return 0;
+
 	hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
 	return hda_send_verb(node, VERB_GET_PROC_COEF, 0);
 }
 
 void HDA_Codec::WriteCoef(USHORT node, USHORT idx, USHORT val)
-{
+{	
+	if (InShutdown) return;
+
 	hda_send_verb(node, VERB_SET_COEF_INDEX, idx);
 	hda_send_verb(node, VERB_SET_PROC_COEF, val);
 }
 
 void HDA_Codec::ApplyAlc292HeadphoneMode()
-{
+{	
+	if (InShutdown) return;
+
 	if (!(codec_quirks & HDA_QUIRK_ALC292_DELL_M4800))
 		return;
 
@@ -1131,7 +1136,9 @@ void HDA_Codec::ApplyAlc292HeadphoneMode()
 
 
 void HDA_Codec::ApplyEeeInit()
-{
+{	
+	if (InShutdown) return;
+
     hda_log("WDMHDA: ApplyEeeInit\n");
 
     hda_send_verb(20, 0x707, 0x40); 
@@ -1153,10 +1160,14 @@ void HDA_Codec::ApplyEeeInit()
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 
 	//make sure to clean up correctly on driver unload!
+	if (InShutdown) return;
 
 	BOOLEAN headphone_present = hda_is_headphone_connected();
 	BOOLEAN dock_present = (codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) && IsDockLineoutPresent();
 	ULONG desired_output_node = pin_output_node_number;
+
+	//hda_log("Headphone %d Dock %d Output pin %X Selected is %X \n", 
+	//headphone_present, dock_present, pin_output_node_number, selected_output_node);
 
 	if (headphone_present)
 		desired_output_node = headphone_node_number;
@@ -1196,10 +1207,14 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
         hda_enable_pin_output(pin_output_node_number);
 		//don't disable headphone output on unplug (for now)
     }
+	
+	//mark selected node
+	selected_output_node = desired_output_node;
 }
 
 BOOLEAN HDA_Codec::IsDockLineoutPresent()
 {
+	if (InShutdown) return FALSE;
 	return dock_lineout_node_number != 0 &&
 		(hda_send_verb(dock_lineout_node_number, VERB_GET_PIN_SENSE, 0x00) & 0x80000000) != 0;
 }
@@ -1231,7 +1246,7 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 	ULONG mask=0x0000001;
 
 	ULONG caps = 0x7ff; //i don't think win98 will actually ask for anything > 96khz though
-
+	
 	//
     // Check what sample rates we support based on
 	// audio_output_node_sample_capabilities
@@ -1274,6 +1289,8 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 
 STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
 
+	if (InShutdown) return;
+
 	//Set volume on the selected gain amp and mute on a separate mute-capable
 	//amp when the codec path uses different widgets for those controls.
 	for (ULONG i = 0; i < out_paths.count; ++i){
@@ -1302,6 +1319,9 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mu
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute) {
+	
+	if (InShutdown) return;
+	
 	//ch bit 0: left channel bit 1: right channel
 	ch &= 3;
 	ULONG payload = ch << 12;
@@ -1331,12 +1351,14 @@ STDMETHODIMP_(void) HDA_Codec::hda_set_node_gain(ULONG node, ULONG node_type, UL
  * Wraps the adapter's hda_send_verb with this codec's address.
  */
 STDMETHODIMP_(ULONG) HDA_Codec::hda_send_verb(ULONG node, ULONG verb, ULONG command)
-{
+{	
+	if (InShutdown) return 0;
 	return pAdapter->hda_send_verb(codec_address, node, verb, command);
 }
 
 STDMETHODIMP_(ULONG) HDA_Codec::SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag)
-{
+{	
+	if (InShutdown) return 0;
     ULONG st = this->hda_send_verb(node, verb, command);
 
     hda_log("WDMHDA: %s node=0x%02lX verb=0x%03lX cmd=0x%04lX -> 0x%08lX\n",
@@ -1348,14 +1370,18 @@ STDMETHODIMP_(ULONG) HDA_Codec::SendVerbLogged(ULONG node, ULONG verb, ULONG com
 
 
 STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node) {
+	if (InShutdown) return;
 	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) | 0x40));
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
+	if (InShutdown) return;
 	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) & ~0x40));
 }
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
+	if (InShutdown) return FALSE;
+
 	if (headphone_node_number != 0
     && (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
 		return TRUE;
@@ -1437,5 +1463,10 @@ inline STDMETHODIMP_(USHORT) HDA_Codec::hda_return_sound_data_format(ULONG sampl
 		data_format |= ((0x18)<<8);
 	}
 	return data_format;
+}
+
+STDMETHODIMP_(void) HDA_Codec::shutdown(BOOLEAN down)
+{
+	InShutdown = down;	
 }
 

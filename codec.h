@@ -2,10 +2,38 @@
  * codec.h - Audio Codec object.
  *****************************************************************************
  * Copyright (c) 2026 Drew Hoffman
- * Released under MIT License
- * Code from BleskOS and Microsoft's driver samples used under MIT license. 
+ * Released under MIT License, see LICENSE file
+ * Code from BleskOS used under MIT license.
  *
+ * Quirks definitions from FreeBSD used under 2-Clause BSD license:
+ *
+ * Copyright (c) 2006 Stephane E. Potvin <sepotvin@videotron.ca>
+ * Copyright (c) 2006 Ariff Abdullah <ariff@FreeBSD.org>
+ * Copyright (c) 2008-2012 Alexander Motin <mav@FreeBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
+
 
 #ifndef _CODEC_H_
 #define _CODEC_H_
@@ -76,37 +104,69 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
 
+
+#define HDAA_GPIO_SHIFT(n)	(n * 3)
+#define HDAA_GPIO_MASK(n)	(0x7 << (n * 3))
+#define HDAA_GPIO_KEEP(n)	(0x0 << (n * 3))
+#define HDAA_GPIO_SET(n)	(0x1 << (n * 3))
+#define HDAA_GPIO_CLEAR(n)	(0x2 << (n * 3))
+#define HDAA_GPIO_DISABLE(n)	(0x3 << (n * 3))
+#define HDAA_GPIO_INPUT(n)	(0x4 << (n * 3))
+
 // Codec quirks
 #define HDA_QUIRK_ALC292_DELL_M4800 0x00000001
+#define HDA_QUIRK_EEEPC_701 0x00000002
+
+/* 9 - 25 = anything else */
+#define HDAA_QUIRK_SOFTPCMVOL	(1 << 9)
+#define HDAA_QUIRK_FIXEDRATE	(1 << 10)
+#define HDAA_QUIRK_FORCESTEREO	(1 << 11)
+#define HDAA_QUIRK_EAPDINV	(1 << 12)
+#define HDAA_QUIRK_SENSEINV	(1 << 14)
+
+/* 26 - 31 = vrefs */
+#define HDAA_QUIRK_IVREF50	(1 << 26)
+#define HDAA_QUIRK_IVREF80	(1 << 27)
+#define HDAA_QUIRK_IVREF100	(1 << 28)
+#define HDAA_QUIRK_OVREF50	(1 << 29)
+#define HDAA_QUIRK_OVREF80	(1 << 30)
+#define HDAA_QUIRK_OVREF100	(1U << 31)
+
+#define HDAA_QUIRK_IVREF	(HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF80 | \
+						HDAA_QUIRK_IVREF100)
+#define HDAA_QUIRK_OVREF	(HDAA_QUIRK_OVREF50 | HDAA_QUIRK_OVREF80 | \
+						HDAA_QUIRK_OVREF100)
+#define HDAA_QUIRK_VREF		(HDAA_QUIRK_IVREF | HDAA_QUIRK_OVREF)
+
 
 // HDA verbs
-#define VERB_GET_PARAMETER            0xF00
-#define VERB_GET_CONN_LIST_ENTRY      0xF02
-#define VERB_GET_CONFIG_DEFAULT       0xF1C
-#define VERB_GET_SUBSYSTEM_ID         0xF20
-#define VERB_GET_PIN_SENSE            0xF09
-#define VERB_SET_PIN_WIDGET_CONTROL   0x707
-#define VERB_SET_EAPD_BTLENABLE       0x70C
+#define VERB_GET_PARAMETER			0xF00
+#define VERB_GET_CONN_LIST_ENTRY	0xF02
+#define VERB_GET_CONFIG_DEFAULT		0xF1C
+#define VERB_GET_SUBSYSTEM_ID		0xF20
+#define VERB_GET_PIN_SENSE			0xF09
+#define VERB_SET_PIN_WIDGET_CONTROL	0x707
+#define VERB_SET_EAPD_BTLENABLE		0x70C
 #define VERB_GET_CONN_LIST_LEN		0xF00
-#define AC_PAR_CONNLIST_LEN      0x0E
-#define VERB_SET_CONNECT_SEL 0x701
-#define VERB_GET_CONNECT_SEL 0xF01
-#define VERB_SET_COEF_INDEX   0x500
-#define VERB_GET_COEF_INDEX   0xD00
-#define VERB_SET_PROC_COEF    0x400
-#define VERB_GET_PROC_COEF    0xC00
+#define AC_PAR_CONNLIST_LEN			0x0E
+#define VERB_SET_CONNECT_SEL		0x701
+#define VERB_GET_CONNECT_SEL		0xF01
+#define VERB_SET_COEF_INDEX			0x500
+#define VERB_GET_COEF_INDEX			0xD00
+#define VERB_SET_PROC_COEF			0x400
+#define VERB_GET_PROC_COEF			0xC00
 #define VERB_GET_PIN_WIDGET_CONTROL 0xF07
 #define VERB_GET_EAPD_BTLENABLE     0xF0C
 #define VERB_GET_AMP_GAIN_MUTE      0xB00
 #define VERB_SET_AMP_GAIN_MUTE      0x300
 
 // Pin Widget Control bits
-#define PINCTL_OUT_EN                 0x40
-#define PINCTL_IN_EN                  0x20
+#define PINCTL_OUT_EN				0x40
+#define PINCTL_IN_EN				0x20
 
 // GET_PARAMETER id's
-#define AC_PAR_AUDIO_WIDGET_CAP       0x09
-#define AC_PAR_PIN_CAP                0x0C
+#define AC_PAR_AUDIO_WIDGET_CAP		0x09
+#define AC_PAR_PIN_CAP				0x0C
 
 // Widget caps helpers
 #define AC_WCAP_TYPE_SHIFT 20

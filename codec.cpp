@@ -1,16 +1,43 @@
 /*****************************************************************************
- * codec.cpp - Codec object.
+ * codec.h - Audio Codec object.
  *****************************************************************************
  * Copyright (c) 2026 Drew Hoffman
- * Released under MIT License
- * Code from BleskOS and Microsoft's driver samples used under MIT license.
- * Quirks mode adjustments taken from FreeBSD and used under BSD license
+ * Released under MIT License, see LICENSE file
+ * Code from BleskOS used under MIT license. 
  *
+ * Quirks definitions from FreeBSD used under 2-Clause BSD license:
+ * 
+ * Copyright (c) 2006 Stephane E. Potvin <sepotvin@videotron.ca>
+ * Copyright (c) 2006 Ariff Abdullah <ariff@FreeBSD.org>
+ * Copyright (c) 2008-2012 Alexander Motin <mav@FreeBSD.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include <stdarg.h>
 #include "common.h"
 #include "codec.h"
+#include "hdac_vendor.h"
 
 #define STR_MODULENAME "HDA_Codec: "
 
@@ -18,22 +45,128 @@
 #define REALTEK_COEF_NODE 0x20
 
 typedef struct _HDA_CODEC_QUIRK_ENTRY {
+	ULONG controller_svid;
 	ULONG codec_id;
 	ULONG subsystem_id;
-	ULONG quirks;
+	ULONG quirk_on, quirk_off;
+	ULONG gpio;
 } HDA_CODEC_QUIRK_ENTRY;
 
 static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id)
 {
 	static const HDA_CODEC_QUIRK_ENTRY quirk_table[] = {
-		{ 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800 },
-		{ 0, 0, 0 }
+		
+	{ 0, 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800, 0, 0},
+
+	//TODO: need SVID for EEE PC 701
+	//{ ???, 0x10EC0662, ???, HDA_QUIRK_EEEPC_701, 0, 0},
+
+	//Remainder of list taken from FreeBSD.
+	/*
+	 * XXX Force stereo quirk. Monoural recording / playback
+	 *     on few codecs (especially ALC880) seems broken or
+	 *     perhaps unsupported.
+	 */
+	{ HDA_MATCH_ALL, HDA_MATCH_ALL, HDA_MATCH_ALL,
+	    HDAA_QUIRK_FORCESTEREO | HDAA_QUIRK_IVREF, 0,
+	    0 },
+	{ ACER_ALL_SUBVENDOR, HDA_MATCH_ALL, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_G2K_SUBVENDOR, HDA_CODEC_ALC660, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_M5200_SUBVENDOR, HDA_CODEC_ALC880, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_A7M_SUBVENDOR, HDA_CODEC_ALC880, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_A7T_SUBVENDOR, HDA_CODEC_ALC882, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_W2J_SUBVENDOR, HDA_CODEC_ALC882, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ ASUS_U5F_SUBVENDOR, HDA_CODEC_AD1986A, HDA_MATCH_ALL,
+	    HDAA_QUIRK_EAPDINV, 0,
+	    0 },
+	{ ASUS_A8X_SUBVENDOR, HDA_CODEC_AD1986A, HDA_MATCH_ALL,
+	    HDAA_QUIRK_EAPDINV, 0,
+	    0 },
+	{ ASUS_F3JC_SUBVENDOR, HDA_CODEC_ALC861, HDA_MATCH_ALL,
+	    HDAA_QUIRK_OVREF, 0,
+	    0 },
+	{ UNIWILL_9075_SUBVENDOR, HDA_CODEC_ALC861, HDA_MATCH_ALL,
+	    HDAA_QUIRK_OVREF, 0,
+	    0 },
+	/*{ ASUS_M2N_SUBVENDOR, HDA_CODEC_AD1988, HDA_MATCH_ALL,
+	    HDAA_QUIRK_IVREF80, HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF100,
+	    0 },*/
+	{ MEDION_MD95257_SUBVENDOR, HDA_CODEC_ALC880, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(1) },
+	{ LENOVO_3KN100_SUBVENDOR, HDA_CODEC_AD1986A, HDA_MATCH_ALL,
+	    HDAA_QUIRK_EAPDINV | HDAA_QUIRK_SENSEINV, 0,
+	    0 },
+	{ SAMSUNG_Q1_SUBVENDOR, HDA_CODEC_AD1986A, HDA_MATCH_ALL,
+	    HDAA_QUIRK_EAPDINV, 0,
+	    0 },
+	{ APPLE_MB3_SUBVENDOR, HDA_CODEC_ALC885, HDA_MATCH_ALL,
+	    HDAA_QUIRK_OVREF50, 0,
+	    HDAA_GPIO_SET(0) },
+	{ APPLE_INTEL_MAC, HDA_CODEC_STAC9221, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) | HDAA_GPIO_SET(1) },
+	{ APPLE_MACBOOKAIR31, HDA_CODEC_CS4206, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(1) | HDAA_GPIO_SET(3) },
+	{ HDA_MATCH_ALL, HDA_CODEC_CS4208, APPLE_MACBOOKAIR61,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ HDA_MATCH_ALL, HDA_CODEC_CS4208, APPLE_MACBOOKAIR62,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ APPLE_MACBOOKPRO55, HDA_CODEC_CS4206, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(1) | HDAA_GPIO_SET(3) },
+	{ APPLE_MACBOOKPRO71, HDA_CODEC_CS4206, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(1) | HDAA_GPIO_SET(3) },
+	{ HDA_INTEL_MACBOOKPRO92, HDA_CODEC_CS4206, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(1) | HDAA_GPIO_SET(3) },
+	{ DELL_D630_SUBVENDOR, HDA_CODEC_STAC9205X, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ DELL_V1400_SUBVENDOR, HDA_CODEC_STAC9228X, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(2) },
+	{ DELL_V1500_SUBVENDOR, HDA_CODEC_STAC9205X, HDA_MATCH_ALL,
+	    0, 0,
+	    HDAA_GPIO_SET(0) },
+	{ HDA_MATCH_ALL, HDA_CODEC_AD1988, HDA_MATCH_ALL,
+	    HDAA_QUIRK_IVREF80, HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF100,
+	    0 },
+	{ HDA_MATCH_ALL, HDA_CODEC_AD1988B, HDA_MATCH_ALL,
+	    HDAA_QUIRK_IVREF80, HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF100,
+	    0 },
+	{ HDA_MATCH_ALL, HDA_CODEC_CX20549, HDA_MATCH_ALL,
+	    0, HDAA_QUIRK_FORCESTEREO,
+	    0 },
+	/* Mac Pro 1,1 requires ovref for proper volume level. */
+	{ 0x00000000, HDA_CODEC_ALC885, 0x106b0c00,
+	    0, HDAA_QUIRK_OVREF,
+	    0 },
+
+	{ 0, 0, 0, 0, 0 } //End of list
+
 	};
 
 	for (ULONG i = 0; quirk_table[i].codec_id != 0; ++i) {
 		if (quirk_table[i].codec_id == codec_id &&
 			quirk_table[i].subsystem_id == subsystem_id)
-			return quirk_table[i].quirks;
+			return quirk_table[i].quirk_on;
 	}
 
 	return 0;
@@ -528,8 +661,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		}
 	}
 	
-	//TODO move this to quirks
-	//ApplyEeeInit(); 
+	if (codec_quirks & HDA_QUIRK_EEEPC_701)
+		ApplyEeeInit(); 
 	
     // hda_check_headphone_connection_change() always performs initial pin configuration.
     hda_check_headphone_connection_change();

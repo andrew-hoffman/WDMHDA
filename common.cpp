@@ -2479,6 +2479,16 @@ PowerChangeState
                 // This is a medium latency sleep state.  In this state the device driver
                 // cannot assume that it can touch the hardware so any accesses need to be
                 // cached and the hardware restored upon entering D0 (or D1 conceivably).
+
+				//TODO: actually put the hardware into a lower power state here
+
+				//put all codecs in shutdown (not ok to touch the hardware)
+				for (i = 0; i < codecCount; i++) {
+					if(pCodecs[i] != NULL){
+						pCodecs[i]->shutdown(TRUE);
+					}
+				}
+
 				m_PowerState = NewState.DeviceState;
 				_DbgPrintF(DEBUGLVL_VERBOSE,("  Entering D%d",ULONG(m_PowerState)-ULONG(PowerDeviceD0)));
 				break;
@@ -2487,6 +2497,8 @@ PowerChangeState
                 // This is a full hibernation state and is the longest latency sleep state.
                 // The driver cannot access the hardware in this state and must cache any
                 // hardware accesses and restore the hardware upon returning to D0 (or D1).
+
+				//TODO: actually put the hardware into a lower power state here
                 
                 // Save the new state.
                 m_PowerState = NewState.DeviceState;

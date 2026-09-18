@@ -258,8 +258,10 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 
 	codec_ven = (USHORT)(codec_id >> 16);
 	codec_dev = (USHORT)(codec_id & 0xFFFF);
-	if(codec_ven == 0x10ec)
+
+	if(codec_ven == 0x10ec){
 		isRealtek = TRUE;
+	}
 
 	//log basic codec info
 	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
@@ -499,6 +501,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				//save node number
 				//TODO: handle if there are multiple HP nodes
 				pin_headphone_node_number = node;
+
 			} else if(pin_node_type == HDA_PIN_CD) {
 				DbgPrint( ("CD"));
 	
@@ -659,9 +662,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		
 	}
 
-	selected_output_node = pin_output_node_number;
-
-	DbgPrint("\n%d Output paths found, Node %X selected\n", out_paths.count, selected_output_node);
+	DbgPrint("\n%d Output paths found, Node %X selected\n", out_paths.count, pin_output_node_number);
 	if(out_paths.count == 0) {
 		//no usable output paths have been found
 		DbgPrint("\nCodec does not have any usable output PINs");
@@ -688,7 +689,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	if (codec_quirks & HDA_QUIRK_EEEPC_701)
 		ApplyEeeInit(); 
 	
-    // hda_check_headphone_connection_change() always performs initial pin configuration.
+    // hda_check_headphone_connection_change() always runs at least once.
     hda_check_headphone_connection_change();
 
     return STATUS_SUCCESS;
@@ -726,7 +727,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	
 	//save type of path so we can find which is headphone and which is speaker later
 	ULONG pin_config = hda_send_verb(pin_node_number, 0xF1C, 0x00);
-	path.path_type = (pin_config >> 20) & 0xF;	
+	path.path_type = (pin_config >> 20) & 0xF;
+	BOOLEAN is_headphone = ( ((pin_config >> 20) & 0xF) == HDA_PIN_HEADPHONE_OUT);
 
     DOUT (DBG_PRINT, ("[HDA_Codec::hda_initialize_output_pin] 0x%x", pin_node_number));
 	//reset variables of first path
@@ -755,20 +757,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 		hda_send_verb(pin_node_number, 0x705, 0x00);
 	}
 
-	//enable PIN amp and output buffers; the dock is a line out, not a headphone pin
-	ULONG pin_control = hda_send_verb(pin_node_number, VERB_GET_PIN_WIDGET_CONTROL, 0x00);
-	if ((codec_quirks & HDA_QUIRK_ALC292_DELL_M4800) &&
-		pin_node_number == dock_lineout_node_number) {
-		pin_control = (pin_control & ~0x80) | PINCTL_OUT_EN;
-	} else {
-		pin_control |= 0x80 | PINCTL_OUT_EN;
-	}
-	hda_send_verb(pin_node_number, VERB_SET_PIN_WIDGET_CONTROL, pin_control);
+	//enable PIN amp and output buffers
+	hda_enable_pin_output(pin_node_number, is_headphone),
 
 	//enable EAPD. do not enable L-R swap, the channel order is correct
 	ForceEapd(pin_node_number, TRUE);
 
-	//set maximal volume for PIN
+	//set ~maximal volume for PIN
 	ULONG pin_output_amp_capabilities = hda_send_verb(pin_node_number, 0xF00, 0x12);
 	hda_set_node_gain(pin_node_number, HDA_OUTPUT_NODE, pin_output_amp_capabilities, 250, 3, FALSE);
 	if(pin_output_amp_capabilities != 0) {
@@ -1106,11 +1101,11 @@ void HDA_Codec::ForcePinOut(ULONG pinNid, BOOLEAN enable)
     ULONG v = enable ? PINCTL_OUT_EN : 0x00;
     hda_log("WDMHDA: ForcePinOut nid=%lu enable=%lu val=0x%02lX\n",
 		pinNid, enable ? 1UL : 0UL, v);
-    //hda_send_verb(pinNid, VERB_SET_PIN_WIDGET_CONTROL, v);
+
 	if(enable) {
-		hda_enable_pin_output(pinNid);
+		hda_enable_pin_output(pinNid, FALSE);
 	} else {
-		hda_disable_pin_output(pinNid);
+		hda_disable_pin(pinNid);
 	}
 }
 
@@ -1307,8 +1302,8 @@ void HDA_Codec::ApplyEeeInit()
 
     hda_log("WDMHDA: ApplyEeeInit\n");
 
-    hda_send_verb(20, 0x707, 0x40); 
-    hda_send_verb(27, 0x707, 0x40);
+	hda_enable_pin_output(20, FALSE);
+	hda_enable_pin_output(27, FALSE);
 
     hda_send_verb(20, 0x701, 0x00); 
     hda_send_verb(27, 0x701, 0x00);
@@ -1352,9 +1347,9 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
             WriteCoef(REALTEK_COEF_NODE, 0x0a, 0x0f81);
         }
 
-        hda_enable_pin_output(dock_lineout_node_number);
+        hda_enable_pin_output(dock_lineout_node_number, FALSE);
         ForceEapd(dock_lineout_node_number, TRUE);
-        hda_disable_pin_output(pin_output_node_number);
+        hda_disable_pin(pin_output_node_number);
     } 
     else if (desired_output_node == headphone_node_number) {
         hda_log("HDA_Codec: SwitchOutput -> HEADPHONES\n");
@@ -1363,15 +1358,15 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
             ApplyAlc292HeadphoneMode();
         }
 
-        hda_enable_pin_output(headphone_node_number);
+        hda_enable_pin_output(headphone_node_number, TRUE);
         ForceEapd(headphone_node_number, TRUE);
-        hda_disable_pin_output(pin_output_node_number);
+        hda_disable_pin(pin_output_node_number);
     } 
     else {
         hda_log("HDA_Codec: SwitchOutput -> SPEAKERS\n");
 
-        hda_enable_pin_output(pin_output_node_number);
-		//don't disable headphone output on unplug (for now)
+        hda_enable_pin_output(pin_output_node_number, FALSE);
+		//don't disable headphone output on unplug event (for now)
     }
 	
 	//mark selected node
@@ -1534,15 +1529,50 @@ STDMETHODIMP_(ULONG) HDA_Codec::SendVerbLogged(ULONG node, ULONG verb, ULONG com
 }
 
 
-
-STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node) {
+STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_input(ULONG pin_node) {
 	if (InShutdown) return;
-	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) | 0x40));
+
+	//TODO: vref bias for inputs
+	ULONG pin_ctl = hda_send_verb(pin_node, VERB_GET_PIN_WIDGET_CONTROL, 0x00);
+	hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, (pin_ctl | 0x20));
 }
 
-STDMETHODIMP_(void) HDA_Codec::hda_disable_pin_output(ULONG pin_node) {
+STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node, BOOLEAN is_headphone) {
 	if (InShutdown) return;
-	hda_send_verb(pin_node, 0x707, (hda_send_verb(pin_node, 0xF07, 0x00) & ~0x40));
+	
+	//check pin capabilities
+	ULONG pin_caps = hda_send_verb(pin_node, VERB_GET_PARAMETER, AC_PAR_PIN_CAP);
+
+	ULONG pin_ctl = PIN_CTL_OUT_ENABLE;
+	BOOLEAN supports_hp  = (pin_caps & PIN_CAP_HP_DRV) != 0;
+
+    if (is_headphone && supports_hp) {
+        // Dell M4800 quirk: Dock line-out pin shouldn't drive HP amp mode
+        if (!( (codec_quirks & HDA_QUIRK_ALC292_DELL_M4800)
+			&& (pin_node == dock_lineout_node_number) )) {
+            pin_ctl |= PIN_CTL_HP_ENABLE;
+        }
+    }
+
+	//Handle Output VREF Bias
+    UCHAR selected_vref = VREF_HIZ;
+
+    if ((codec_quirks & HDAA_QUIRK_OVREF80) && (pin_caps & PIN_CAP_VREF_80)) {
+        selected_vref = VREF_80;
+    } else if ((codec_quirks & HDAA_QUIRK_OVREF100) && (pin_caps & PIN_CAP_VREF_100)) {
+        selected_vref = VREF_100;
+    } else if ((codec_quirks & HDAA_QUIRK_OVREF50) && (pin_caps & PIN_CAP_VREF_50)) {
+        selected_vref = VREF_50;
+    }
+
+    pin_ctl |= selected_vref;
+
+    hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
+}
+
+STDMETHODIMP_(void) HDA_Codec::hda_disable_pin(ULONG pin_node) {
+	if (InShutdown) return;
+	hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, 0x0);
 }
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {

@@ -104,6 +104,27 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
 
+// Definitions for Verb 0x707 (Set Pin Widget Control)
+#define PIN_CTL_IN_ENABLE		0x20
+#define PIN_CTL_OUT_ENABLE      0x40
+#define PIN_CTL_HP_ENABLE       0x80
+
+// Definitions for Verb 0xF1C (Pin Configuration Register)
+#define PIN_CFG_DEVICE_MASK     (0x0FU << 20)
+#define PIN_CFG_DEVICE_HP_OUT   (0x05U << 20)
+
+// Definitions for Parameter 0x0C (Pin Capabilities)
+#define PIN_CAP_HP_DRV          (1U << 3)
+#define PIN_CAP_VREF_50         (1U << 9)
+#define PIN_CAP_VREF_80         (1U << 12)
+#define PIN_CAP_VREF_100        (1U << 13)
+
+// VREF Selection Values (Bits [2:0] of Verb 0x707)
+#define VREF_HIZ                0x00
+#define VREF_50                 0x01
+#define VREF_80                 0x04
+#define VREF_100                0x05
+
 
 #define HDAA_GPIO_SHIFT(n)	(n * 3)
 #define HDAA_GPIO_MASK(n)	(0x7 << (n * 3))
@@ -114,23 +135,24 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDAA_GPIO_INPUT(n)	(0x4 << (n * 3))
 
 // Codec quirks
-#define HDA_QUIRK_ALC292_DELL_M4800 0x00000001
-#define HDA_QUIRK_EEEPC_701 0x00000002
+#define HDA_QUIRK_ALC292_DELL_M4800  1
+#define HDA_QUIRK_EEEPC_701			(1 << 1)
 
 /* 9 - 25 = anything else */
 #define HDAA_QUIRK_SOFTPCMVOL	(1 << 9)
 #define HDAA_QUIRK_FIXEDRATE	(1 << 10)
 #define HDAA_QUIRK_FORCESTEREO	(1 << 11)
-#define HDAA_QUIRK_EAPDINV	(1 << 12)
-#define HDAA_QUIRK_SENSEINV	(1 << 14)
+#define HDAA_QUIRK_EAPDINV		(1 << 12)
+#define HDAA_QUIRK_SENSEINV		(1 << 14)
 
 /* 26 - 31 = vrefs */
-#define HDAA_QUIRK_IVREF50	(1 << 26)
-#define HDAA_QUIRK_IVREF80	(1 << 27)
-#define HDAA_QUIRK_IVREF100	(1 << 28)
-#define HDAA_QUIRK_OVREF50	(1 << 29)
-#define HDAA_QUIRK_OVREF80	(1 << 30)
-#define HDAA_QUIRK_OVREF100	(1U << 31)
+//Sets allowed voltage reference values for input/output pin widget
+#define HDAA_QUIRK_IVREF50		(1 << 26)
+#define HDAA_QUIRK_IVREF80		(1 << 27)
+#define HDAA_QUIRK_IVREF100		(1 << 28)
+#define HDAA_QUIRK_OVREF50		(1 << 29)
+#define HDAA_QUIRK_OVREF80		(1 << 30)
+#define HDAA_QUIRK_OVREF100		(1U << 31)
 
 #define HDAA_QUIRK_IVREF	(HDAA_QUIRK_IVREF50 | HDAA_QUIRK_IVREF80 | \
 						HDAA_QUIRK_IVREF100)
@@ -271,9 +293,10 @@ public:
 
 	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
-
-	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node);
-	STDMETHODIMP_(void) hda_disable_pin_output(ULONG pin_node);
+	
+	STDMETHODIMP_(void) hda_enable_pin_input(ULONG pin_node);
+	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node, BOOLEAN is_headphone);
+	STDMETHODIMP_(void) hda_disable_pin(ULONG pin_node);
 
 	STDMETHODIMP_(USHORT) hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	STDMETHODIMP_(NTSTATUS) ProgramSampleRate(DWORD dwSampleRate);

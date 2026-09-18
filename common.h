@@ -111,7 +111,7 @@
 #define MPU401_CMD_UART     0x3F    // Switch to UART mod
 
 /*****************************************************************************
- * Defines for HD Audio
+ * Defines for HD Audio Controller
  *****************************************************************************/
 
 // Communication types

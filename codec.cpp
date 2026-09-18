@@ -42,7 +42,6 @@
 #define STR_MODULENAME "HDA_Codec: "
 
 #define hda_log DbgPrint
-#define REALTEK_COEF_NODE 0x20
 
 typedef struct _HDA_CODEC_QUIRK_ENTRY {
 	ULONG controller_subsystem_id;
@@ -58,7 +57,8 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG c
 		
 	{ HDA_MATCH_ALL, 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800, 0, 0},
 
-	//TODO: need Controller and/or Codec SVID for EEE PC 701
+	//TODO: need Controller and/or Codec SVID for EEE PC 701 to gate this fix
+	//there are 700+ other motherboards using this codec.
 	//{ HDA_MATCH_ALL, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
 
 	//Remainder of list taken from FreeBSD.
@@ -184,7 +184,7 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG c
 								|| HDA_MATCH_ALL            == quirk_table[i].controller_subsystem_id
 								   );
 
-		if (match_codec && match_controller && match_subsystem) {
+		if (match_codec && match_subsystem && match_controller) {
 			//apply codec quirks from list
 			hda_log("\n Applying codec quirk %d\n", i);
 			quirks_sum |= quirk_table[i].quirk_on;
@@ -371,11 +371,14 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		if(type_of_node == HDA_WIDGET_AUDIO_OUTPUT) {
 			DbgPrint( ("Output Converter"));
 
-			//disable every audio output by connecting it to stream 0
+			//disable every audio output (for now) by connecting it to stream 0
 			hda_send_verb(node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
 			DbgPrint( ("Input Converter"));
+			//where to connect the input converters?
+			//disable every audio input (for now) by connecting it to stream 0
+			hda_send_verb(node, 0x706, 0x00);
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
 			DbgPrint( ("Audio Mixer"));
@@ -391,7 +394,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 			//break out all pin config fields
 			ULONG pin_connectivity		= (pin_config >> 30) & 0x3;
-			ULONG pin_loaction_fr		= (pin_config >> 28) & 0x3;
+			ULONG pin_location_fr		= (pin_config >> 28) & 0x3;
 			ULONG pin_location_geo		= (pin_config >> 24) & 0xf;
 			ULONG pin_node_type			= (pin_config >> 20) & 0xF;
 			ULONG pin_connection_type	= (pin_config >> 16) & 0xF;
@@ -870,12 +873,12 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 	else {
 		path.audio_output_node_stream_format_capabilities = audio_output_stream_format_capabilities;
 	}
-	if(path.output_amp_node_number==0) {
+	if (path.output_amp_node_number==0) {
 		//if nodes in path do not have output amp capabilities, volume will be controlled by Audio Output node with capabilities taken from AFG node
 		path.output_amp_node_number = output_node_number;
 		path.output_amp_node_capabilities = afg_node_output_amp_capabilities;
 	}
-	if(path.mute_amp_node_number == 0 &&
+	if (path.mute_amp_node_number == 0 &&
 		(afg_node_output_amp_capabilities & 0x80000000UL) != 0) {
 		path.mute_amp_node_number = output_node_number;
 		path.mute_amp_node_capabilities = afg_node_output_amp_capabilities;
@@ -1126,13 +1129,6 @@ void HDA_Codec::ForceEapd(ULONG pinNid, BOOLEAN enable)
     hda_send_verb(pinNid, VERB_SET_EAPD_BTLENABLE, v);
 }
 
-BOOLEAN HDA_Codec::IsHpPresent()
-{
-	if (InShutdown) return FALSE;
-
-	return hda_is_headphone_connected();
-}
-
 void HDA_Codec::SwitchOutput(BOOLEAN hpPresent)
 {
 	if (InShutdown) return;
@@ -1294,14 +1290,12 @@ void HDA_Codec::ApplyAlc292HeadphoneMode()
 //quirks for EEE PC 701
 //Realtek ALC662 with what subsystem ID?
 //can't apply this generally.
-
-
 void HDA_Codec::ApplyEeeInit()
 {	
 	if (InShutdown) return;
 
     hda_log("WDMHDA: ApplyEeeInit\n");
-
+	//turn on pins 20(14h) and 27 (1Bh)
 	hda_enable_pin_output(20, FALSE);
 	hda_enable_pin_output(27, FALSE);
 
@@ -1529,22 +1523,49 @@ STDMETHODIMP_(ULONG) HDA_Codec::SendVerbLogged(ULONG node, ULONG verb, ULONG com
 }
 
 
-STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_input(ULONG pin_node) {
+STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_input(ULONG pin_node, BOOLEAN is_microphone) {
 	if (InShutdown) return;
+	
+	//ignore how pin control was already set
+	ULONG pin_ctl = PIN_CTL_IN_ENABLE;
 
-	//TODO: vref bias for inputs
-	ULONG pin_ctl = hda_send_verb(pin_node, VERB_GET_PIN_WIDGET_CONTROL, 0x00);
-	hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, (pin_ctl | 0x20));
+	//check pin capabilities
+	ULONG pin_caps = hda_send_verb(pin_node, VERB_GET_PARAMETER, AC_PAR_PIN_CAP);
+
+	if (is_microphone) {
+		//Handle Input VREF Bias
+		UCHAR selected_vref = VREF_HIZ;
+	
+		if ((codec_quirks & HDAA_QUIRK_IVREF80) && (pin_caps & PIN_CAP_VREF_80)) {
+		    selected_vref = VREF_80;
+		} else if ((codec_quirks & HDAA_QUIRK_IVREF100) && (pin_caps & PIN_CAP_VREF_100)) {
+			selected_vref = VREF_100;
+	    } else if ((codec_quirks & HDAA_QUIRK_IVREF50) && (pin_caps & PIN_CAP_VREF_50)) {
+		    selected_vref = VREF_50;
+		} else {
+			// Standard default selection for input pins. 80 is preferred if no quirk
+			if (pin_caps & PIN_CAP_VREF_80)       selected_vref = VREF_80;
+			else if (pin_caps & PIN_CAP_VREF_100) selected_vref = VREF_100;
+			else if (pin_caps & PIN_CAP_VREF_50)  selected_vref = VREF_50;
+		}	
+		pin_ctl |= selected_vref;
+	}
+
+    hda_log("\n Pin input enabled nid=0x%02lX pin_ctl=0x%02lX\n",
+		 pin_node, pin_ctl);
+
+	hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
 }
 
 STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node, BOOLEAN is_headphone) {
 	if (InShutdown) return;
-	
+
+	//ignore how pin control was already set
+	ULONG pin_ctl = PIN_CTL_OUT_ENABLE;
+
 	//check pin capabilities
 	ULONG pin_caps = hda_send_verb(pin_node, VERB_GET_PARAMETER, AC_PAR_PIN_CAP);
-
-	ULONG pin_ctl = PIN_CTL_OUT_ENABLE;
-	BOOLEAN supports_hp  = (pin_caps & PIN_CAP_HP_DRV) != 0;
+	BOOLEAN supports_hp = (pin_caps & PIN_CAP_HP_DRV) != 0;
 
     if (is_headphone && supports_hp) {
         // Dell M4800 quirk: Dock line-out pin shouldn't drive HP amp mode
@@ -1556,16 +1577,20 @@ STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node, BOOLEAN is_
 
 	//Handle Output VREF Bias
     UCHAR selected_vref = VREF_HIZ;
-
-    if ((codec_quirks & HDAA_QUIRK_OVREF80) && (pin_caps & PIN_CAP_VREF_80)) {
-        selected_vref = VREF_80;
-    } else if ((codec_quirks & HDAA_QUIRK_OVREF100) && (pin_caps & PIN_CAP_VREF_100)) {
+	
+	//Only turn on VREF on an output pin if there is a quirk
+    if ((codec_quirks & HDAA_QUIRK_OVREF100) && (pin_caps & PIN_CAP_VREF_100)) {
         selected_vref = VREF_100;
+    } else if ((codec_quirks & HDAA_QUIRK_OVREF80) && (pin_caps & PIN_CAP_VREF_80)) {
+        selected_vref = VREF_80;
     } else if ((codec_quirks & HDAA_QUIRK_OVREF50) && (pin_caps & PIN_CAP_VREF_50)) {
         selected_vref = VREF_50;
     }
 
     pin_ctl |= selected_vref;
+
+	hda_log("\n Pin output enabled nid=0x%02lX pin_ctl=0x%02lX\n",
+		 pin_node, pin_ctl);
 
     hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, pin_ctl);
 }
@@ -1573,6 +1598,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_enable_pin_output(ULONG pin_node, BOOLEAN is_
 STDMETHODIMP_(void) HDA_Codec::hda_disable_pin(ULONG pin_node) {
 	if (InShutdown) return;
 	hda_send_verb(pin_node, VERB_SET_PIN_WIDGET_CONTROL, 0x0);
+	hda_log("\n Pin disabled nid=0x%02lX\n", pin_node);
 }
 
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {

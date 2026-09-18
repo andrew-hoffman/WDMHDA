@@ -68,7 +68,8 @@ typedef struct _HDA_OUTPUT_LIST {
 } HDA_OUTPUT_LIST;
 
 /*****************************************************************************
- * Constants
+ * Constants for HD Audio Codec
+ *****************************************************************************
  */
 
 // Widget types
@@ -103,6 +104,7 @@ typedef struct _HDA_OUTPUT_LIST {
 // Node types
 #define HDA_OUTPUT_NODE 0x1
 #define HDA_INPUT_NODE 0x2
+#define REALTEK_COEF_NODE 0x20
 
 // Definitions for Verb 0x707 (Set Pin Widget Control)
 #define PIN_CTL_IN_ENABLE		0x20
@@ -198,7 +200,7 @@ typedef struct _HDA_OUTPUT_LIST {
 
 
 /*****************************************************************************
- * HDA_Codec
+ * HDA_Codec Class Definition
  *****************************************************************************
  * HD Audio Codec object for managing individual codec instances on the link.
  * Supports up to 16 codecs per HD Audio link as per the spec.
@@ -244,7 +246,7 @@ private:
 
     void ForcePinOut(ULONG pinNid, BOOLEAN enable);
     void ForceEapd(ULONG pinNid, BOOLEAN enable);
-    BOOLEAN IsHpPresent();
+
     void SwitchOutput(BOOLEAN hpPresent);
     void UnmutePinOutAmp(ULONG pinNid);
     void MutePinOutAmp(ULONG pinNid);   
@@ -294,7 +296,7 @@ public:
 	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
 	
-	STDMETHODIMP_(void) hda_enable_pin_input(ULONG pin_node);
+	STDMETHODIMP_(void) hda_enable_pin_input(ULONG pin_node, BOOLEAN is_microphone);
 	STDMETHODIMP_(void) hda_enable_pin_output(ULONG pin_node, BOOLEAN is_headphone);
 	STDMETHODIMP_(void) hda_disable_pin(ULONG pin_node);
 

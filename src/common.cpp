@@ -270,6 +270,14 @@ private:
 		IN PCWSTR ValueName,
 		OUT PULONG Value
 	);
+	STDMETHODIMP_(NTSTATUS) ReadRegistryValue(
+		IN PREGISTRYKEY RegistryKey,
+		IN PCWSTR ValueName,
+		IN ULONG ValueType,
+		OUT PVOID Value,
+		IN ULONG ValueLength,
+		OUT PULONG ResultLength OPTIONAL
+	);
 	STDMETHODIMP_(NTSTATUS) WriteRegistryDword(
 		IN PREGISTRYKEY RegistryKey,
 		IN PCWSTR ValueName,
@@ -596,6 +604,8 @@ Init
 
 	if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
+		ExFreePool(pConfigMem);
+		pConfigMem = NULL;
         return ntStatus;
 	}
 
@@ -1128,6 +1138,7 @@ CAdapterCommon::
 )
 {
     PAGED_CODE();
+	UCHAR i;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CAdapterCommon::~CAdapterCommon]"));
 
@@ -1135,13 +1146,21 @@ CAdapterCommon::
 	hda_stop_stream ();
 	
 	//put all codecs in shutdown
-	for (UCHAR i = 0; i < codecCount; i++) {
+	for (i = 0; i < codecCount; i++) {
 		if(pCodecs[i] != NULL){
 			pCodecs[i]->shutdown(TRUE);
 		}
 	}
 
 	StopJackPolling();
+
+	// Prevent the ISR from accessing codecs, DMA buffers, or MMIO during teardown.
+    if (m_pInterruptSync)
+    {
+        m_pInterruptSync->Disconnect();
+        m_pInterruptSync->Release();
+        m_pInterruptSync = NULL;
+    }
 
 	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
 	for (i = 0; i < codecCount; i++) {
@@ -1192,11 +1211,6 @@ CAdapterCommon::
 		m_pHDARegisters = NULL; // Ensure the pointer is set to NULL after unmapping
 	}
 
-    if (m_pInterruptSync)
-    {
-        m_pInterruptSync->Disconnect();
-        m_pInterruptSync->Release();
-    }
     if (m_pPortWave)
     {
         m_pPortWave->Release();
@@ -1848,37 +1862,63 @@ CAdapterCommon::OpenRegistrySubKey(
 }
 
 STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::ReadRegistryDword(
+CAdapterCommon::ReadRegistryValue(
 	IN PREGISTRYKEY RegistryKey,
 	IN PCWSTR ValueName,
-	OUT PULONG Value
+	IN ULONG ValueType,
+	OUT PVOID Value,
+	IN ULONG ValueLength,
+	OUT PULONG ResultLength OPTIONAL
 )
 {
 	UNICODE_STRING Name;
-	ULONG ResultLength;
-	UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
-	PKEY_VALUE_PARTIAL_INFORMATION Information = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+	typedef struct _REGISTRY_VALUE_BUFFER {
+		KEY_VALUE_PARTIAL_INFORMATION Information;
+		ULONG Data;
+	} REGISTRY_VALUE_BUFFER;
+	REGISTRY_VALUE_BUFFER Buffer;
+	ULONG Length;
 	NTSTATUS Status;
 
-	if (RegistryKey == NULL || ValueName == NULL || Value == NULL) {
+	if (RegistryKey == NULL || ValueName == NULL || Value == NULL || ValueLength == 0) {
 		return STATUS_INVALID_PARAMETER;
 	}
 
 	RtlInitUnicodeString(&Name, ValueName);
 	Status = RegistryKey->QueryValueKey(&Name,
 		KeyValuePartialInformation,
-		Information,
+		&Buffer.Information,
 		sizeof(Buffer),
-		&ResultLength);
+		&Length);
 	if (!NT_SUCCESS(Status)) {
 		return Status;
 	}
-	if (Information->Type != REG_DWORD || Information->DataLength != sizeof(ULONG)) {
+	if (Buffer.Information.Type != ValueType) {
 		return STATUS_OBJECT_TYPE_MISMATCH;
 	}
+	if (Buffer.Information.DataLength > ValueLength) {
+		return STATUS_BUFFER_TOO_SMALL;
+	}
 
-	*Value = *(PULONG)Information->Data;
+	RtlCopyMemory(Value, Buffer.Information.Data, Buffer.Information.DataLength);
+	if (ResultLength) *ResultLength = Buffer.Information.DataLength;
 	return STATUS_SUCCESS;
+}
+
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::ReadRegistryDword(
+	IN PREGISTRYKEY RegistryKey,
+	IN PCWSTR ValueName,
+	OUT PULONG Value
+)
+{
+	ULONG ResultLength;
+	NTSTATUS Status;
+
+	Status = ReadRegistryValue(RegistryKey, ValueName, REG_DWORD, Value,
+		sizeof(*Value), &ResultLength);
+	return (NT_SUCCESS(Status) && ResultLength != sizeof(*Value)) ?
+		STATUS_OBJECT_TYPE_MISMATCH : Status;
 }
 
 STDMETHODIMP_(NTSTATUS)
@@ -2431,7 +2471,7 @@ SaveMixerSettingsToRegistry
     for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++) {
 		//ignore out of bounds mixer settings
 		ULONG reg = DefaultMixerSettings[i].RegisterIndex;
-		if (reg > SIZEOF_ARRAY(MixerSettings)){
+		if (reg >= DSP_MIX_MAXREGS){
 			DOUT (DBG_ERROR, ("Out of bounds mixer setting! %d",reg));
 			continue;
 		}

@@ -308,6 +308,9 @@ public:
     // Accessors
     UCHAR GetCodecAddress() const { return codec_address; }
     ULONG GetCodecId() const { return codec_id; }
+    USHORT GetCodecVendorId() const { return codec_ven; }
+    USHORT GetCodecDeviceId() const { return codec_dev; }
+    ULONG GetCodecSubsystemId() const { return codec_subsystem_id; }
     BOOLEAN IsInitialized() const { return (BOOLEAN) (out_paths.count > 0); }
 };
 

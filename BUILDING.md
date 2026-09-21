@@ -38,27 +38,25 @@ Code adapted from the Win2k DDK AC97 and SB16 sample drivers
 Also adapted from BleskOS (2025u10 branch), MPXPlay, FreeBSD, MSDN references
 Sources are noted in the file headers.
 
-File		Description
----------------------------
-
-adapter.cpp	Connects the driver with the system
-codec.cpp 	Object for each Codec device on HDA link
-codec.h 	Codec object header
-common.cpp	Common object used by all miniports, and HDA controller setup
-common.h 	Header file for the common object
-debug.h		Debug print definition
-hda_vendor.h	PCI Vendor and Device IDs
-makefile	Standard Windows NT makefile
-mintopo.cpp	Implementation of the topology miniport
-mintopo.h	Header file for the topology miniport
-minwave.cpp	Implementation of the wave cyclic miniport and the stream object
-minwave.h	Header file for the wave cyclic miniport and the stream object
-mydma.h		DMA channel wrapper for alignment and cache flushing
-tables.h	Topology and property tables
-
-HDA.inf		Setup information
-HDA.rc		Resource file containing version information
-sources		Dependency information for compiling
-b.bat		Build command
-c.bat		Copies driver into system32\Drivers
+| File		| Description							|
+|---------------|---------------------------------------------------------------|
+| adapter.cpp	| Connects the driver with the system				|
+| codec.cpp 	| Object for each Codec device on HDA link			|
+| codec.h 	| Codec object header						|
+| common.cpp	| Common object used by all miniports, and HDA controller setup |
+| common.h 	| Header file for the common object				|
+| debug.h	| Debug print definition					|
+| hda_vendor.h	| PCI Vendor and Device IDs					|
+| makefile	| Standard Windows NT makefile					|
+| mintopo.cpp	| Implementation of the topology miniport			|
+| mintopo.h	| Header file for the topology miniport				|
+| minwave.cpp	| Implementation of the wave cyclic miniport and stream object	|
+| minwave.h	| Header file for the wave cyclic miniport and stream object	|
+| mydma.h	| DMA channel wrapper for alignment and cache flushing		|
+| tables.h	| Topology and property tables					|
+| HDA.inf	| Setup information						|
+| HDA.rc	| Resource file containing version information			|
+| sources	| Dependency information for compiling (MSBUILD)		|
+| b.bat		| Build command							|
+| c.bat		| Copies driver into system32\Drivers				|
 

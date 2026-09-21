@@ -7,9 +7,9 @@ TARGETPATH=obj
 TARGETLIBS= \
         $(SDK_LIB_PATH)\portcls.lib\
         $(SDK_LIB_PATH)\libcntpr.lib\
-        ..\lib\*\stdunk.lib
+        ..\..\lib\*\stdunk.lib
 
-INCLUDES=..\inc
+INCLUDES=..\..\inc
 
 MSC_WARNING_LEVEL=-W3 -WX
 

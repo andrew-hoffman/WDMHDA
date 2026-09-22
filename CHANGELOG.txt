@@ -1,5 +1,10 @@
 # WDMHDA 0.23 2026-09-21
-Change version numbering schema, Alpha is no longer appropriate
+- Change version numbering schema, Alpha is no longer appropriate
+- Add codec quirks system from FreeBSD
+- Add quirks for Dell Precision M4800 & dock from @sdz
+- Log codec vendor, device, and subsystem IDs to the Device key in the Registry so it can be seen without DbgView
+	(HKEY_LOCAL_MACHINE\Enum\PCI\ whatever the vendor and device IDs of the Controller are)
+- Turn on headphone amp when output is a headphone, and enable bias voltage when needed
 
 # WDMHDA Alpha-022 2026-07-11
 

@@ -250,6 +250,39 @@ private:
 		IN UCHAR codec_number,
 		IN PCSTR interfaceName
 	);
+	STDMETHODIMP_(NTSTATUS) WriteHardwareIdsToRegistry(
+		IN HDA_Codec* Codec
+	);
+	STDMETHODIMP_(NTSTATUS) OpenRegistryKey(
+		OUT PREGISTRYKEY* RegistryKey,
+		IN BOOLEAN DeviceKey,
+		IN ACCESS_MASK DesiredAccess
+	);
+	STDMETHODIMP_(NTSTATUS) OpenRegistrySubKey(
+		IN PREGISTRYKEY ParentKey,
+		IN PCWSTR Name,
+		IN ACCESS_MASK DesiredAccess,
+		OUT PREGISTRYKEY* RegistryKey,
+		OUT PULONG Disposition OPTIONAL
+	);
+	STDMETHODIMP_(NTSTATUS) ReadRegistryDword(
+		IN PREGISTRYKEY RegistryKey,
+		IN PCWSTR ValueName,
+		OUT PULONG Value
+	);
+	STDMETHODIMP_(NTSTATUS) ReadRegistryValue(
+		IN PREGISTRYKEY RegistryKey,
+		IN PCWSTR ValueName,
+		IN ULONG ValueType,
+		OUT PVOID Value,
+		IN ULONG ValueLength,
+		OUT PULONG ResultLength OPTIONAL
+	);
+	STDMETHODIMP_(NTSTATUS) WriteRegistryDword(
+		IN PREGISTRYKEY RegistryKey,
+		IN PCWSTR ValueName,
+		IN ULONG Value
+	);
 	STDMETHODIMP_(NTSTATUS) StartJackPolling (void);
 	STDMETHODIMP_(VOID) StopJackPolling (void);
 
@@ -571,6 +604,8 @@ Init
 
 	if (!NT_SUCCESS (ntStatus)){
 		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
+		ExFreePool(pConfigMem);
+		pConfigMem = NULL;
         return ntStatus;
 	}
 
@@ -1103,6 +1138,7 @@ CAdapterCommon::
 )
 {
     PAGED_CODE();
+	UCHAR i;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CAdapterCommon::~CAdapterCommon]"));
 
@@ -1110,13 +1146,21 @@ CAdapterCommon::
 	hda_stop_stream ();
 	
 	//put all codecs in shutdown
-	for (UCHAR i = 0; i < codecCount; i++) {
+	for (i = 0; i < codecCount; i++) {
 		if(pCodecs[i] != NULL){
 			pCodecs[i]->shutdown(TRUE);
 		}
 	}
 
 	StopJackPolling();
+
+	// Prevent the ISR from accessing codecs, DMA buffers, or MMIO during teardown.
+    if (m_pInterruptSync)
+    {
+        m_pInterruptSync->Disconnect();
+        m_pInterruptSync->Release();
+        m_pInterruptSync = NULL;
+    }
 
 	//Delete all initialized codec objects (packed in pCodecs[0..codecCount-1])
 	for (i = 0; i < codecCount; i++) {
@@ -1167,11 +1211,6 @@ CAdapterCommon::
 		m_pHDARegisters = NULL; // Ensure the pointer is set to NULL after unmapping
 	}
 
-    if (m_pInterruptSync)
-    {
-        m_pInterruptSync->Disconnect();
-        m_pInterruptSync->Release();
-    }
     if (m_pPortWave)
     {
         m_pPortWave->Release();
@@ -1754,6 +1793,10 @@ CAdapterCommon::TryInitializeCodecSlot(
 				delete pCodec;
 				return STATUS_UNSUCCESSFUL;
 			} else {
+				NTSTATUS registryStatus = WriteHardwareIdsToRegistry(pCodec);
+				if (!NT_SUCCESS(registryStatus)) {
+					DOUT(DBG_ERROR, ("Unable to save HDA hardware IDs to the device registry key: 0x%08X", registryStatus));
+				}
 				return status;
 			}
 		} else {
@@ -1761,6 +1804,209 @@ CAdapterCommon::TryInitializeCodecSlot(
 		}
 	}
 	return STATUS_UNSUCCESSFUL;
+}
+
+/*****************************************************************************
+ * Registry helpers
+ *
+ * Keep PortCls key creation, subkey creation, and DWORD access in one place
+ * so future registry users share the same lifetime and error handling.
+ *****************************************************************************/
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::OpenRegistryKey(
+	OUT PREGISTRYKEY* RegistryKey,
+	IN BOOLEAN DeviceKey,
+	IN ACCESS_MASK DesiredAccess
+)
+{
+	if (RegistryKey == NULL) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	*RegistryKey = NULL;
+	return PcNewRegistryKey(RegistryKey,
+		NULL,
+		DeviceKey ? DeviceRegistryKey : DriverRegistryKey,
+		DesiredAccess,
+		m_pDeviceObject,
+		NULL,
+		NULL,
+		0,
+		NULL);
+}
+
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::OpenRegistrySubKey(
+	IN PREGISTRYKEY ParentKey,
+	IN PCWSTR Name,
+	IN ACCESS_MASK DesiredAccess,
+	OUT PREGISTRYKEY* RegistryKey,
+	OUT PULONG Disposition OPTIONAL
+)
+{
+	UNICODE_STRING KeyName;
+	ULONG LocalDisposition;
+
+	if (ParentKey == NULL || Name == NULL || RegistryKey == NULL) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	*RegistryKey = NULL;
+	RtlInitUnicodeString(&KeyName, Name);
+	return ParentKey->NewSubKey(RegistryKey,
+		NULL,
+		DesiredAccess,
+		&KeyName,
+		REG_OPTION_NON_VOLATILE,
+		Disposition ? Disposition : &LocalDisposition);
+}
+
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::ReadRegistryValue(
+	IN PREGISTRYKEY RegistryKey,
+	IN PCWSTR ValueName,
+	IN ULONG ValueType,
+	OUT PVOID Value,
+	IN ULONG ValueLength,
+	OUT PULONG ResultLength OPTIONAL
+)
+{
+	UNICODE_STRING Name;
+	typedef struct _REGISTRY_VALUE_BUFFER {
+		KEY_VALUE_PARTIAL_INFORMATION Information;
+		ULONG Data;
+	} REGISTRY_VALUE_BUFFER;
+	REGISTRY_VALUE_BUFFER Buffer;
+	ULONG Length;
+	NTSTATUS Status;
+
+	if (RegistryKey == NULL || ValueName == NULL || Value == NULL || ValueLength == 0) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	RtlInitUnicodeString(&Name, ValueName);
+	Status = RegistryKey->QueryValueKey(&Name,
+		KeyValuePartialInformation,
+		&Buffer.Information,
+		sizeof(Buffer),
+		&Length);
+	if (!NT_SUCCESS(Status)) {
+		return Status;
+	}
+	if (Buffer.Information.Type != ValueType) {
+		return STATUS_OBJECT_TYPE_MISMATCH;
+	}
+	if (Buffer.Information.DataLength > ValueLength) {
+		return STATUS_BUFFER_TOO_SMALL;
+	}
+
+	RtlCopyMemory(Value, Buffer.Information.Data, Buffer.Information.DataLength);
+	if (ResultLength) *ResultLength = Buffer.Information.DataLength;
+	return STATUS_SUCCESS;
+}
+
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::ReadRegistryDword(
+	IN PREGISTRYKEY RegistryKey,
+	IN PCWSTR ValueName,
+	OUT PULONG Value
+)
+{
+	ULONG ResultLength;
+	NTSTATUS Status;
+
+	Status = ReadRegistryValue(RegistryKey, ValueName, REG_DWORD, Value,
+		sizeof(*Value), &ResultLength);
+	return (NT_SUCCESS(Status) && ResultLength != sizeof(*Value)) ?
+		STATUS_OBJECT_TYPE_MISMATCH : Status;
+}
+
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::WriteRegistryDword(
+	IN PREGISTRYKEY RegistryKey,
+	IN PCWSTR ValueName,
+	IN ULONG Value
+)
+{
+	UNICODE_STRING Name;
+
+	if (RegistryKey == NULL || ValueName == NULL) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	RtlInitUnicodeString(&Name, ValueName);
+	return RegistryKey->SetValueKey(&Name, REG_DWORD, &Value, sizeof(Value));
+}
+
+/*****************************************************************************
+ * CAdapterCommon::WriteHardwareIdsToRegistry
+ *
+ * Records controller IDs in the device key and codec IDs below
+ * \Codecs\<codec address>\<codec ID>.  The address level provides a stable
+ * location for a codec if the enumeration order changes.
+ *****************************************************************************/
+STDMETHODIMP_(NTSTATUS)
+CAdapterCommon::WriteHardwareIdsToRegistry(
+	IN HDA_Codec* Codec
+)
+{
+	PREGISTRYKEY DeviceKey = NULL;
+	PREGISTRYKEY CodecsKey = NULL;
+	PREGISTRYKEY CodecAddressKey = NULL;
+	PREGISTRYKEY CodecKey = NULL;
+	ULONG Disposition;
+	NTSTATUS Status;
+	WCHAR CodecIdName[9];
+	WCHAR CodecAddressName[3];
+
+	if (Codec == NULL) {
+		return STATUS_INVALID_PARAMETER;
+	}
+
+	Status = OpenRegistryKey(&DeviceKey, TRUE, KEY_ALL_ACCESS);
+	if (!NT_SUCCESS(Status)) {
+		goto Exit;
+	}
+
+	Status = WriteRegistryDword(DeviceKey, L"ControllerVendorId", pci_ven);
+	if (!NT_SUCCESS(Status)) goto Exit;
+	Status = WriteRegistryDword(DeviceKey, L"ControllerDeviceId", pci_dev);
+	if (!NT_SUCCESS(Status)) goto Exit;
+	Status = WriteRegistryDword(DeviceKey, L"ControllerSubsystemId", pci_sid);
+	if (!NT_SUCCESS(Status)) goto Exit;
+
+	Status = OpenRegistrySubKey(DeviceKey, L"Codecs", KEY_ALL_ACCESS, &CodecsKey, &Disposition);
+	if (!NT_SUCCESS(Status)) {
+		goto Exit;
+	}
+
+	// The fixed-width format fits exactly in this buffer, including the terminator.
+	swprintf(CodecAddressName, L"%02X", Codec->GetCodecAddress());
+	CodecAddressName[ARRAY_COUNT(CodecAddressName) - 1] = L'\0';
+	Status = OpenRegistrySubKey(CodecsKey, CodecAddressName, KEY_ALL_ACCESS, &CodecAddressKey, &Disposition);
+	if (!NT_SUCCESS(Status)) {
+		goto Exit;
+	}
+
+	swprintf(CodecIdName, L"%08X", Codec->GetCodecId());
+	CodecIdName[ARRAY_COUNT(CodecIdName) - 1] = L'\0';
+	Status = OpenRegistrySubKey(CodecAddressKey, CodecIdName, KEY_ALL_ACCESS, &CodecKey, &Disposition);
+	if (!NT_SUCCESS(Status)) {
+		goto Exit;
+	}
+
+	Status = WriteRegistryDword(CodecKey, L"VendorId", Codec->GetCodecVendorId());
+	if (!NT_SUCCESS(Status)) goto Exit;
+	Status = WriteRegistryDword(CodecKey, L"DeviceId", Codec->GetCodecDeviceId());
+	if (!NT_SUCCESS(Status)) goto Exit;
+	Status = WriteRegistryDword(CodecKey, L"SubsystemId", Codec->GetCodecSubsystemId());
+
+Exit:
+	if (CodecKey) CodecKey->Release();
+	if (CodecAddressKey) CodecAddressKey->Release();
+	if (CodecsKey) CodecsKey->Release();
+	if (DeviceKey) DeviceKey->Release();
+	return Status;
 }
 
 
@@ -1776,64 +2022,18 @@ CAdapterCommon::ReadRegistryBoolean(
 
     PREGISTRYKEY   DriverKey   = NULL;
     PREGISTRYKEY   SettingsKey = NULL;
-    UNICODE_STRING KeyName;
-    ULONG          Disposition;
     NTSTATUS       Status;
     BOOLEAN        Result = DefaultValue;
+	ULONG Value;
 
-	const ULONG AllocSize =
-    sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(DWORD);
+	Status = OpenRegistryKey(&DriverKey, FALSE, KEY_READ);
+	if (!NT_SUCCESS(Status)) goto Exit;
 
-    PKEY_VALUE_PARTIAL_INFORMATION Info =
-        (PKEY_VALUE_PARTIAL_INFORMATION)
-            ExAllocatePool(PagedPool, AllocSize);
+	Status = OpenRegistrySubKey(DriverKey, L"Settings", KEY_READ, &SettingsKey, NULL);
+	if (!NT_SUCCESS(Status)) goto Exit;
 
-	Status = PcNewRegistryKey( &DriverKey,               // IRegistryKey
-                               NULL,                     // OuterUnknown
-                               DriverRegistryKey,        // Registry key type
-                               KEY_READ,				 // Access flags
-                               m_pDeviceObject,          // Device object
-                               NULL,                     // Subdevice
-                               NULL,                     // ObjectAttributes
-                               0,                        // Create options
-                               NULL );                   // Disposition
-
-    if (!NT_SUCCESS(Status))
-        goto Exit;
-
-    RtlInitUnicodeString(&KeyName, L"Settings");
-
-    Status = DriverKey->NewSubKey(
-        &SettingsKey,
-        NULL,
-        KEY_READ,
-        &KeyName,
-        REG_OPTION_NON_VOLATILE,
-        &Disposition
-    );
-    if (!NT_SUCCESS(Status))
-        goto Exit;
-
-    if (!Info)
-        goto Exit;
-
-    RtlInitUnicodeString(&KeyName, ValueName);
-
-    Status = SettingsKey->QueryValueKey(
-        &KeyName,
-        KeyValuePartialInformation,
-        Info,
-        AllocSize,
-        &Disposition
-    );
-
-    if (NT_SUCCESS(Status) &&
-        Info->DataLength >= sizeof(BYTE))
-    {
-        Result = (*(PBYTE)Info->Data) ? TRUE : FALSE;
-    }
-
-    ExFreePool(Info);
+	Status = ReadRegistryDword(SettingsKey, ValueName, &Value);
+	if (NT_SUCCESS(Status)) Result = Value ? TRUE : FALSE;
 
 Exit:
     if (SettingsKey) SettingsKey->Release();
@@ -2189,42 +2389,20 @@ RestoreMixerSettingsFromRegistry
 (   void
 )
 {
-    PREGISTRYKEY    DriverKey;
-    PREGISTRYKEY    SettingsKey;
+    PREGISTRYKEY    DriverKey = NULL;
+    PREGISTRYKEY    SettingsKey = NULL;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[RestoreMixerSettingsFromRegistry]"));
     
-    // open the driver registry key
-    NTSTATUS ntStatus = PcNewRegistryKey( &DriverKey,               // IRegistryKey
-                                          NULL,                     // OuterUnknown
-                                          DriverRegistryKey,        // Registry key type
-                                          KEY_ALL_ACCESS,           // Access flags
-                                          m_pDeviceObject,          // Device object
-                                          NULL,                     // Subdevice
-                                          NULL,                     // ObjectAttributes
-                                          0,                        // Create options
-                                          NULL );                   // Disposition
+    NTSTATUS ntStatus = OpenRegistryKey(&DriverKey, FALSE, KEY_ALL_ACCESS);
     if(NT_SUCCESS(ntStatus))
     {
-        UNICODE_STRING  KeyName;
         ULONG           Disposition;
-        
-        // make a unicode strong for the subkey name
-        RtlInitUnicodeString( &KeyName, L"Settings" );
 
-
-
-        // open the settings subkey
-        ntStatus = DriverKey->NewSubKey( &SettingsKey,              // Subkey
-                                         NULL,                      // OuterUnknown
-                                         KEY_ALL_ACCESS,            // Access flags
-                                         &KeyName,                  // Subkey name
-                                         REG_OPTION_NON_VOLATILE,   // Create options
-                                         &Disposition );
+        ntStatus = OpenRegistrySubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
+                                      &SettingsKey, &Disposition);
         if(NT_SUCCESS(ntStatus))
         {
-            ULONG   ResultLength;
-
             if(Disposition == REG_CREATED_NEW_KEY)
             {
                 // copy default settings
@@ -2235,52 +2413,16 @@ RestoreMixerSettingsFromRegistry
                 }
             } else
             {
-                // allocate data to hold key info
-                PVOID KeyInfo = ExAllocatePool(PagedPool, sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(DWORD));
-                if(NULL != KeyInfo)
+                for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++)
                 {
-                    // loop through all mixer settings
-                    for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++)
-                    {
-                        // init key name
-                        RtlInitUnicodeString( &KeyName, DefaultMixerSettings[i].KeyName );
-        
-                        // query the value key
-                        ntStatus = SettingsKey->QueryValueKey( &KeyName,
-                                                               KeyValuePartialInformation,
-                                                               KeyInfo,
-                                                               sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(DWORD),
-                                                               &ResultLength );
-                        if(NT_SUCCESS(ntStatus))
-                        {
-                            PKEY_VALUE_PARTIAL_INFORMATION PartialInfo = PKEY_VALUE_PARTIAL_INFORMATION(KeyInfo);
-    
-                            if(PartialInfo->DataLength == sizeof(DWORD))
-                            {
-                                // set mixer register to registry value
-                                MixerRegWrite( DefaultMixerSettings[i].RegisterIndex,
-                                               BYTE(*(PDWORD(PartialInfo->Data))) );
-                            }
-                        } else
-                        {
-                            // if key access failed, set to default
-                            MixerRegWrite( DefaultMixerSettings[i].RegisterIndex,
-                                           DefaultMixerSettings[i].RegisterSetting );
-                        }
+                    ULONG Value;
+                    ntStatus = ReadRegistryDword(SettingsKey, DefaultMixerSettings[i].KeyName, &Value);
+                    if (NT_SUCCESS(ntStatus)) {
+                        MixerRegWrite(DefaultMixerSettings[i].RegisterIndex, BYTE(Value));
+                    } else {
+                        MixerRegWrite(DefaultMixerSettings[i].RegisterIndex,
+                                      DefaultMixerSettings[i].RegisterSetting);
                     }
-    
-                    // free the key info
-                    ExFreePool(KeyInfo);
-                } else
-                {
-                    // copy default settings
-                    for(ULONG i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++)
-                    {
-                        MixerRegWrite( DefaultMixerSettings[i].RegisterIndex,
-                                       DefaultMixerSettings[i].RegisterSetting );
-                    }
-
-                    ntStatus = STATUS_INSUFFICIENT_RESOURCES;
                 }
             }
 
@@ -2307,8 +2449,8 @@ SaveMixerSettingsToRegistry
 (   void
 )
 {
-    PREGISTRYKEY    DriverKey;
-    PREGISTRYKEY    SettingsKey;
+    PREGISTRYKEY    DriverKey = NULL;
+    PREGISTRYKEY    SettingsKey = NULL;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[SaveMixerSettingsToRegistry]"));
 
@@ -2316,53 +2458,27 @@ SaveMixerSettingsToRegistry
 		return STATUS_UNSUCCESSFUL;
 	}
     
-    // open the driver registry key
-    NTSTATUS ntStatus = PcNewRegistryKey( &DriverKey,               // IRegistryKey
-                                          NULL,                     // OuterUnknown
-                                          DriverRegistryKey,        // Registry key type
-                                          KEY_ALL_ACCESS,           // Access flags
-                                          m_pDeviceObject,          // Device object
-                                          NULL,                     // Subdevice
-                                          NULL,                     // ObjectAttributes
-                                          0,                        // Create options
-                                          NULL );                   // Disposition
+    NTSTATUS ntStatus = OpenRegistryKey(&DriverKey, FALSE, KEY_ALL_ACCESS);
     if(! NT_SUCCESS(ntStatus) || DriverKey == NULL) {
 		return STATUS_UNSUCCESSFUL;
     }
-    UNICODE_STRING  KeyName;
-        
-    // make a unicode strong for the subkey name
-    RtlInitUnicodeString( &KeyName, L"Settings" );
-
-    // open the settings subkey
-    ntStatus = DriverKey->NewSubKey( &SettingsKey,              // Subkey
-                                     NULL,                      // OuterUnknown
-                                     KEY_ALL_ACCESS,            // Access flags
-                                     &KeyName,                  // Subkey name
-                                     REG_OPTION_NON_VOLATILE,   // Create options
-                                     NULL );
+    ntStatus = OpenRegistrySubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
+                                  &SettingsKey, NULL);
     if(! NT_SUCCESS(ntStatus) || SettingsKey == NULL) {
-		return STATUS_UNSUCCESSFUL;
 		DriverKey->Release();
+		return STATUS_UNSUCCESSFUL;
 	}
     // loop through all mixer settings
     for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++) {
-        // init key name
-        RtlInitUnicodeString( &KeyName, DefaultMixerSettings[i].KeyName );
-
 		//ignore out of bounds mixer settings
 		ULONG reg = DefaultMixerSettings[i].RegisterIndex;
-		if (reg > SIZEOF_ARRAY(MixerSettings)){
+		if (reg >= DSP_MIX_MAXREGS){
 			DOUT (DBG_ERROR, ("Out of bounds mixer setting! %d",reg));
 			continue;
 		}
 
-        // set the key
-        DWORD KeyValue = DWORD(MixerSettings[reg]);
-        ntStatus = SettingsKey->SetValueKey( &KeyName,                 // Key name
-                                             REG_DWORD,                // Key type
-                                             PVOID(&KeyValue),
-                                             sizeof(DWORD) );
+        ntStatus = WriteRegistryDword(SettingsKey, DefaultMixerSettings[i].KeyName,
+                                      ULONG(MixerSettings[reg]));
         if(!NT_SUCCESS(ntStatus)) {
 			break;
         }

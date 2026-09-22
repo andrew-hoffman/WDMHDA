@@ -13,6 +13,7 @@
 #include "stdunk.h"
 #include "common.h"
 #include "codec.h"
+#include <wchar.h>
 
 
 #define STR_MODULENAME "HDACommon: "
@@ -622,8 +623,7 @@ Init
 	pci_ssid = (USHORT)(pci_sid >> 16);
 	pci_svid = (USHORT)(pci_sid & 0xFFFF);
 
-	DbgPrint( "\nHDA Controller: VID:0x%04X  PID:0x%04X : ", pci_ven, pci_dev);
-	DbgPrint( "\n     Subsystem: SSID:0x%04X SVID:0x%04X : ", pci_ssid, pci_svid);
+	DbgPrint( "\nHDA Controller: VID:0x%04X  PID:0x%04X:", pci_ven, pci_dev);
 
 	USHORT tmp;
 	
@@ -795,6 +795,8 @@ Init
 		DbgPrint( "\nPCI Config Space Write Failed! 0x%X\n", ntStatus);
         //return ntStatus; //is failure fatal? i dont think so
 	}
+
+	DbgPrint( "\n     Subsystem: SSID:0x%04X SVID:0x%04X\n", pci_ssid, pci_svid);
 
 
 	//there may be multiple instances of this driver loaded at once
@@ -1776,6 +1778,8 @@ CAdapterCommon::TryInitializeCodecSlot(
 	}
 
 	DOUT (DBG_SYSINFO, ("HDA: Codec %d VID/PID: %08X %s communication interface", codec_number, codec_id, interfaceName));
+	
+	//TODO: arrow anti-pattern
 
 	//create and initialize codec object and pack into array
 	if (codecCount < ARRAY_COUNT(pCodecs)) {

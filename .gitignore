@@ -1,5 +1,5 @@
-buildchk.*
-buildfre.*
-/obj/**
-/objchk/**
-/objfre/**
+/src/buildchk.*
+/src/buildfre.*
+/src/obj/**
+/src/objchk/**
+/src/objfre/**

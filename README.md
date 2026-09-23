@@ -18,9 +18,9 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 - Install HDA.inf with Device Manager on the HD Audio Controller device.
   - On Windows 98se/Me the device is listed in "Other Devices" as **"PCI Card"** with class code **0403** (you can run `hwinfo /ui` to see the vendor /device info on unknown devices).
-  - On Windows 2000/XP if you have the official KB888111 update installed, the HDA controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. **Do not install on the HD Audio Codec device** (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
+  - On Windows 2000/XP if you have the official KB888111 update installed, the audio controller will be listed in the "System Devices" section as **"Microsoft UAA Bus Device"** or similar. **Do not install on the HD Audio Codec device** (this will have a device ID string that starts with "HDAUDIO\") as this will not function.
 - If you get a dialog box saying "A file being copied is older than the file currently in use" for ksuser.dll and stream.sys, **Always keep the newer file.**
-- After installation, you must restart before the Volume Control will load and audio will work. If the Volume Control still does not appear after a restart, open the Multimedia control panel, click to select the "Show volume control on the taskbar" check box, then click OK and restart the computer again.
+- After first installation, wait a few  minutes to see if the speaker icon appears in the taskbar (the WDM audio components are installing and loading in the background). You must then restart for audio to work. If the Volume Control still does not appear after a restart, open the Multimedia control panel, click to select the "Show volume control on the taskbar" check box, then click OK and restart the computer again. If the WDM components will not install, try plugging in a USB audio device or see the workaround in issue #62 . 
 
 It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver as it contains some improvements to the kernel streaming components. You may also wish to install the WDM Audio Update from Microsoft, which are packages Q242937 and Q269601.
 

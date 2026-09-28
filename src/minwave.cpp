@@ -1221,7 +1221,7 @@ Init
 
 	if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, set up the stream
-			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
 			if (NT_SUCCESS(ntStatus)) {
 				StreamDescriptorValid = TRUE;
 			}
@@ -1461,7 +1461,7 @@ SetState
                     StreamDescriptorValid = FALSE;
 
                     if (NT_SUCCESS(ntStatus) && DmaChannel) {
-                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
                         if (NT_SUCCESS(ntStatus)) {
                             StreamDescriptorValid = TRUE;
                         }
@@ -1476,7 +1476,7 @@ SetState
                     Miniport->AdapterCommon->hda_stop_sound();
                 }
             } else if (DmaChannel && !StreamDescriptorValid) {
-                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel);
+                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
                 if (NT_SUCCESS(ntStatus)) {				
                     StreamDescriptorValid = TRUE;					
                 } else {

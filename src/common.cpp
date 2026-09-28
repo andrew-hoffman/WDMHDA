@@ -26,6 +26,7 @@ typedef struct _BDLE {
     ULONG   Flags;
 } BDLE;
 
+//Functions for common buffers
 #define HDA_COMMON_BUFFER_ALIGNMENT 128
 
 typedef struct _HDA_DMA_COMMON_BUFFER {
@@ -167,21 +168,17 @@ private:
     USHORT InputStreamBase;
     USHORT OutputStreamBase;
 
-	// CORB/RIRB buffers
-	// need to be in different 4k pages
+	// CORB/RIRB buffers for commands to/from codec
+	// Must be in different 4k pages
 	HDA_DMA_COMMON_BUFFER RirbBuffer;
-
     HDA_DMA_COMMON_BUFFER CorbBuffer;
-
-	HDA_DMA_COMMON_BUFFER BdlBuffer;
+	
+	//Buffer Description Lists for stream engines
+	HDA_DMA_COMMON_BUFFER InputBdl;
+	HDA_DMA_COMMON_BUFFER OutputBdl;
 
 	HDA_DMA_COMMON_BUFFER DmaPosBuffer;
 	ULONG bad_dpos_count;
-
-    // Output buffer information
-    PULONG OutputBufferList;
-	PVOID BufVirtualAddress;
-	PHYSICAL_ADDRESS BufLogicalAddress;
 
 	UCHAR interrupt;
 	ULONG memLength;
@@ -374,7 +371,7 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
-	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(PDMACHANNEL DmaChannel);
+	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(PDMACHANNEL DmaChannel, BOOLEAN in);
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
@@ -554,7 +551,7 @@ Init
 
 	ResetCommonBufferDescriptor(&RirbBuffer);
 	ResetCommonBufferDescriptor(&CorbBuffer);
-	ResetCommonBufferDescriptor(&BdlBuffer);
+	ResetCommonBufferDescriptor(&OutputBdl);
 	ResetCommonBufferDescriptor(&DmaPosBuffer);
 	
 	//Read settings from registry
@@ -989,7 +986,8 @@ Init
 
 	DOUT(DBG_SYSINFO, ("Corb Virt Addr = 0x%X,", CorbBuffer.AlignedVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbBuffer.AlignedLogicalAddress));
-
+	
+	//TODO remove duplicate checks that are already done in AllcateAlignedCommonBuffer
 	if (!CorbBuffer.AlignedVirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt Corb Space"));
 		return STATUS_BUFFER_TOO_SMALL;
@@ -1006,29 +1004,29 @@ Init
 	//check 128-byte alignment of what we received
 	ASSERT( (CorbBuffer.AlignedLogicalAddress.LowPart & 0x7F) == 0);
 
-	//allocate BDL
+	//allocate output BDL
 	ntStatus = AllocateAlignedCommonBuffer(
 		DMA_Adapter,
 		BdlSize,
 		HDA_COMMON_BUFFER_ALIGNMENT,
-		&BdlBuffer);
+		&OutputBdl);
 
 	if (!NT_SUCCESS(ntStatus)) {
 		DOUT(DBG_ERROR, ("Couldn't allocate aligned BDL Space (status 0x%X)", ntStatus));
 		return ntStatus;
 	}
 
-	if (!BdlBuffer.AlignedVirtualAddress) {
+	if (!OutputBdl.AlignedVirtualAddress) {
 		DOUT(DBG_ERROR, ("Couldn't map virt BDL Space"));
 		return STATUS_BUFFER_TOO_SMALL;
 	}
-	if (BdlBuffer.AlignedLogicalAddress.QuadPart == 0) {
+	if (OutputBdl.AlignedLogicalAddress.QuadPart == 0) {
 		DOUT(DBG_ERROR, ("Couldn't map phys BDL Space"));
 		return STATUS_NO_MEMORY;
 	}
 
 	if (is64OK == FALSE) {
-		ASSERT(BdlBuffer.AlignedLogicalAddress.HighPart == 0);
+		ASSERT(OutputBdl.AlignedLogicalAddress.HighPart == 0);
 	}
 
 	//allocate DMA Position Buffer
@@ -1183,9 +1181,9 @@ CAdapterCommon::
 		DOUT (DBG_PRINT, ("freeing Corb buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &CorbBuffer);
 	}
-	if((BdlBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
+	if((OutputBdl.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
-		FreeAlignedCommonBuffer(DMA_Adapter, &BdlBuffer);
+		FreeAlignedCommonBuffer(DMA_Adapter, &OutputBdl);
 	}
 	if((DmaPosBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Dma buffer"));
@@ -1966,12 +1964,15 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 	if (Codec == NULL) {
 		return STATUS_INVALID_PARAMETER;
 	}
-
+	
+	//Device Key is under HKLM\Enum\PCI\<device ID string>
 	Status = OpenRegistryKey(&DeviceKey, TRUE, KEY_ALL_ACCESS);
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
-
+	
+	//write controller ven, dev, susbystem IDs;
+	//already in the device key as the device string though
 	Status = WriteRegistryDword(DeviceKey, L"ControllerVendorId", pci_ven);
 	if (!NT_SUCCESS(Status)) goto Exit;
 	Status = WriteRegistryDword(DeviceKey, L"ControllerDeviceId", pci_dev);
@@ -1983,6 +1984,9 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
+	
+	//codec IDs are saved in subtree Codecs\<codec address on bus>\<codec vendor and device ID>
+	//like Codecs\01\10EC15AD
 
 	_snwprintf(CodecAddressName, ARRAY_COUNT(CodecAddressName), L"%02X", Codec->GetCodecAddress());
 	CodecAddressName[ARRAY_COUNT(CodecAddressName) - 1] = L'\0';
@@ -1997,14 +2001,16 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
-
+	
+	//write codec's vendor, device, & subsystem IDs.
+	//Todo: Log more topology info and read config verb overrides back
 	Status = WriteRegistryDword(CodecKey, L"VendorId", Codec->GetCodecVendorId());
 	if (!NT_SUCCESS(Status)) goto Exit;
 	Status = WriteRegistryDword(CodecKey, L"DeviceId", Codec->GetCodecDeviceId());
 	if (!NT_SUCCESS(Status)) goto Exit;
 	Status = WriteRegistryDword(CodecKey, L"SubsystemId", Codec->GetCodecSubsystemId());
 
-Exit:
+Exit: //cleanup
 	if (CodecKey) CodecKey->Release();
 	if (CodecAddressKey) CodecAddressKey->Release();
 	if (CodecsKey) CodecsKey->Release();
@@ -2928,8 +2934,15 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 	writeULONG(reg, readULONG(reg) & ~flag);
 }
 
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL DmaChannel) {
+//set up the appropriate BDL for the input or output DmaChannel
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL DmaChannel, BOOLEAN in) {
 	
+	// Output audio buffer information
+	PVOID BufVirtualAddress;
+	PHYSICAL_ADDRESS BufLogicalAddress;
+
+	HDA_DMA_COMMON_BUFFER Bdl = in ? (InputBdl) : (OutputBdl); 
+
 	ULONG i = 0;
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
@@ -2954,16 +2967,16 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	ULONG entries = audBufSize / 2048;
 	if(entries > 128UL) entries = 128;
 	for(i = 0; i < (entries * 4); i += 4){
-		BdlBuffer.AlignedVirtualAddress[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
-		BdlBuffer.AlignedVirtualAddress[i+1] = BufLogicalAddress.HighPart;
-		BdlBuffer.AlignedVirtualAddress[i+2] = audBufSize / entries;
-		BdlBuffer.AlignedVirtualAddress[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
+		Bdl.AlignedVirtualAddress[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
+		Bdl.AlignedVirtualAddress[i+1] = BufLogicalAddress.HighPart;
+		Bdl.AlignedVirtualAddress[i+2] = audBufSize / entries;
+		Bdl.AlignedVirtualAddress[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
 	}
 	
 	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
 	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?
 	/*
-	BDLE* Bdl = reinterpret_cast<BDLE*>(BdlBuffer.AlignedVirtualAddress);
+	BDLE* Bdl = reinterpret_cast<BDLE*>(Bdl.AlignedVirtualAddress);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
     ULONG offset = 0;
     USHORT entries = 0;
@@ -2993,7 +3006,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	for(i = 0; i < ((int)BdlSize); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
-				(i/4), BdlBuffer.AlignedVirtualAddress[i+1], BdlBuffer.AlignedVirtualAddress[i], BdlBuffer.AlignedVirtualAddress[i+2], BdlBuffer.AlignedVirtualAddress[i+3]));
+				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));
 	}
 	*/
 	
@@ -3006,11 +3019,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	//KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 
 	//CacheLineFlush(BufVirtualAddress, audBufSize);
-	CacheLineFlush(BdlBuffer.RawVirtualAddress, BdlBuffer.RawLength);
+	CacheLineFlush(Bdl.RawVirtualAddress, Bdl.RawLength);
 
 	//set buffer registers
-	writeULONG(OutputStreamBase + 0x18, BdlBuffer.AlignedLogicalAddress.LowPart);
-	writeULONG(OutputStreamBase + 0x1C, BdlBuffer.AlignedLogicalAddress.HighPart);
+	writeULONG(OutputStreamBase + 0x18, Bdl.AlignedLogicalAddress.LowPart);
+	writeULONG(OutputStreamBase + 0x1C, Bdl.AlignedLogicalAddress.HighPart);
 	writeULONG(OutputStreamBase + 0x08, audBufSize);
 	writeUSHORT(OutputStreamBase + 0x0C, (USHORT)(entries - 1)); //there are entries-1 entries in buffer
 

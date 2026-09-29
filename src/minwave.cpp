@@ -1103,15 +1103,18 @@ Init
 {
 	NTSTATUS ntStatus = STATUS_SUCCESS;
     PAGED_CODE();
+	
+	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
 
 	//TODO: Temporary block on creating capture streams
-	if(Capture_)
+	if(Capture_){
+		_DbgPrintF(DEBUGLVL_TERSE,("Capture stream unsupported"));
 		return STATUS_UNSUCCESSFUL;
-
-    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
+	}
 
     ASSERT(Miniport_);
     ASSERT(DataFormat);
+	//is this assert valid? crashes on trying to capture in Sound Recorder
     ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
     ASSERT(DmaChannel_);
 
@@ -1148,7 +1151,7 @@ Init
 	/*
 	if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, set up the stream
-			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
+			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
 			if (NT_SUCCESS(ntStatus)) {
 				StreamDescriptorValid = TRUE;
 			}
@@ -1378,7 +1381,7 @@ SetState
                     StreamDescriptorValid = FALSE;
 
                     if (NT_SUCCESS(ntStatus) && DmaChannel) {
-                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
+                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
                         if (NT_SUCCESS(ntStatus)) {
                             StreamDescriptorValid = TRUE;
                         }
@@ -1393,7 +1396,7 @@ SetState
                     Miniport->AdapterCommon->hda_stop_sound();
                 }
             } else if (DmaChannel && !StreamDescriptorValid) {
-                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
+                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
                 if (NT_SUCCESS(ntStatus)) {				
                     StreamDescriptorValid = TRUE;					
                 } else {

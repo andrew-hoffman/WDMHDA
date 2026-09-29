@@ -22,8 +22,8 @@
 #include "portcls.h"
 #include "DMusicKS.h"
 
-//get less debug prints
-#define DEBUG_LEVEL DEBUGLVL_TERSE
+//level for debug prints: blab > verbose > terse > none
+#define DEBUG_LEVEL DEBUGLVL_VERBOSE
 #include "ksdebug.h"
 #include "debug.h"
 

@@ -40,8 +40,6 @@ private:
 
     BOOLEAN             AllocatedCapture;           // Capture in use.
     BOOLEAN             AllocatedRender;            // Render in use.
-    BOOLEAN             Allocated8Bit;              // 8-bit DMA in use.
-    BOOLEAN             Allocated16Bit;             // 16-bit DMA in use.
 
 	PDMACHANNEL         DmaChannel; 
 	PADAPTER_OBJECT     AdapterObject;

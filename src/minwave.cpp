@@ -222,6 +222,9 @@ ValidateFormat
 	// Limiting this to 22050-48000 because Windows's kernel mixer will
 	// try to resample anything lower to the highest supported multiple
 	// and native 8-11khz if even supported by the codec causes problems with buffering
+	//
+	// 16-bit formats only supported for now. TODO: add other bit depths
+
     if  (   (Format->FormatSize >= sizeof(KSDATAFORMAT_WAVEFORMATEX))
         &&  IsEqualGUIDAligned(Format->MajorFormat,KSDATAFORMAT_TYPE_AUDIO)
         &&  IsEqualGUIDAligned(Format->SubFormat,KSDATAFORMAT_SUBTYPE_PCM)
@@ -233,8 +236,9 @@ ValidateFormat
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
         &&  (   (waveFormat->wBitsPerSample == 16)
             )
-        &&  (   (waveFormat->nChannels == 2)
-
+        &&  (   (waveFormat->nChannels == 1) 
+			 || (waveFormat->nChannels == 2)
+				
             )
         &&  (   (waveFormat->nSamplesPerSec >= 8000)
             &&  (waveFormat->nSamplesPerSec <= 48000)
@@ -808,53 +812,20 @@ DataRangeIntersection
                 return STATUS_NO_MATCH;
             }
         }
-
-        //
-        // Check if one pin is in use -> use same sample frequency.
-        //
-        if (AllocatedCapture || AllocatedRender)
-        {
-            SampleFrequency = SamplingFrequency;
-            if ((SampleFrequency > ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency) ||
-                (SampleFrequency < ((PKSDATARANGE_AUDIO) MatchingDataRange)->MinimumSampleFrequency))
-            {
-                return STATUS_NO_MATCH;
-            }
-        }
-        else
-        {
-            SampleFrequency = min( AudioRange->MaximumSampleFrequency,
+		
+		// removed - HDA is full duplex
+		
+        SampleFrequency = min( AudioRange->MaximumSampleFrequency,
                  ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency );
 
-        }
+
 
         WaveFormatEx->nSamplesPerSec = SampleFrequency;
+		
+		// removed - HDA doesn't need to budget DMA channels
 
-        //
-        // Check if one pin is in use -> use other bits per sample.
-        //
-        if (AllocatedCapture || AllocatedRender)
-        {
-            if (Allocated8Bit)
-            {
-                BitsPerSample = 16;
-            }
-            else
-            {
-                BitsPerSample = 8;
-            }
-
-            if ((BitsPerSample > ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample) ||
-                (BitsPerSample < ((PKSDATARANGE_AUDIO) MatchingDataRange)->MinimumBitsPerSample))
-            {
-                return STATUS_NO_MATCH;
-            }
-        }
-        else
-        {
-            BitsPerSample = (USHORT) min( AudioRange->MaximumBitsPerSample,
+        BitsPerSample = (USHORT) min( AudioRange->MaximumBitsPerSample,
                           ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample );
-        }
 
 
         WaveFormatEx->wBitsPerSample = BitsPerSample;
@@ -950,45 +921,17 @@ NewStream
         ntStatus = ValidateFormat(DataFormat);
     }
 
-    if(NT_SUCCESS(ntStatus))
-    {
-        // if we're trying to start a full-duplex stream.
-        if(AllocatedCapture || AllocatedRender)
-        {
-            // make sure the requested sampling rate is the
-            // same as the currently running one...
-            PWAVEFORMATEX waveFormat = PWAVEFORMATEX(DataFormat + 1);
-            if( SamplingFrequency != waveFormat->nSamplesPerSec )
-            {
-                // Bad format....
-                ntStatus = STATUS_INVALID_PARAMETER;
-            }
-        }
-    }
+	//Removed sample rate sync unnecessary for HDA
 
     PDMACHANNEL    dmaChannel = NULL;
     PWAVEFORMATEX       waveFormat = PWAVEFORMATEX(DataFormat + 1);
-
-    //
+	
+	//
     // Get the required DMA channel if it's not already in use.
+	// removed check - HDA doesn't have sample rate limitations on full duplex
     //
-    if (NT_SUCCESS(ntStatus))
-    {
-        if (waveFormat->wBitsPerSample == 8)
-        {
-            if (! Allocated8Bit)
-            {
-                dmaChannel = DmaChannel;
-            }
-        }
-        else
-        {
-            if (! Allocated16Bit)
-            {
-                dmaChannel = DmaChannel;
-            }
-        }
-    }
+
+	dmaChannel = DmaChannel;
 
     if (! dmaChannel)
     {
@@ -1025,15 +968,6 @@ NewStream
                 else
                 {
                     AllocatedRender = TRUE;
-                }
-
-                if (waveFormat->wBitsPerSample == 8)
-                {
-                    Allocated8Bit = TRUE;
-                }
-                else
-                {
-                    Allocated16Bit = TRUE;
                 }
 
                 *OutStream = PMINIPORTWAVECYCLICSTREAM(stream);
@@ -1142,20 +1076,8 @@ CMiniportWaveCyclicStreamHDA::
         {
             Miniport->AllocatedRender = FALSE;
         }
-
-        if (Format16Bit)
-        {
-            Miniport->Allocated16Bit = FALSE;
-        }
-        else
-        {
-            Miniport->Allocated8Bit = FALSE;
-        }
 		
 		//stop hw stream before destruction
-		//probably unnecessary since hw stream should have been stopped
-		//when it entered Pause state
-		//but just to be sure
 		Miniport->AdapterCommon->hda_stop_stream();
 
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
@@ -1181,6 +1103,10 @@ Init
 {
 	NTSTATUS ntStatus = STATUS_SUCCESS;
     PAGED_CODE();
+
+	//TODO: Temporary block on creating capture streams
+	if(Capture_)
+		return STATUS_UNSUCCESSFUL;
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
 
@@ -1218,7 +1144,8 @@ Init
     );
     Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
     KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
-
+	
+	/*
 	if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, set up the stream
 			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, FALSE);
@@ -1226,7 +1153,8 @@ Init
 				StreamDescriptorValid = TRUE;
 			}
 	}
-    
+    */
+
     SetFormat( DataFormat );
 
     return ntStatus;
@@ -1292,20 +1220,9 @@ SetFormat
             FALSE,
             NULL
         );
-    
-        // check for full-duplex stuff
-        if( NT_SUCCESS(ntStatus)
-            && Miniport->AllocatedCapture
-            && Miniport->AllocatedRender
-        )
-        {
-            // no new formats.... bad...
-            if( Miniport->SamplingFrequency != waveFormat->nSamplesPerSec )
-            {
-                // Bad format....
-                ntStatus = STATUS_INVALID_PARAMETER;
-            }
-        }
+		
+		//Removed - unnecessary
+        // check for full-duplex sample rate sync
     
         // TODO:  Validate sample size.
     

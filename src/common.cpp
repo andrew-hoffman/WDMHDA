@@ -27,7 +27,7 @@ typedef struct _BDLE {
 } BDLE;
 
 //Functions for common buffers
-#define HDA_COMMON_BUFFER_ALIGNMENT 128
+#define HDA_COMMON_BUFFER_ALIGNMENT 128 //must be power of 2
 
 typedef struct _HDA_DMA_COMMON_BUFFER {
 	volatile PULONG AlignedVirtualAddress;
@@ -45,6 +45,11 @@ ResetCommonBufferDescriptor(
 	OUT PHDA_DMA_COMMON_BUFFER Buffer
 );
 
+/*
+ * Allocates Common Buffer to a COMMON_BUFFER struct
+ * Allocates extra space to guarantee alignment
+ * then returns an aligned window within that space for use
+ */
 static
 NTSTATUS
 AllocateAlignedCommonBuffer(
@@ -58,23 +63,28 @@ AllocateAlignedCommonBuffer(
 	PHYSICAL_ADDRESS rawLogicalAddress;
 	PVOID rawVirtualAddress;
 	ULONG rawLength;
-
+	
+	//validate parameters
 	if (!DmaAdapter || !Buffer || Alignment == 0 || (Alignment & (Alignment - 1)) != 0) {
 		return STATUS_INVALID_PARAMETER;
 	}
 
 	ResetCommonBufferDescriptor(Buffer);
 	rawLength = BufferLength + (Alignment - 1);
+
+	//allocate buffer with extra room
 	rawVirtualAddress = DmaAdapter->DmaOperations->AllocateCommonBuffer(
 		DmaAdapter,
 		rawLength,
 		&rawLogicalAddress,
 		FALSE);
-
+	
+	//confirm we got anything at all
 	if (!rawVirtualAddress || rawLogicalAddress.QuadPart == 0) {
 		return STATUS_INSUFFICIENT_RESOURCES;
 	}
-
+	
+	//create the aligned offsets
 	alignedOffset = (ULONG_PTR)((Alignment - (rawLogicalAddress.QuadPart & (Alignment - 1))) & (Alignment - 1));
 	Buffer->AlignedVirtualAddress = (PULONG)((PUCHAR)rawVirtualAddress + alignedOffset);
 	Buffer->AlignedLogicalAddress.QuadPart = rawLogicalAddress.QuadPart + alignedOffset;
@@ -102,6 +112,7 @@ AllocateAlignedCommonBuffer(
 	return STATUS_SUCCESS;
 }
 
+//clear a COMMON_BUFFER struct
 static VOID ResetCommonBufferDescriptor(
 	OUT PHDA_DMA_COMMON_BUFFER Buffer
 )
@@ -109,6 +120,7 @@ static VOID ResetCommonBufferDescriptor(
 	RtlZeroMemory(Buffer, sizeof(HDA_DMA_COMMON_BUFFER));
 }
 
+//free a COMMON_BUFFER struct
 static VOID FreeAlignedCommonBuffer(
 	IN PDMA_ADAPTER DmaAdapter,
 	IN OUT PHDA_DMA_COMMON_BUFFER Buffer
@@ -165,6 +177,8 @@ private:
 	// MMIO registers
 	volatile PUCHAR m_pHDARegisters;     
 	PUCHAR Base;
+
+	//TODO: find everything that assumes an output stream base
     USHORT InputStreamBase;
     USHORT OutputStreamBase;
 
@@ -554,6 +568,7 @@ Init
 
 	ResetCommonBufferDescriptor(&RirbBuffer);
 	ResetCommonBufferDescriptor(&CorbBuffer);
+	ResetCommonBufferDescriptor(&InputBdl);
 	ResetCommonBufferDescriptor(&OutputBdl);
 	ResetCommonBufferDescriptor(&DmaPosBuffer);
 	
@@ -942,7 +957,8 @@ Init
 
 	DOUT(DBG_SYSINFO, ("Map Registers = %d", nMapRegisters));
 
-	//now we call the AllocateCommonBuffer function pointer in that struct
+	//now we call the AllocateCommonBuffer function
+	//pointed to by the DMA_Adapter struct
 	
 	//Allocate RIRB
 	ntStatus = AllocateAlignedCommonBuffer(
@@ -959,21 +975,10 @@ Init
 	DOUT(DBG_SYSINFO, ("RIRB Virt Addr = 0x%X,", RirbBuffer.AlignedVirtualAddress));
 	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbBuffer.AlignedLogicalAddress));
 
-	if (!RirbBuffer.AlignedVirtualAddress) {
-		DOUT(DBG_ERROR, ("Couldn't map virt RIRB Space"));
-		return STATUS_BUFFER_TOO_SMALL;
-	}
-	if (RirbBuffer.AlignedLogicalAddress.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys RIRB Space"));
-		return STATUS_NO_MEMORY;
-	}
-
 	if (is64OK == FALSE) {
-		ASSERT(RirbBuffer.AlignedLogicalAddress.HighPart == 0);
+		if ( RirbBuffer.AlignedLogicalAddress.HighPart == 0)
+			return STATUS_INVALID_PARAMETER;
 	}
-
-	//check 128-byte alignment of what we received
-	ASSERT( (RirbBuffer.AlignedLogicalAddress.LowPart & 0x7F) == 0);
 
 	//allocate CORB
 	ntStatus = AllocateAlignedCommonBuffer(
@@ -989,23 +994,28 @@ Init
 
 	DOUT(DBG_SYSINFO, ("Corb Virt Addr = 0x%X,", CorbBuffer.AlignedVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbBuffer.AlignedLogicalAddress));
-	
-	//TODO remove duplicate checks that are already done in AllcateAlignedCommonBuffer
-	if (!CorbBuffer.AlignedVirtualAddress) {
-		DOUT(DBG_ERROR, ("Couldn't map virt Corb Space"));
-		return STATUS_BUFFER_TOO_SMALL;
+
+	if (is64OK == FALSE) {
+		if ( CorbBuffer.AlignedLogicalAddress.HighPart == 0)
+			return STATUS_INVALID_PARAMETER;
 	}
-	if (CorbBuffer.AlignedLogicalAddress.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys Corb Space"));
-		return STATUS_NO_MEMORY;
+
+	//allocate input BDL
+	ntStatus = AllocateAlignedCommonBuffer(
+		DMA_Adapter,
+		BdlSize,
+		HDA_COMMON_BUFFER_ALIGNMENT,
+		&InputBdl);
+
+	if (!NT_SUCCESS(ntStatus)) {
+		DOUT(DBG_ERROR, ("Couldn't allocate aligned BDL Space (status 0x%X)", ntStatus));
+		return ntStatus;
 	}
 
 	if (is64OK == FALSE) {
-		ASSERT(CorbBuffer.AlignedLogicalAddress.HighPart == 0);
+		if ( InputBdl.AlignedLogicalAddress.HighPart == 0)
+			return STATUS_INVALID_PARAMETER;
 	}
-
-	//check 128-byte alignment of what we received
-	ASSERT( (CorbBuffer.AlignedLogicalAddress.LowPart & 0x7F) == 0);
 
 	//allocate output BDL
 	ntStatus = AllocateAlignedCommonBuffer(
@@ -1019,17 +1029,9 @@ Init
 		return ntStatus;
 	}
 
-	if (!OutputBdl.AlignedVirtualAddress) {
-		DOUT(DBG_ERROR, ("Couldn't map virt BDL Space"));
-		return STATUS_BUFFER_TOO_SMALL;
-	}
-	if (OutputBdl.AlignedLogicalAddress.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys BDL Space"));
-		return STATUS_NO_MEMORY;
-	}
-
 	if (is64OK == FALSE) {
-		ASSERT(OutputBdl.AlignedLogicalAddress.HighPart == 0);
+		if ( OutputBdl.AlignedLogicalAddress.HighPart == 0)
+			return STATUS_INVALID_PARAMETER;
 	}
 
 	//allocate DMA Position Buffer
@@ -1044,26 +1046,12 @@ Init
 		return ntStatus;
 	}
 
-	if (!DmaPosBuffer.AlignedVirtualAddress) {
-		DOUT(DBG_ERROR, ("Couldn't map virt DMA Position Buffer"));
-		return STATUS_BUFFER_TOO_SMALL;
-	}
-	if (DmaPosBuffer.AlignedLogicalAddress.QuadPart == 0) {
-		DOUT(DBG_ERROR, ("Couldn't map phys DMA Position Buffer"));
-		return STATUS_NO_MEMORY;
-	}
-
 	if (is64OK == FALSE) {
-		ASSERT(DmaPosBuffer.AlignedLogicalAddress.HighPart == 0);
-	}
-	
-	if (!NT_SUCCESS (ntStatus)){
-		DbgPrint( "\nBuffer Mapping Failed! 0x%X\n", ntStatus);
-        return ntStatus;
+		if ( DmaPosBuffer.AlignedLogicalAddress.HighPart == 0)
+			return STATUS_INVALID_PARAMETER;
 	}
 
-
-	// Not mapping an audio buffer yet, the Wave miniport creates that.
+	// Not mapping an audio buffer here, the Wave miniport creates that.
 
 	//
     // Reset the controller and init registers
@@ -1180,14 +1168,22 @@ CAdapterCommon::
 		DOUT (DBG_PRINT, ("freeing rirb buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &RirbBuffer);
 	}
+
 	if((CorbBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Corb buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &CorbBuffer);
 	}
+
+	if((InputBdl.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
+		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
+		FreeAlignedCommonBuffer(DMA_Adapter, &InputBdl);
+	}
+
 	if((OutputBdl.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Bdl buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &OutputBdl);
 	}
+
 	if((DmaPosBuffer.RawVirtualAddress != NULL) && (DMA_Adapter != NULL)){
 		DOUT (DBG_PRINT, ("freeing Dma buffer"));
 		FreeAlignedCommonBuffer(DMA_Adapter, &DmaPosBuffer);
@@ -2957,7 +2953,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	PVOID BufVirtualAddress;
 	PHYSICAL_ADDRESS BufLogicalAddress;
 
-	HDA_DMA_COMMON_BUFFER Bdl = in ? (InputBdl) : (OutputBdl); 
+	HDA_DMA_COMMON_BUFFER Bdl = in ? InputBdl : OutputBdl; 
+	USHORT StreamBase = in ? InputStreamBase : OutputStreamBase;
 
 	ULONG i = 0;
 	NTSTATUS ntStatus = STATUS_SUCCESS;
@@ -2979,6 +2976,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
 	
 	//divide the buffer into <entries> chunks (buffer must be an integer multiple of chunk size)
+
+	//todo: need the sample rate, bit depth and requested interrupt interval here
 	
 	ULONG entries = audBufSize / 2048;
 	if(entries > 128UL) entries = 128;
@@ -3037,11 +3036,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	//CacheLineFlush(BufVirtualAddress, audBufSize);
 	CacheLineFlush(Bdl.RawVirtualAddress, Bdl.RawLength);
 
-	//set buffer registers
-	writeULONG(OutputStreamBase + 0x18, Bdl.AlignedLogicalAddress.LowPart);
-	writeULONG(OutputStreamBase + 0x1C, Bdl.AlignedLogicalAddress.HighPart);
-	writeULONG(OutputStreamBase + 0x08, audBufSize);
-	writeUSHORT(OutputStreamBase + 0x0C, (USHORT)(entries - 1)); //there are entries-1 entries in buffer
+	//set registers on stream descriptor
+	writeULONG(StreamBase + 0x18, Bdl.AlignedLogicalAddress.LowPart);
+	writeULONG(StreamBase + 0x1C, Bdl.AlignedLogicalAddress.HighPart);
+	writeULONG(StreamBase + 0x08, audBufSize);
+	writeUSHORT(StreamBase + 0x0C, (USHORT)(entries - 1)); //there are entries-1 entries in buffer
 
 	//clear pending codec interrupts once, we do not care
 	UCHAR rirbsts = readUCHAR(0x5D);

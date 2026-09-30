@@ -592,7 +592,7 @@ Init
 	g_bHasClFlush = (edx_feat & (1 << 19)) != 0;
 	
 	if (! g_bHasClFlush){
-		DOUT(DBG_ERROR,("SSE2 instructions not detected, cache flushes will not work!"));
+		DbgPrint("SSE2 instructions not detected, cache flushes will not work!\n");
 	}
 
 	// Initialize codec array
@@ -638,7 +638,7 @@ Init
 	pci_ssid = (USHORT)(pci_sid >> 16);
 	pci_svid = (USHORT)(pci_sid & 0xFFFF);
 
-	DbgPrint( "\nHDA Controller: VID:0x%04X  PID:0x%04X:", pci_ven, pci_dev);
+	DbgPrint( "\nHDA Controller:  VID:0x%04X  PID:0x%04X ", pci_ven, pci_dev);
 
 	USHORT tmp;
 	
@@ -811,7 +811,7 @@ Init
         //return ntStatus; //is failure fatal? i dont think so
 	}
 
-	DbgPrint( "\n     Subsystem: SSID:0x%04X SVID:0x%04X\n", pci_ssid, pci_svid);
+	DbgPrint( "     Subsystem: SSID:0x%04X SVID:0x%04X\n\n", pci_ssid, pci_svid);
 
 
 	//there may be multiple instances of this driver loaded at once
@@ -945,7 +945,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus; //assumed to be cache-coherent
-	pDeviceDescription -> MaximumLength		= BdlSize + 4096 + 8192;
+	pDeviceDescription -> MaximumLength		= (BdlSize * 2) + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -973,7 +973,7 @@ Init
 	}
 
 	DOUT(DBG_SYSINFO, ("RIRB Virt Addr = 0x%X,", RirbBuffer.AlignedVirtualAddress));
-	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbBuffer.AlignedLogicalAddress));
+	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbBuffer.AlignedLogicalAddress.QuadPart));
 
 	if (is64OK == FALSE) {
 		if ( RirbBuffer.AlignedLogicalAddress.HighPart == 0)
@@ -993,7 +993,7 @@ Init
 	}
 
 	DOUT(DBG_SYSINFO, ("Corb Virt Addr = 0x%X,", CorbBuffer.AlignedVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbBuffer.AlignedLogicalAddress));
+	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbBuffer.AlignedLogicalAddress.QuadPart));
 
 	if (is64OK == FALSE) {
 		if ( CorbBuffer.AlignedLogicalAddress.HighPart == 0)
@@ -2990,6 +2990,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	
 	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
 	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?
+
 	/*
 	BDLE* Bdl = reinterpret_cast<BDLE*>(Bdl.AlignedVirtualAddress);
 	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
@@ -3016,14 +3017,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
     }
 	*/
 	
-	//let's print enough of the BDL and make sure we've got it right
-	/*
-	for(i = 0; i < ((int)BdlSize); i += 4){
+	//print BDL entries and make sure we've got it right
+	
+	for(i = 0; i < 256; i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));
 	}
-	*/
+	
 	
 
 	DOUT(DBG_SYSINFO, ("BDL set up"));
@@ -3301,7 +3302,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::StartJackPolling()
 
     KeSetTimerEx(&JackPollTimer, due, 250, &JackPollDpc);
 
-    DbgPrint("WDMHDA: HP polling START\n");
+    DbgPrint("Headphone Jack Polling Started\n");
 	return STATUS_SUCCESS;
 }
 

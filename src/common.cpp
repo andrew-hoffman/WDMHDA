@@ -350,7 +350,10 @@ public:
 
 	STDMETHODIMP_(NTSTATUS) ProgramSampleRate
     (
-        IN  DWORD dwSampleRate
+        IN  DWORD   dwSampleRate,
+		IN  USHORT  Channels,
+		IN  USHORT  BitDepth,
+		IN  BOOLEAN Input
     );
 
 
@@ -2505,22 +2508,34 @@ SaveMixerSettingsToRegistry
 /*****************************************************************************
  * CAdapterCommon::ProgramSampleRate
  *****************************************************************************
- * Programs the sample rate for all outputs. 
+ * Programs the sample rate & parameters for an input or output stream 
  * If the rate cannot be programmed, the routine returns STATUS_UNSUCCESSFUL.
  */
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 (
-    IN  DWORD           dwSampleRate
-	//Currently always stereo 16-bit, the KMixer can upconvert mono/8bit
+    IN  DWORD           dwSampleRate,
+	IN  USHORT			Channels,
+	IN  USHORT			BitDepth,
+	IN  BOOLEAN         Input
 )
 {
     PAGED_CODE ();
 
 	ULONG status = 0;
+	DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
+	DOUT (DBG_PRINT, ("rate %d ch %d bitdepth %d input %B", dwSampleRate, Channels, BitDepth, Input));
 
+	//validate parameters
+	if((Channels == 0) || (Channels > 2)){
+		DOUT (DBG_PRINT, ("bad channels"));
+		return STATUS_UNSUCCESSFUL;
+	}
+	if( (BitDepth != 8) && (BitDepth != 16) ){
+		DOUT (DBG_PRINT, ("bad bit depth"));
+		return STATUS_UNSUCCESSFUL;
+	}
 	//set sample rate on all codecs
 
-    DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
 	for (int i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
 			status = pCodecs[i]->ProgramSampleRate(dwSampleRate);
@@ -2529,8 +2544,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 		}
 	}
 	// if that's ok, set stream data format
-	writeUSHORT(OutputStreamBase + 0x12, 
-		hda_return_sound_data_format(dwSampleRate, 2, 16));
+	USHORT StreamBase = Input ? InputStreamBase : OutputStreamBase;
+	writeUSHORT( StreamBase + 0x12, 
+		hda_return_sound_data_format(dwSampleRate, Channels, BitDepth));
 
 	// todo: adjust size of BDL chunks based on samplerate.
 	// output gets crunchy if rate is set too low for the irq frequency

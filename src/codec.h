@@ -293,7 +293,7 @@ public:
 	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
 	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
 
-	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path);
+	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);
 	
 	STDMETHODIMP_(void) hda_enable_pin_input(ULONG pin_node, BOOLEAN is_microphone);

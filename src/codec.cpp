@@ -1375,24 +1375,26 @@ BOOLEAN HDA_Codec::IsDockLineoutPresent()
 }
 
 
-STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_channel_size(UCHAR size, HDA_NODE_PATH& path) {
+STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_channel_size(UCHAR size) {
 	UCHAR channel_sizes[5] = {8, 16, 20, 24, 32};
 	ULONG mask=0x00010000;
+	UCHAR i = 0;
  
 	//get bit of requested size in capabilities
-	for(int i=0; i<5; i++) {
+	for(i=0; i < 5; i++) {
 		if(channel_sizes[i] == size) {
 			break;
 		}
-	mask <<= 1;
+		mask <<= 1;
 	}
- 
-	if((path.audio_output_node_sample_capabilities & mask) == mask) {
-		return TRUE;
+	
+	//find the union of capabilities of all connected output paths
+	for( i = 0; i < out_paths.count; ++i){ 
+		if (! ((out_paths.paths[i].audio_output_node_sample_capabilities & mask) == mask) ) {
+			return FALSE;
+		}
 	}
-	else {
-		return FALSE;
-	}
+	return TRUE;
 }
 
 STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) {
@@ -1613,21 +1615,6 @@ STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	}
 }
 
-/*
-STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
-	//loop through all inited output paths
-	//return true if at least one headphone output is connected
-	for (ULONG i = 0; i < out_paths.count; ++i) {
-		if (out_paths.paths[i].path_type == HDA_PIN_HEADPHONE_OUT){
-			if ( (hda_send_verb(out_paths.paths[i].audio_output_node_number, 0xF09, 0x00)
-					& 0x80000000) == 0x80000000) {
-				return TRUE;
-			}
-		}
-	}
-	return FALSE;
-}
-*/
 
 inline STDMETHODIMP_(USHORT) HDA_Codec::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {
 	USHORT data_format = 0;

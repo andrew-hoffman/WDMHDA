@@ -236,8 +236,8 @@ ValidateFormat
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
         &&  (   (waveFormat->wBitsPerSample == 16)
             )
-        &&  (   (waveFormat->nChannels == 1) 
-			 || (waveFormat->nChannels == 2)
+        &&  (   //(waveFormat->nChannels == 1) ||
+				(waveFormat->nChannels == 2)
 				
             )
         &&  (   (waveFormat->nSamplesPerSec >= 8000)
@@ -254,7 +254,7 @@ ValidateFormat
 		}
 
 		//try programming the given sample rate and see if it works
-		//ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec);
+		//ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
     }
     else
     {
@@ -1238,7 +1238,7 @@ SetFormat
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
 			
 			//don't actually set the sample rate on the controller, this is done right when going into Run
-			//Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
+			//Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
         }
 
         KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
@@ -1410,7 +1410,11 @@ SetState
         case KSSTATE_RUN:
             {    
 				if (DmaChannel) {
-					Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency);
+					Miniport->AdapterCommon->ProgramSampleRate(
+						Miniport->SamplingFrequency, 
+						FormatStereo ? 2 : 1, 
+						Format16Bit ? 16: 8, 
+						Capture);
 				}
                 // Start DMA.
 				Miniport->AdapterCommon->hda_start_sound();

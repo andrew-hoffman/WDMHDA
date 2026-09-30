@@ -221,7 +221,10 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
 
 	STDMETHOD_(NTSTATUS,ProgramSampleRate)
     (   THIS_
-        IN  DWORD           dwSampleRate
+        IN  DWORD           dwSampleRate,
+		IN  USHORT			Channels,
+		IN  USHORT			BitDepth,
+		IN  BOOLEAN			Input
     )   PURE;
 
 	STDMETHOD_(UCHAR,hda_is_supported_sample_rate)

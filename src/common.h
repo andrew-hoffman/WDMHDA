@@ -219,7 +219,7 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     (   THIS
     )   PURE;
 
-	STDMETHOD_(NTSTATUS,ProgramSampleRate)
+	STDMETHOD_(NTSTATUS,ProgramDataFormat)
     (   THIS_
         IN  DWORD           dwSampleRate,
 		IN  USHORT			Channels,
@@ -250,7 +250,10 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
 
 	STDMETHOD_(NTSTATUS,hda_setup_stream_descriptor)
     (   THIS_
-        IN      PDMACHANNEL DmaChannel,
+        IN  PDMACHANNEL DmaChannel,
+		IN  DWORD   dwSampleRate,
+		IN  USHORT  Channels,
+		IN  USHORT  BitDepth,
 		IN      BOOLEAN In
     )   PURE;
 

@@ -20,11 +20,18 @@
 
 #define BDLE_FLAG_IOC  0x01
 
-typedef struct _BDLE {
-    ULONG64 Address;
-    ULONG   Length;
-    ULONG   Flags;
-} BDLE;
+// Standard HD Audio BDL Entry layout (16 bytes)
+typedef struct _HDA_BDL_ENTRY {
+    ULONG AddressLow;
+    ULONG AddressHigh;
+    ULONG LengthBytes;
+    ULONG Flags; // Bit 0 = Interrupt on Completion (IOC)
+} HDA_BDL_ENTRY, *PHDA_BDL_ENTRY;
+
+#define HDA_BDL_IOC_ENABLE         0x00000001UL
+#define HDA_MAX_BDL_ENTRIES        256
+#define HDA_BYTES_PER_PAGE         4096
+#define HDA_ALIGNMENT_REQUIREMENT  256
 
 //Functions for common buffers
 #define HDA_COMMON_BUFFER_ALIGNMENT 128 //must be power of 2
@@ -140,7 +147,6 @@ static VOID FreeAlignedCommonBuffer(
 	ResetCommonBufferDescriptor(Buffer);
 }
 
-#define CHUNK_SIZE 1792 //100ms of 44khz 16bit stereo rounded up to nearest 128b
 
 /*****************************************************************************
  * CAdapterCommon
@@ -306,6 +312,16 @@ private:
 	);
 	static STDMETHODIMP_(VOID) JackPollWorker(PVOID Context);
 
+	ULONG hda_setup_bdl(
+    PHDA_BDL_ENTRY bdl_table,
+    ULONG          max_bdl_entries,
+    PHYSICAL_ADDRESS physical_address,
+    ULONG          total_buffer_bytes,
+    ULONG          sample_rate,
+    ULONG          bit_depth,
+    ULONG          channels,
+    ULONG          target_interval_ms);
+
 
 public:
     DECLARE_STD_UNKNOWN();
@@ -362,7 +378,7 @@ public:
     (   void
     );
 
-	STDMETHODIMP_(NTSTATUS) ProgramSampleRate
+	STDMETHODIMP_(NTSTATUS) ProgramDataFormat
     (
         IN  DWORD   dwSampleRate,
 		IN  USHORT  Channels,
@@ -388,8 +404,15 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
 	STDMETHODIMP_(void)		hda_enable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
-	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(PDMACHANNEL DmaChannel, BOOLEAN in);
-	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
+	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(
+		PDMACHANNEL DmaChannel,
+		IN  DWORD   dwSampleRate,
+		IN  USHORT  Channels,
+		IN  USHORT  BitDepth, 
+		IN  BOOLEAN in
+		);
+	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(
+		ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
 	STDMETHODIMP_(UCHAR)	readUCHAR(USHORT reg);
     STDMETHODIMP_(void)		writeUCHAR(USHORT reg, UCHAR value);
@@ -2502,12 +2525,12 @@ SaveMixerSettingsToRegistry
 }
 
 /*****************************************************************************
- * CAdapterCommon::ProgramSampleRate
+ * CAdapterCommon::ProgramDataFormat
  *****************************************************************************
  * Programs the sample rate & parameters for an input or output stream 
  * If the rate cannot be programmed, the routine returns STATUS_UNSUCCESSFUL.
  */
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramDataFormat
 (
     IN  DWORD           dwSampleRate,
 	IN  USHORT			Channels,
@@ -2518,7 +2541,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
     PAGED_CODE ();
 
 	ULONG status = 0;
-	DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramSampleRate]"));
+	DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramDataFormat]"));
 	DOUT (DBG_PRINT, ("rate %d ch %d bitdepth %d input %B", dwSampleRate, Channels, BitDepth, Input));
 
 	//validate parameters
@@ -2534,7 +2557,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramSampleRate
 
 	for (int i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
-			status = pCodecs[i]->ProgramSampleRate(dwSampleRate);
+			status = pCodecs[i]->ProgramDataFormat(dwSampleRate, Channels, BitDepth, Input);
 			if(!NT_SUCCESS(status))
 				return status;
 		}
@@ -2947,7 +2970,12 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 }
 
 //set up the appropriate BDL for the input or output DmaChannel
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL DmaChannel, BOOLEAN in) {
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
+	PDMACHANNEL DmaChannel,
+	IN  DWORD   dwSampleRate,
+	IN  USHORT  Channels,
+	IN  USHORT  BitDepth,
+	IN  BOOLEAN in) {
 	
 	// Output audio buffer information
 	PVOID BufVirtualAddress;
@@ -2972,13 +3000,25 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	ULONG audBufSize = DmaChannel->BufferSize();
 
 	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress));
+	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress.QuadPart));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
 	
 	//divide the buffer into <entries> chunks (buffer must be an integer multiple of chunk size)
 
 	//todo: need the sample rate, bit depth and requested interrupt interval here
+
+	//Setup BDL
+	ULONG entries = hda_setup_bdl(
+		(PHDA_BDL_ENTRY)Bdl.AlignedVirtualAddress,
+		256,
+		BufLogicalAddress,
+		audBufSize,
+		dwSampleRate,
+		BitDepth,
+		Channels,
+		10);
 	
+	/*
 	ULONG entries = audBufSize / 2048;
 	if(entries > 128UL) entries = 128;
 	for(i = 0; i < (entries * 4); i += 4){
@@ -2987,44 +3027,19 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 		Bdl.AlignedVirtualAddress[i+2] = audBufSize / entries;
 		Bdl.AlignedVirtualAddress[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
 	}
-	
-	//fill BDL entries out with 10 ms buffer chunks (1792 bytes at 44100)
-	//this does not work on Virtualbox - do buffers really need to be power of 2 secretly?
-
-	/*
-	BDLE* Bdl = reinterpret_cast<BDLE*>(Bdl.AlignedVirtualAddress);
-	PHYSICAL_ADDRESS BasePhys = BufLogicalAddress;
-    ULONG offset = 0;
-    USHORT entries = 0;
-
-    while ((offset + CHUNK_SIZE) <= audBufSize && entries < 256)
-    {
-        Bdl[entries].Address = BasePhys.QuadPart + offset;
-        Bdl[entries].Length  = CHUNK_SIZE;
-        Bdl[entries].Flags   = BDLE_FLAG_IOC;     // interrupt every ~10 ms
-        offset += CHUNK_SIZE;
-        entries++;
-    }
-
-    //handle any leftover < CHUNK_SIZE tail
-    ULONG remainder = audBufSize - offset;
-    if (remainder >= 128) {
-        remainder &= ~127;  // trim to 128-byte boundary
-        Bdl[entries].Address = BasePhys.QuadPart + offset;
-        Bdl[entries].Length  = remainder;
-        Bdl[entries].Flags   = BDLE_FLAG_IOC;
-        entries++;
-    }
 	*/
 	
 	//print BDL entries and make sure we've got it right
-	
-	for(i = 0; i < 256; i += 4){
+
+	if(entries == 0){
+		DOUT(DBG_ERROR, ("no BDL entries created"));
+		return STATUS_UNSUCCESSFUL;
+	}
+	for(i = 0; i < (256 * 4); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));
 	}
-	
 	
 
 	DOUT(DBG_SYSINFO, ("BDL set up"));
@@ -3065,6 +3080,127 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(PDMACHANNEL 
 	// wait for Play state to actually start the stream though.
 	
     return ntStatus;
+}
+
+
+//new impl, Gemini assisted
+/**
+ * hda_setup_bdl
+ *
+ * Populates a HD Audio Buffer Descriptor List (BDL) for a WaveCyclic audio buffer.
+ *
+ * @param bdl_table         Pointer to contiguous memory holding the BDL array.
+ * @param max_bdl_entries   Max entries available in bdl_table (typically 256).
+ * @param physical_address  Base physical address of the contiguous audio buffer.
+ * @param total_buffer_bytes Total size of the audio buffer in bytes (multiple of 4096).
+ * @param sample_rate       Audio sample rate (e.g., 44100, 48000).
+ * @param bit_depth         Bits per sample (e.g., 16, 24, 32).
+ * @param channels          Number of audio channels (e.g., 2).
+ * @param target_interval_ms Target interrupt interval in milliseconds (e.g., 10).
+ *
+ * @return Total number of BDL entries populated, or 0 on error.
+ */
+ULONG CAdapterCommon::hda_setup_bdl(
+    PHDA_BDL_ENTRY bdl_table,
+    ULONG          max_bdl_entries,
+    PHYSICAL_ADDRESS physical_address,
+    ULONG          total_buffer_bytes,
+    ULONG          sample_rate,
+    ULONG          bit_depth,
+    ULONG          channels,
+    ULONG          target_interval_ms)
+{
+    ULONG bytes_per_frame = 0;
+    ULONG bytes_per_sec = 0;
+    ULONG target_chunk_bytes = 0;
+    ULONG aligned_chunk_bytes = 0;
+    ULONG current_offset = 0;
+    ULONG entry_count = 0;
+
+    // Sanity checks
+    if (!bdl_table || max_bdl_entries == 0 || total_buffer_bytes == 0) {
+		DOUT(DBG_ERROR, ("insanity"));
+        return 0;
+    }
+
+    // 1. Calculate frame size and PCM byte rate
+    bytes_per_frame = (bit_depth / 8) * channels;
+
+	DOUT(DBG_ERROR, ("bytes per frame %d", bytes_per_frame));
+    if (bytes_per_frame == 0) {
+		DOUT(DBG_ERROR, ("null frame size"));
+        return 0;
+    }
+
+    bytes_per_sec = sample_rate * bytes_per_frame;
+	DOUT(DBG_ERROR, ("bytes per sec %d", bytes_per_sec));
+
+    // 2. Calculate raw target bytes drained in target_interval_ms (10ms)
+    //    target = (bytes_per_sec * target_interval_ms) / 1000
+    target_chunk_bytes = (ULONG)(((ULONGLONG)bytes_per_sec * target_interval_ms) / 1000);
+	DOUT(DBG_ERROR, ("target chunk bytes %d", target_chunk_bytes));
+
+    // 3. Align chunk size to 128 bytes AND integer frame boundaries
+    //    First align down to 128 bytes
+    aligned_chunk_bytes = target_chunk_bytes & ~(HDA_ALIGNMENT_REQUIREMENT - 1);
+	DOUT(DBG_ERROR, ("aligned chunk bytes %d", aligned_chunk_bytes));
+
+    //    Ensure aligned_chunk_bytes is an exact multiple of PCM frame size
+    if (aligned_chunk_bytes % bytes_per_frame != 0) {
+        aligned_chunk_bytes -= (aligned_chunk_bytes % bytes_per_frame);
+    }
+
+    // Fallback safeguard: if 10ms is tiny, enforce at least 128 bytes
+    if (aligned_chunk_bytes < HDA_ALIGNMENT_REQUIREMENT) {
+        aligned_chunk_bytes = HDA_ALIGNMENT_REQUIREMENT;
+        // Align up to frame boundary if necessary
+        if (aligned_chunk_bytes % bytes_per_frame != 0) {
+            aligned_chunk_bytes += (bytes_per_frame - (aligned_chunk_bytes % bytes_per_frame));
+        }
+    }
+
+	DOUT(DBG_ERROR, ("aligned chunk bytes again %d", aligned_chunk_bytes));
+
+    // 4. Fill BDL Entries
+    while (current_offset < total_buffer_bytes) {
+        ULONG remaining_bytes = total_buffer_bytes - current_offset;
+        ULONG current_chunk_bytes = aligned_chunk_bytes;
+
+        if (entry_count >= max_bdl_entries) {
+            // Out of BDL slots
+			DOUT(DBG_ERROR, ("out of BDL slots %d", entry_count));
+            return 0;
+        }
+
+        // If remaining space is less than 1.5x chunk size, absorb it into the last entry
+        if (remaining_bytes < (aligned_chunk_bytes + (aligned_chunk_bytes / 2))) {
+            current_chunk_bytes = remaining_bytes;
+        }
+
+        // Compute physical address for this chunk
+        ULONGLONG chunk_phys_addr = physical_address.QuadPart + current_offset;
+
+        // Double check 128-byte alignment rule on start address
+        if ((chunk_phys_addr & (HDA_ALIGNMENT_REQUIREMENT - 1)) != 0) {
+			DOUT(DBG_ERROR, ("Misalignment"))
+            return 0; // Misaligned physical address
+        }
+
+        bdl_table[entry_count].AddressLow  = (ULONG)(chunk_phys_addr & 0xFFFFFFFFUL);
+        bdl_table[entry_count].AddressHigh = (ULONG)((chunk_phys_addr >> 32) & 0xFFFFFFFFUL);
+        bdl_table[entry_count].LengthBytes = current_chunk_bytes;
+        bdl_table[entry_count].Flags       = HDA_BDL_IOC_ENABLE; // Set IOC for every chunk
+
+        current_offset += current_chunk_bytes;
+        entry_count++;
+
+        // If we absorbed the remainder, we're done
+        if (current_chunk_bytes == remaining_bytes) {
+            break;
+        }
+    }
+
+    return entry_count;
 }
 
 inline STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample) {

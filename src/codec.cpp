@@ -1020,16 +1020,18 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 }
 
 /*****************************************************************************
- * HDA_Codec::ProgramSampleRate
+ * HDA_Codec::ProgramDataFormat
  *****************************************************************************
  * Programs the sample rate for all outputs paths in the codec 
  * If the rate cannot be programmed, the routine returns STATUS_UNSUCCESSFUL.
+ * input parameter ignored for now
  */
-STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
+STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramDataFormat
 (
-    IN  DWORD           dwSampleRate
-	//Currently always stereo 16-bit, the KMixer can generally upconvert mono/8bit
-	//TODO: maybe not on Win98 Gold though?
+    IN  DWORD           dwSampleRate,
+	IN  USHORT			Channels,
+	IN  USHORT			BitDepth,
+	IN  BOOLEAN         Input
 )
 {
     PAGED_CODE ();
@@ -1040,7 +1042,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 	ULONG status = 0;
 	ULONG successes = 0;
 
-    DOUT (DBG_PRINT, ("[HDA_Codec::ProgramSampleRate]"));
+    DOUT (DBG_PRINT, ("[HDA_Codec::ProgramDataFormat]"));
 
 	if (out_paths.count == 0){
 			DOUT (DBG_ERROR, ("No output paths inited yet!"));
@@ -1055,7 +1057,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 
 
 
-	USHORT format = hda_return_sound_data_format(dwSampleRate, 2, 16);
+	USHORT format = hda_return_sound_data_format(dwSampleRate, Channels, BitDepth);
 
 
 	DOUT (DBG_VSR, ("Sound data format 0x%X", format));
@@ -1064,6 +1066,16 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramSampleRate
 	//to save on unneeded message traffic and avoid delays on system sound starts
 	if (format == prev_data_format){
 		return STATUS_SUCCESS;
+	}
+
+	//validate parameters
+	if((Channels == 0) || (Channels > 2)){
+		DOUT (DBG_PRINT, ("bad channels"));
+		return STATUS_UNSUCCESSFUL;
+	}
+	if( (BitDepth != 8) && (BitDepth != 16) ){
+		DOUT (DBG_PRINT, ("bad bit depth"));
+		return STATUS_UNSUCCESSFUL;
 	}
 
 	//set Audio Output nodes data format for all paths

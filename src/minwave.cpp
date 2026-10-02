@@ -254,7 +254,7 @@ ValidateFormat
 		}
 
 		//try programming the given sample rate and see if it works
-		//ntStatus = AdapterCommon->ProgramSampleRate(waveFormat->nSamplesPerSec, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+		//ntStatus = AdapterCommon->ProgramDataFormat(waveFormat->nSamplesPerSec, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
     }
     else
     {
@@ -1182,10 +1182,34 @@ SetNotificationFreq
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::SetNotificationFreq]"));
 
     Miniport->NotificationInterval = Interval;
-    *FramingSize = 
-        (1 << (FormatStereo + Format16Bit)) * 
-            Miniport->SamplingFrequency * Interval / 1000;
 
+	ULONG target_chunk_bytes = (1 << (FormatStereo + Format16Bit)) * 
+            Miniport->SamplingFrequency * Interval / 1000;
+	DOUT(DBG_ERROR, ("target chunk bytes %d", target_chunk_bytes));
+
+	// Align chunk size to 256 bytes AND integer frame boundaries
+    //    First align down to 256 bytes
+    ULONG aligned_chunk_bytes = target_chunk_bytes & ~(255);
+	DOUT(DBG_ERROR, ("aligned chunk bytes %d", aligned_chunk_bytes));
+
+    //    Ensure aligned_chunk_bytes is an exact multiple of PCM frame size
+    //if (aligned_chunk_bytes % bytes_per_frame != 0) {
+    //    aligned_chunk_bytes -= (aligned_chunk_bytes % bytes_per_frame);
+    //}
+
+    // Fallback safeguard: if 10ms is tiny, enforce at least 256 bytes
+    if (aligned_chunk_bytes < 256) {
+        aligned_chunk_bytes = 256;
+        // Align up to frame boundary if necessary
+        //if (aligned_chunk_bytes % bytes_per_frame != 0) {
+        //    aligned_chunk_bytes += (bytes_per_frame - (aligned_chunk_bytes % bytes_per_frame));
+        //}
+    }
+
+	//write aligned frame size to out pointer
+    *FramingSize = aligned_chunk_bytes;
+
+	//we could recalculate the actual interval in terms of our aligned chunk sizes but it is not used
     return Miniport->NotificationInterval;
 }
 
@@ -1238,7 +1262,7 @@ SetFormat
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
 			
 			//don't actually set the sample rate on the controller, this is done right when going into Run
-			//Miniport->AdapterCommon->ProgramSampleRate(Miniport->SamplingFrequency, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+			//Miniport->AdapterCommon->ProgramDataFormat(Miniport->SamplingFrequency, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
         }
 
         KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
@@ -1326,6 +1350,9 @@ Return:
  *****************************************************************************
  * Sets the state of the channel
  */
+
+//Old
+/*
 STDMETHODIMP
 CMiniportWaveCyclicStreamHDA::
 SetState
@@ -1333,10 +1360,7 @@ SetState
     IN      KSSTATE     NewState
 )
 {
-	/* States always progress in in the order of:
-	DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
-	(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
-	*/
+
 
     PAGED_CODE();
 
@@ -1381,7 +1405,12 @@ SetState
                     StreamDescriptorValid = FALSE;
 
                     if (NT_SUCCESS(ntStatus) && DmaChannel) {
-                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
+                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
+							DmaChannel,
+							Miniport->SamplingFrequency, 
+							FormatStereo ? 2 : 1, 
+							Format16Bit ? 16: 8,
+							Capture);
                         if (NT_SUCCESS(ntStatus)) {
                             StreamDescriptorValid = TRUE;
                         }
@@ -1396,7 +1425,12 @@ SetState
                     Miniport->AdapterCommon->hda_stop_sound();
                 }
             } else if (DmaChannel && !StreamDescriptorValid) {
-                ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
+                        ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
+							DmaChannel,
+							Miniport->SamplingFrequency, 
+							FormatStereo ? 2 : 1, 
+							Format16Bit ? 16: 8,
+							Capture);
                 if (NT_SUCCESS(ntStatus)) {				
                     StreamDescriptorValid = TRUE;					
                 } else {
@@ -1410,7 +1444,7 @@ SetState
         case KSSTATE_RUN:
             {    
 				if (DmaChannel) {
-					Miniport->AdapterCommon->ProgramSampleRate(
+					Miniport->AdapterCommon->ProgramDataFormat(
 						Miniport->SamplingFrequency, 
 						FormatStereo ? 2 : 1, 
 						Format16Bit ? 16: 8, 
@@ -1422,14 +1456,14 @@ SetState
             break;
 
         case KSSTATE_STOP:
-			/*
-			if (StreamDescriptorValid) {
-                ntStatus = Miniport->AdapterCommon->hda_stop_stream();
-                if (NT_SUCCESS(ntStatus)) {
-                    StreamDescriptorValid = FALSE;
-                }
-            }
-			*/
+			//
+			//if (StreamDescriptorValid) {
+           //     ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+           //     if (NT_SUCCESS(ntStatus)) {
+            //        StreamDescriptorValid = FALSE;
+            //    }
+           // }
+			//
 
 			if (DmaChannel) {
                 Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
@@ -1443,6 +1477,75 @@ SetState
 
     return ntStatus;
 }
+*/
+
+/* States always progress in in the order of:
+DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
+(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
+*/
+
+//the KMixer will often take the stream up to Pause and then back down again as a dry-run before playing sound
+
+//new (assisted by Gemini)
+//TODO: keep previous stream descriptor if it is valid, same sample rate etc. 
+
+STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
+{
+    NTSTATUS ntStatus = STATUS_SUCCESS;
+
+    switch (NewState)
+    {
+    case KSSTATE_STOP:
+        // 1. Stop DMA
+        ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+        State = KSSTATE_STOP;
+        break;
+
+    case KSSTATE_ACQUIRE:
+        // Just state tracking
+        State = KSSTATE_ACQUIRE;
+        break;
+
+    case KSSTATE_PAUSE:
+        if (State == KSSTATE_RUN) {
+            // Transitioning from RUN -> PAUSE: Pause DMA (clear RUN bit)
+            Miniport->AdapterCommon->hda_stop_sound();
+        } else {
+            // Transitioning from ACQUIRE -> PAUSE:
+            // Format is 100% final now. Generate and program BDL cleanly.
+			if (DmaChannel) {
+					Miniport->AdapterCommon->ProgramDataFormat(
+						Miniport->SamplingFrequency, 
+						FormatStereo ? 2 : 1, 
+						Format16Bit ? 16: 8, 
+						Capture);
+			}
+
+            // Write BDL base address, CBL, and LVI into controller registers
+            ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
+							DmaChannel,
+							Miniport->SamplingFrequency, 
+							FormatStereo ? 2 : 1, 
+							Format16Bit ? 16: 8,
+							Capture);
+
+			if (NT_SUCCESS(ntStatus)) {				
+                    StreamDescriptorValid = TRUE;					
+            }
+        }
+        State = KSSTATE_PAUSE;
+        break;
+
+    case KSSTATE_RUN:
+        // Fast start: Just enable the RUN bit
+        Miniport->AdapterCommon->hda_start_sound();
+        State = KSSTATE_RUN;
+        break;
+    }
+
+    return ntStatus;
+}
+
 
 #pragma code_seg()
 

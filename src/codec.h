@@ -301,7 +301,11 @@ public:
 	STDMETHODIMP_(void) hda_disable_pin(ULONG pin_node);
 
 	STDMETHODIMP_(USHORT) hda_return_sound_data_format(ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
-	STDMETHODIMP_(NTSTATUS) ProgramSampleRate(DWORD dwSampleRate);
+	STDMETHODIMP_(NTSTATUS) ProgramDataFormat(
+	IN  DWORD dwSampleRate,
+	IN  USHORT			Channels,
+	IN  USHORT			BitDepth,
+	IN  BOOLEAN         Input);
 
 	STDMETHODIMP_(void) shutdown(BOOLEAN down);
     

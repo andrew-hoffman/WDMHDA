@@ -3002,10 +3002,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress.QuadPart));
 	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
-	
-	//divide the buffer into <entries> chunks (buffer must be an integer multiple of chunk size)
-
-	//todo: need the sample rate, bit depth and requested interrupt interval here
 
 	//Setup BDL
 	ULONG entries = hda_setup_bdl(
@@ -3018,24 +3014,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		Channels,
 		10);
 	
-	/*
-	ULONG entries = audBufSize / 2048;
-	if(entries > 128UL) entries = 128;
-	for(i = 0; i < (entries * 4); i += 4){
-		Bdl.AlignedVirtualAddress[i+0] = BufLogicalAddress.LowPart + (i/4)*(audBufSize/entries);
-		Bdl.AlignedVirtualAddress[i+1] = BufLogicalAddress.HighPart;
-		Bdl.AlignedVirtualAddress[i+2] = audBufSize / entries;
-		Bdl.AlignedVirtualAddress[i+3] = BDLE_FLAG_IOC; //interrupt on completion ON
-	}
-	*/
-	
 	//print BDL entries and make sure we've got it right
 
 	if(entries == 0){
 		DOUT(DBG_ERROR, ("no BDL entries created"));
 		return STATUS_UNSUCCESSFUL;
 	}
-	for(i = 0; i < (256 * 4); i += 4){
+	for(i = 0; i < ((entries * 4) + 1); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));

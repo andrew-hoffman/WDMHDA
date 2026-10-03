@@ -41,7 +41,8 @@ private:
     BOOLEAN             AllocatedCapture;           // Capture in use.
     BOOLEAN             AllocatedRender;            // Render in use.
 
-	PDMACHANNEL         DmaChannel; 
+	PDMACHANNEL         DmaChannelCapture;			// Bus Master DMA channel for input
+	PDMACHANNEL         DmaChannelRender;			// Bus Master DMA channel for output
 	PADAPTER_OBJECT     AdapterObject;
 
     PSERVICEGROUP       ServiceGroup;               // For notification.
@@ -63,6 +64,13 @@ private:
     (
         IN      PRESOURCELIST   ResourceList
     );
+
+	NTSTATUS CreateDmaChannel
+	(	
+		IN     PRESOURCELIST   ResourceList,
+		IN     BOOLEAN		   Capture
+	);
+
     NTSTATUS ValidateFormat
     (
         IN      PKSDATAFORMAT   Format
@@ -111,12 +119,15 @@ class CMiniportWaveCyclicStreamHDA
 {
 private:
     CMiniportWaveCyclicHDA *   Miniport;       // Miniport that created us.
+
     ULONG                       Channel;        // Index into channel list.
     BOOLEAN                     Capture;        // Capture or render.
     BOOLEAN                     Format16Bit;    // 16- or 8-bit samples.
     BOOLEAN                     FormatStereo;   // Two or one channel.
     KSSTATE                     State;          // Stop, pause, run.
+
     PDMACHANNEL		            DmaChannel;     // DMA channel to use.
+
 	BOOLEAN                     StreamDescriptorValid; // Hardware stream descriptor is programmed.
     BOOLEAN                     RestoreInputMixer;  // Restore input mixer.
     UCHAR                       InputMixerLeft; // Cache for left input mixer.

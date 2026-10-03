@@ -8,8 +8,6 @@
 #include "mydma.h"
 
 #define STR_MODULENAME "HDAwave: "
-#define PC_CACHEDIS 0x00100000  /* Allocate uncached pages - new for WDM */
-#define PC_CACHEWT  0x00080000  /* Allocate write through cache pages - new for WDM */ 
 
 
 
@@ -90,12 +88,6 @@ ProcessResources
     ULONG   countMemory    = ResourceList->NumberOfMemories();
     ULONG   countIRQ    = ResourceList->NumberOfInterrupts();
 
-#if (DBG)
-    _DbgPrintF(DEBUGLVL_VERBOSE,("Starting HDA wave on IRQ %d",
-        ResourceList->FindUntranslatedInterrupt(0)->u.Interrupt.Level) );
-
-#endif
-
 	//
     // Make sure we have the expected number of resources.
 	// 
@@ -107,8 +99,31 @@ ProcessResources
         )
     {
         _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
-        ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
+
+
+	//Create the two DMA channel objects
+	ntStatus = CreateDmaChannel(ResourceList, FALSE);
+	
+	if(!NT_SUCCESS(ntStatus)){
+		return ntStatus;
+	}
+
+	ntStatus = CreateDmaChannel(ResourceList, TRUE);
+	
+
+    return ntStatus;
+}
+
+NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
+	IN      PRESOURCELIST   ResourceList,
+	IN		BOOLEAN			Capture
+)
+{
+	PAGED_CODE();
+	NTSTATUS ntStatus = STATUS_SUCCESS;
+	PDMACHANNEL DmaChannel;
 
 	//
     // Create the DMA Channel object.
@@ -150,6 +165,7 @@ ProcessResources
     // Allocate the buffer. start MUST be aligned to 128 bytes
 	// this may fail or return a smaller buffer than requested
     //
+
     if (NT_SUCCESS(ntStatus)) {
         ULONG  lDMABufferLength = MAXLEN_DMA_BUFFER;
             
@@ -184,7 +200,15 @@ ProcessResources
         }
 	}
 
-    return ntStatus;
+	//assign to the correct places in the object
+	
+	if(Capture){
+		DmaChannelCapture = DmaChannel;
+	} else {
+		DmaChannelRender = DmaChannel;
+	}
+
+	return ntStatus;
 }
 
 /*****************************************************************************
@@ -334,9 +358,14 @@ CMiniportWaveCyclicHDA::
     {
         Port->Release();
     }
-	if (DmaChannel)
+	if (DmaChannelCapture)
     {
-        DmaChannel->Release();
+        DmaChannelCapture->Release();
+    }
+
+	if (DmaChannelRender)
+    {
+        DmaChannelRender->Release();
     }
 
     if (ServiceGroup)
@@ -895,23 +924,25 @@ NewStream
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::NewStream]"));
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
+	PDMACHANNEL dmaChannel = NULL;
+	PWAVEFORMATEX       waveFormat = PWAVEFORMATEX(DataFormat + 1);
 
     //
     // Make sure the hardware is not already in use.
+	// Get the required DMA channel if it's not already in use.
     //
-    if (Capture)
-    {
-        if (AllocatedCapture)
-        {
+    if (Capture) {
+        if (AllocatedCapture){
             ntStatus = STATUS_INVALID_DEVICE_REQUEST;
-        }
-    }
-    else
-    {
-        if (AllocatedRender)
-        {
+        } else {
+			dmaChannel = DmaChannelCapture;
+		}
+    } else {
+        if (AllocatedRender) {
             ntStatus = STATUS_INVALID_DEVICE_REQUEST;
-        }
+        } else {
+			dmaChannel = DmaChannelRender;
+		}
     }
 
     //
@@ -922,18 +953,9 @@ NewStream
         ntStatus = ValidateFormat(DataFormat);
     }
 
-	//Removed sample rate sync unnecessary for HDA
-
-    PDMACHANNEL    dmaChannel = NULL;
-    PWAVEFORMATEX       waveFormat = PWAVEFORMATEX(DataFormat + 1);
-	
-	//
-    // Get the required DMA channel if it's not already in use.
-	// removed check - HDA doesn't have sample rate limitations on full duplex
-    //
-
-	dmaChannel = DmaChannel;
-
+	//TODO: NTSTATUS overwritten here!
+	//so an invalid format can get through to the Assert later
+    	
     if (! dmaChannel)
     {
         ntStatus = STATUS_INVALID_DEVICE_REQUEST;
@@ -1108,14 +1130,17 @@ Init
 	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
 
 	//TODO: Temporary block on creating capture streams
+	/*
 	if(Capture_){
 		_DbgPrintF(DEBUGLVL_TERSE,("Capture stream unsupported"));
 		return STATUS_UNSUCCESSFUL;
 	}
+	*/
 
     ASSERT(Miniport_);
     ASSERT(DataFormat);
 	//is this assert valid? crashes on trying to capture in Sound Recorder
+	//as well as on virtualbox.
     //ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
     ASSERT(DmaChannel_);
 
@@ -1372,14 +1397,8 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
     switch (NewState) {
 		
 		case KSSTATE_STOP:
-			// don't actually stop the stream?
-
-			//if (StreamDescriptorValid) {
-            //    ntStatus = Miniport->AdapterCommon->hda_stop_stream();
-            //    if (NT_SUCCESS(ntStatus)) {
-            //        StreamDescriptorValid = FALSE;
-            //    }
-            //}
+			// don't destroy the stream descriptor,
+			// this is done anyway when the WaveCyclicStream is destroyed.
 			
 			// do clear out the buffer
 

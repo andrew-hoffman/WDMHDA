@@ -2235,8 +2235,8 @@ MixerRegWrite
 )
 {
 
-	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
-	DOUT (DBG_PRINT, ("trying to write %d to %d", Value, index));
+	//DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegWrite]"));
+	//DOUT (DBG_PRINT, ("trying to write %d to %d", Value, index));
 
     // only hit the hardware if we're in an acceptable power state
     if( m_PowerState <= PowerDeviceD1 ) {
@@ -2279,8 +2279,8 @@ MixerRegRead
     IN      BYTE    Index
 )
 {
-	DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegRead]"));
-	DOUT (DBG_PRINT, ("read from mixer reg %d: %d", Index, MixerSettings[Index]));
+	//DOUT (DBG_PRINT, ("[CAdapterCommon::MixerRegRead]"));
+	//DOUT (DBG_PRINT, ("read from mixer reg %d: %d", Index, MixerSettings[Index]));
 
     if(Index < DSP_MIX_MAXREGS)
     {

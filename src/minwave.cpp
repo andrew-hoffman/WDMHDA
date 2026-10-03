@@ -219,11 +219,11 @@ ValidateFormat
     // type of specifier used to indicate format specifics.  We are only
     // supporting PCM audio formats that use WAVEFORMATEX.
     //
-	// Limiting this to 22050-48000 because Windows's kernel mixer will
+	// Limiting this to 8000-48000 because Windows's kernel mixer will
 	// try to resample anything lower to the highest supported multiple
-	// and native 8-11khz if even supported by the codec causes problems with buffering
+	// native 8-11khz if even supported by the codec causes problems with buffering
 	//
-	// 16-bit formats only supported for now. TODO: add other bit depths
+	// 8 and 16-bit formats only supported for now. TODO: add other bit depths
 
     if  (   (Format->FormatSize >= sizeof(KSDATAFORMAT_WAVEFORMATEX))
         &&  IsEqualGUIDAligned(Format->MajorFormat,KSDATAFORMAT_TYPE_AUDIO)
@@ -234,9 +234,10 @@ ValidateFormat
                 KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
             )
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
-        &&  (   (waveFormat->wBitsPerSample == 16)
+        &&  (   (waveFormat->wBitsPerSample == 8) ||
+				(waveFormat->wBitsPerSample == 16)
             )
-        &&  (   //(waveFormat->nChannels == 1) ||
+        &&  (   (waveFormat->nChannels == 1) ||
 				(waveFormat->nChannels == 2)
 				
             )
@@ -1115,7 +1116,7 @@ Init
     ASSERT(Miniport_);
     ASSERT(DataFormat);
 	//is this assert valid? crashes on trying to capture in Sound Recorder
-    ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
+    //ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
     ASSERT(DmaChannel_);
 
     PWAVEFORMATEX waveFormat = PWAVEFORMATEX(DataFormat + 1);

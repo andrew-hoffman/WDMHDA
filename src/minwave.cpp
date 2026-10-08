@@ -428,7 +428,6 @@ Init
     //
     if (NT_SUCCESS(ntStatus))
     {
-        KeInitializeMutex(&SampleRateSync,1);
         ntStatus = PcNewServiceGroup(&ServiceGroup,NULL);
         if (NT_SUCCESS(ntStatus))
         {
@@ -1157,22 +1156,17 @@ Init
 
     Channel         = Channel_;
     Capture         = Capture_;
-    FormatStereo    = (waveFormat->nChannels == 2);
-    Format16Bit     = (waveFormat->wBitsPerSample == 16);
-    State           = KSSTATE_STOP;
+	
+	FormatSampleRate	= waveFormat->nSamplesPerSec;
+    FormatChannels		= waveFormat->nChannels;
+    FormatBitDepth		= waveFormat->wBitsPerSample;
+    State				= KSSTATE_STOP;
+	
 	StreamDescriptorValid = FALSE;
     RestoreInputMixer = FALSE;
 
-    KeWaitForSingleObject
-    (
-        &Miniport->SampleRateSync,
-        Executive,
-        KernelMode,
-        FALSE,
-        NULL
-    );
-    Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;
-    KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
+
+    FormatSampleRate = waveFormat->nSamplesPerSec;
 	
 	/*
 	if(NT_SUCCESS(ntStatus)){
@@ -1209,8 +1203,14 @@ SetNotificationFreq
 
     Miniport->NotificationInterval = Interval;
 
-	ULONG target_chunk_bytes = (1 << (FormatStereo + Format16Bit)) * 
-            Miniport->SamplingFrequency * Interval / 1000;
+	ULONG bytes_per_bit_depth = ((FormatBitDepth <= 8) ? 1 
+		: (FormatBitDepth <= 16) ? 2 
+		: (FormatBitDepth <= 32) ? 4 
+		: 8
+		);
+
+	ULONG target_chunk_bytes = FormatChannels * bytes_per_bit_depth
+            * FormatSampleRate * Interval / 1000;
 	DOUT(DBG_ERROR, ("target chunk bytes %d", target_chunk_bytes));
 
 	// Align chunk size to 256 bytes AND integer frame boundaries
@@ -1265,15 +1265,6 @@ SetFormat
     
         PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
 
-        KeWaitForSingleObject
-        (
-            &Miniport->SampleRateSync,
-            Executive,
-            KernelMode,
-            FALSE,
-            NULL
-        );
-		
 		//Removed - unnecessary
         // check for full-duplex sample rate sync
     
@@ -1283,15 +1274,17 @@ SetFormat
         {
             PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
 
-            Miniport->SamplingFrequency = waveFormat->nSamplesPerSec;   
+            FormatSampleRate = waveFormat->nSamplesPerSec;   
 
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
 			
 			//don't actually set the sample rate on the controller, this is done right when going into Run
-			//Miniport->AdapterCommon->ProgramDataFormat(Miniport->SamplingFrequency, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+			//Miniport->AdapterCommon->ProgramDataFormat(FormatSampleRate, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+			
+			FormatDirty = TRUE;
+			StreamDescriptorValid = FALSE;
         }
 
-        KeReleaseMutex(&Miniport->SampleRateSync,FALSE);
     }
 
     return ntStatus;
@@ -1362,10 +1355,17 @@ Return:
 
 {   
 	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::NormalizePhysicalPosition] %d", PhysicalPosition));
+
+	ULONG bytes_per_bit_depth = ((FormatBitDepth <= 8) ? 1 
+		: (FormatBitDepth <= 16) ? 2 
+		: (FormatBitDepth <= 32) ? 4 
+		: 8
+		);
+
     *PhysicalPosition =
-            (_100NS_UNITS_PER_SECOND / 
-                (1 << (FormatStereo + Format16Bit)) * *PhysicalPosition) / 
-                    Miniport->SamplingFrequency;
+            ( _100NS_UNITS_PER_SECOND / 
+                (bytes_per_bit_depth * FormatChannels) * *PhysicalPosition) / 
+                    FormatSampleRate;
     return STATUS_SUCCESS;
 }
     
@@ -1438,9 +1438,9 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 
                     ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
 						DmaChannel,
-						Miniport->SamplingFrequency, 
-						FormatStereo ? 2 : 1, 
-						Format16Bit ? 16: 8,
+						FormatSampleRate, 
+						FormatChannels, 
+						FormatBitDepth,
 						Capture);
 
                     if (NT_SUCCESS(ntStatus)) {
@@ -1464,9 +1464,9 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 			if (!StreamDescriptorValid) {
                 ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
 							DmaChannel,
-							Miniport->SamplingFrequency, 
-							FormatStereo ? 2 : 1, 
-							Format16Bit ? 16: 8,
+							FormatSampleRate, 
+							FormatChannels, 
+							FormatBitDepth,
 							Capture);
                 if (NT_SUCCESS(ntStatus)) {				
                     StreamDescriptorValid = TRUE;					
@@ -1478,9 +1478,9 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
         case KSSTATE_RUN: // Pause -> Run
                 
 			Miniport->AdapterCommon->ProgramDataFormat(
-				Miniport->SamplingFrequency, 
-				FormatStereo ? 2 : 1, 
-				Format16Bit ? 16: 8, 
+				FormatSampleRate, 
+				FormatChannels, 
+				FormatBitDepth, 
 				Capture);
 			// Start DMA.
 			Miniport->AdapterCommon->hda_start_sound();
@@ -1531,18 +1531,18 @@ STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
             // Format is 100% final now. Generate and program BDL cleanly.
 			if (DmaChannel) {
 					Miniport->AdapterCommon->ProgramDataFormat(
-						Miniport->SamplingFrequency, 
-						FormatStereo ? 2 : 1, 
-						Format16Bit ? 16: 8, 
+						FormatSampleRate, 
+						FormatChannels, 
+						FormatBitDepth, 
 						Capture);
 			}
 
             // Write BDL base address, CBL, and LVI into controller registers
             ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
 							DmaChannel,
-							Miniport->SamplingFrequency, 
-							FormatStereo ? 2 : 1, 
-							Format16Bit ? 16: 8,
+							FormatSampleRate, 
+							FormatChannels, 
+							FormatBitDepth,
 							Capture);
 
 			if (NT_SUCCESS(ntStatus)) {				
@@ -1578,5 +1578,5 @@ Silence
     IN      ULONG   ByteCount
 )
 {
-    RtlFillMemory(Buffer,ByteCount,Format16Bit ? 0 : 0x7f);
+    RtlFillMemory(Buffer,ByteCount, (FormatBitDepth > 8) ? 0 : 0x7f);
 }

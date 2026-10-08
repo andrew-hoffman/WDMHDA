@@ -331,6 +331,16 @@ public:
     /*****************************************************************************
      * IAdapterCommon methods
      */
+
+	/* TODO: IAdapterCommon is currently a **singleton** 
+	but there may be multiple instances of this driver loaded at once
+	on systems with a dGPU with HDMI display audio support for instance
+	and currently that causes a CRASH.
+
+	There should be one IAdapterCommon object per HDA controller.
+	Each AdapterCommon may access multiple Codecs and that works fine already
+	*/
+
     STDMETHODIMP_(NTSTATUS) Init
     (
         IN      PRESOURCELIST   ResourceList,
@@ -514,6 +524,7 @@ static REG_BOOL_SETTING g_BooleanSettings[] =
  *****************************************************************************
  * Create a new adapter common object.
  */
+
 NTSTATUS
 NewAdapterCommon
 (
@@ -822,9 +833,14 @@ Init
 			DbgPrint( "unknown or no special patches\n");
 			break;
 	}
-	//Set TCSEL (offset 44h in config space, lowest 3 bits) to 0 on some hardware to avoid crackling/static.
-	//the Watlers and MPXPlay drivers set this byte on all but ATI controllers
-	//I'm not sure if class 0 is the highest or lowest priority. some hardware defaults to traffic class 7
+	// Set TCSEL (offset 44h in config space, lowest 3 bits) to 0 
+	// to avoid crackling/static on some hardware.
+	// the Watlers and MPXPlay drivers set this byte on all but ATI controllers
+
+	// Traffic class 0 is the default "best effort" priority
+	// but is the only one guaranteed to be set up on non PCIe aware OSes.
+	// some HDA hardware defaults to traffic class 7
+
 	if(pci_ven != 0x1002){
 		ntStatus = WriteConfigSpaceByte(0x44, 0xf8, 0x0);
 	}
@@ -836,15 +852,7 @@ Init
 
 	DbgPrint( "     Subsystem: SSID:0x%04X SVID:0x%04X\n\n", pci_ssid, pci_svid);
 
-
-	//there may be multiple instances of this driver loaded at once
-	//on systems with HDMI display audio support for instance
-	//but it should be one driver object per HDA controller.
-	//which may access multiple codecs
-	//for now only sending 1 output audio stream to all
-
-    //
-    //Get the memory base address for the HDA controller registers. 
+    // Get the memory base address for the HDA controller registers. 
     // note we only want the first BAR
 	// on Skylake and newer mobile chipsets,
 	// there is a DSP interface at BAR2 for Intel Smart Sound Technology

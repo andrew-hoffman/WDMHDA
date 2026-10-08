@@ -1,7 +1,8 @@
 /*****************************************************************************
  * minwave.h - HDA wave miniport private definitions
  *****************************************************************************
- * Copyright (c) 1997-1999 Microsoft Corporation. All Rights Reserved.
+ * Copyright (c) 1997-1999 Microsoft Corporation. (Later released under MIT License)
+ * Copyright 2025-2026 Drew Hoffman (Released under MIT License)
  */
 
 #ifndef _HDAWAVE_PRIVATE_H_
@@ -36,7 +37,8 @@ private:
     PUCHAR              PortBase;                   // Base port address.
 
     ULONG               NotificationInterval;       // In milliseconds.
-    ULONG               SamplingFrequency;          // Frames per second.
+
+	//sample frequency moved to per-stream
 
     BOOLEAN             AllocatedCapture;           // Capture in use.
     BOOLEAN             AllocatedRender;            // Render in use.
@@ -46,7 +48,6 @@ private:
 	PADAPTER_OBJECT     AdapterObject;
 
     PSERVICEGROUP       ServiceGroup;               // For notification.
-    KMUTEX              SampleRateSync;             // Sync for sample rate changes.
 
     /*************************************************************************
      * CMiniportWaveCyclicHDA methods
@@ -54,12 +55,7 @@ private:
      * These are private member functions used internally by the object.  See
      * MINIPORT.CPP for specific descriptions.
      */
-    BOOLEAN ConfigureDevice
-    (
-        IN      ULONG   Interrupt,
-        IN      ULONG   DMA8Bit,
-        IN      ULONG   DMA16Bit
-    );
+
     NTSTATUS ProcessResources
     (
         IN      PRESOURCELIST   ResourceList
@@ -122,8 +118,13 @@ private:
 
     ULONG                       Channel;        // Index into channel list.
     BOOLEAN                     Capture;        // Capture or render.
-    BOOLEAN                     Format16Bit;    // 16- or 8-bit samples.
-    BOOLEAN                     FormatStereo;   // Two or one channel.
+	
+	
+	BOOLEAN						FormatDirty;
+	ULONG						FormatSampleRate; //in hz, 8000-48000 valid
+	USHORT						FormatBitDepth;	  //sample bit depth (only 8 or 16 bits valid)
+	USHORT						FormatChannels;   //number of channels (only 1-2 valid yet)
+
     KSSTATE                     State;          // Stop, pause, run.
 
     PDMACHANNEL		            DmaChannel;     // DMA channel to use.

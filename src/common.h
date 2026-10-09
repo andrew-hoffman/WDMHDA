@@ -120,7 +120,9 @@
 #define HDA_CORB_RIRB 2
 #define HDA_PIO 3
 
+//base registers of the nth output stream
 #define HDA_STREAMBASE(n) ((0x80+(0x20*n)))
+
 #define SDCTL_RUN 0x2
 #define SDCTL_IE 0x10
 
@@ -198,6 +200,7 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     STDMETHOD_(PINTERRUPTSYNC,GetInterruptSync)
     (   THIS
     )   PURE;
+
 	STDMETHOD_(PDEVICE_DESCRIPTION,GetDeviceDescription)
     (   THIS
     )   PURE;
@@ -233,19 +236,23 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     )   PURE;
 
 	STDMETHOD_(void,hda_start_sound)
-    (   THIS
+    (   THIS_
+		IN      BOOLEAN In
     )   PURE;
 
 	STDMETHOD_(void,hda_stop_sound)
-    (   THIS
+    (   THIS_
+		IN      BOOLEAN In
     )   PURE;
 
 	STDMETHOD_(NTSTATUS,hda_stop_stream)
-    (   THIS
+    (   THIS_
+		IN      BOOLEAN In
     )   PURE;
 
 	STDMETHOD_(ULONG,hda_get_actual_stream_position)
-    (   THIS
+    (   THIS_
+		IN      BOOLEAN In
     )   PURE;
 
 	STDMETHOD_(NTSTATUS,hda_setup_stream_descriptor)

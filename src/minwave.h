@@ -114,10 +114,10 @@ class CMiniportWaveCyclicStreamHDA
     public CUnknown
 {
 private:
-    CMiniportWaveCyclicHDA *   Miniport;       // Miniport that created us.
+    CMiniportWaveCyclicHDA *    Miniport;       // Miniport that created us.
 
     ULONG                       Channel;        // Index into channel list.
-    BOOLEAN                     Capture;        // Capture or render.
+    BOOLEAN                     isCapture;      // Capture or render.
 	
 	
 	BOOLEAN						FormatDirty;

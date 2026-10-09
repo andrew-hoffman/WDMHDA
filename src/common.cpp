@@ -204,6 +204,8 @@ private:
 	ULONG memLength;
 	UCHAR codecNumber;
 	UCHAR nSDO;
+
+	UCHAR FirstInputStream;
 	UCHAR FirstOutputStream;
 	USHORT statests;
 
@@ -251,6 +253,10 @@ private:
     BOOLEAN AdapterISR
     (   void
     );
+	STDMETHODIMP_(NTSTATUS) TryInitializeCodecSlot(
+		IN UCHAR codec_number,
+		IN PCSTR interfaceName
+	);
 	STDMETHODIMP_(NTSTATUS) ReadWriteConfigSpace(
     IN PDEVICE_OBJECT  DeviceObject,
     IN ULONG  ReadOrWrite,  // 0 for read, 1 for write
@@ -258,15 +264,14 @@ private:
     IN ULONG  Offset,
     IN ULONG  Length
     );
+
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte);
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord);
+
+	//Registry r/w
 	STDMETHODIMP_(BOOLEAN) ReadRegistryBoolean(
     IN  PCWSTR   ValueName,
     IN  BOOLEAN  DefaultValue
-	);
-	STDMETHODIMP_(NTSTATUS) TryInitializeCodecSlot(
-		IN UCHAR codec_number,
-		IN PCSTR interfaceName
 	);
 	STDMETHODIMP_(NTSTATUS) WriteHardwareIdsToRegistry(
 		IN HDA_Codec* Codec
@@ -301,6 +306,7 @@ private:
 		IN PCWSTR ValueName,
 		IN ULONG Value
 	);
+
 	STDMETHODIMP_(NTSTATUS) StartJackPolling (void);
 	STDMETHODIMP_(VOID) StopJackPolling (void);
 
@@ -367,7 +373,7 @@ public:
     (   void
     );
 	STDMETHODIMP_(NTSTATUS) hda_stop_stream
-    (   void
+    (   BOOLEAN In
     );
     STDMETHODIMP_(void) MixerRegWrite
     (
@@ -402,13 +408,13 @@ public:
 	STDMETHODIMP_(ULONG)	hda_send_verb(ULONG codec, ULONG node, ULONG verb, ULONG command);
 	static ULONG SendVerb(CAdapterCommon* pAdapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 	STDMETHODIMP_(PULONG)	get_bdl_mem(void);
-	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(void);
+	STDMETHODIMP_(ULONG)	hda_get_actual_stream_position(IN BOOLEAN In);
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(BOOLEAN)	hda_is_headphone_connected (void);
 	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
-	STDMETHODIMP_(void)		hda_start_sound (void);
-	STDMETHODIMP_(void)		hda_stop_sound (void);
+	STDMETHODIMP_(void)		hda_start_sound (IN BOOLEAN In);
+	STDMETHODIMP_(void)		hda_stop_sound (IN BOOLEAN In);
 
 	STDMETHODIMP_(void)		hda_check_headphone_connection_change(void);
 	STDMETHODIMP_(UCHAR)	hda_is_supported_sample_rate(ULONG sample_rate);
@@ -421,6 +427,7 @@ public:
 		IN  USHORT  BitDepth, 
 		IN  BOOLEAN in
 		);
+
 	STDMETHODIMP_(USHORT)	hda_return_sound_data_format(
 		ULONG sample_rate, ULONG channels, ULONG bits_per_sample);
 	
@@ -567,8 +574,8 @@ Init
     PAGED_CODE();
 
     ASSERT(ResourceList);
-    ASSERT(DeviceObject != NULL);
-	ASSERT(PDO != NULL);
+    ASSERT(DeviceObject);
+	ASSERT(PDO);
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 	PHYSICAL_ADDRESS physAddr = {0};
@@ -916,7 +923,9 @@ Init
 	DOUT( DBG_SYSINFO, ("Version: %d.%d", readUCHAR(0x03), readUCHAR(0x02) ));
 
 	//offsets for stream engines
-	InputStreamBase = (0x80);
+	FirstInputStream = 0;
+	InputStreamBase = HDA_STREAMBASE(FirstInputStream);
+
 	UCHAR numCaptureStreams = ((caps >> 8) & 0xF);
 	UCHAR numPlaybackStreams = ((caps >> 12) & 0xf);
 	if(!numCaptureStreams && !numPlaybackStreams){
@@ -1164,8 +1173,10 @@ CAdapterCommon::
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CAdapterCommon::~CAdapterCommon]"));
 
-	//At least try to stop the stream before destruction
-	hda_stop_stream ();
+	//At least try to stop all streams before destruction
+
+	hda_stop_stream (TRUE);
+	hda_stop_stream (FALSE);
 	
 	//put all codecs in shutdown
 	for (i = 0; i < codecCount; i++) {
@@ -2349,7 +2360,9 @@ HDA_INTERRUPT_TYPE CAdapterCommon::AcknowledgeIRQ()
 					writeUCHAR(HDA_STREAMBASE(stream) + 3, sdsts);
 
 					// If this is not a stream we manage, quiesce it
-					if (stream != FirstOutputStream) {
+					if (   (stream != FirstOutputStream) 
+						&& (stream != FirstInputStream) ) {
+
 						UCHAR ctl = readUCHAR(HDA_STREAMBASE(stream) + 0);
 						ctl &= ~(SDCTL_RUN | SDCTL_IE);
 						writeUCHAR(HDA_STREAMBASE(stream) + 0, ctl);
@@ -2410,7 +2423,9 @@ ResetController(void)
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::ResetController]"));
 
-	ntStatus = hda_stop_stream();
+	hda_stop_stream(TRUE);
+
+	hda_stop_stream(FALSE);
 
 	ntStatus = InitHDAController();
 
@@ -2550,7 +2565,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramDataFormat
 
 	ULONG status = 0;
 	DOUT (DBG_PRINT, ("[CAdapterCommon::ProgramDataFormat]"));
-	DOUT (DBG_PRINT, ("rate %d ch %d bitdepth %d input %B", dwSampleRate, Channels, BitDepth, Input));
+	DOUT (DBG_PRINT, ("rate:%d ch:%d bitdepth:%d %s",
+		dwSampleRate, Channels, BitDepth, Input ? "Input" : "Output"));
 
 	//validate parameters
 	if((Channels == 0) || (Channels > 2)){
@@ -2575,10 +2591,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramDataFormat
 	writeUSHORT( StreamBase + 0x12, 
 		hda_return_sound_data_format(dwSampleRate, Channels, BitDepth));
 
-	// todo: adjust size of BDL chunks based on samplerate.
-	// output gets crunchy if rate is set too low for the irq frequency
-    
     DOUT (DBG_VSR, ("Samplerate changed to %d.", dwSampleRate));
+
+	// Size of BDL buffer chunks has to be changed by rebuilding the stream descriptor
 
     return STATUS_SUCCESS;
 }
@@ -2755,18 +2770,24 @@ NTSTATUS InterruptServiceRoutine
     IN      PINTERRUPTSYNC  InterruptSync,
     IN      PVOID           DynamicContext
 )
-{
+{	
+	//no printing in an ISR
+    //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
+	
+	// if the AdapterCommon object isn't inited yet we really shouldn't even be here
+	// but it's possible this is happening when loading onto a shared IRQ after startup
 
-    ASSERT(DynamicContext);
+    if (!DynamicContext) {
+		return STATUS_UNSUCCESSFUL;
+	}
+	if (!InterruptSync) {
+		return STATUS_UNSUCCESSFUL;
+	}
 
     CAdapterCommon *that = (CAdapterCommon *) DynamicContext;
 
-    //_DbgPrintF( DEBUGLVL_TERSE, ("***[CAdapterCommon::InterruptServiceRoutine]"));
-
-	//
     // ACK the ISR. note we don't have any direct access to CAdapterCommon, gotta use the pointer
-	// todo: how do we handle being called if the AdapterCommon object isn't inited yet?
-	// todo: call from a DPC fallback if the IRQ does not appear to be firing properly
+	// todo: call Service from a DPC fallback if the IRQ does not appear to be firing properly
 
     // get out of here immediately if it's not our IRQ
 	HDA_INTERRUPT_TYPE irqType = that->AcknowledgeIRQ();
@@ -2776,14 +2797,14 @@ NTSTATUS InterruptServiceRoutine
 		return STATUS_SUCCESS; //without queuing the DPC
 	}
 
-    ASSERT(InterruptSync);
-    ASSERT(that->m_pServiceGroupWave);
+    if(!(that->m_pServiceGroupWave)){
+		return STATUS_UNSUCCESSFUL;
+	}
 
     //
     // Make sure there is a wave port driver.
     //
-    if (that->m_pPortWave)
-    {
+    if (that->m_pPortWave) {
         //
         // Tell it it needs to do some work.
         //
@@ -2793,41 +2814,43 @@ NTSTATUS InterruptServiceRoutine
 }
 
 //stop stream and clear all stream registers
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
+STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (BOOLEAN In) {
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
-	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream]"));
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_stream] %s ", In ? "input" : "output"));
+
+	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
     
 	//for first output stream: turn off IOC IRQs, disable the Run bit
-	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+	writeUCHAR(StreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
 	while(ticks++ < 40) {
 		//wait till the run bit reads 0 to confirm it has stopped
 		//should be within 40 us
 		KeStallExecutionProcessor(1);
-		if((readUCHAR(OutputStreamBase + 0x00) & SDCTL_RUN )== 0x0 ) {
+		if((readUCHAR(StreamBase + 0x00) & SDCTL_RUN )== 0x0 ) {
 			break;
 		}
 	}
-	if((readUCHAR(OutputStreamBase + 0x00) & SDCTL_RUN ) == SDCTL_RUN) {
+	if((readUCHAR(StreamBase + 0x00) & SDCTL_RUN ) == SDCTL_RUN) {
 		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
 		ntStatus = STATUS_TIMEOUT;
 	}
  
 	//reset stream registers
-	writeUCHAR(OutputStreamBase + 0x00, 0x01);
+	writeUCHAR(StreamBase + 0x00, 0x01);
 	ticks = 0;
 	while(ticks++ < 10) {
 		KeStallExecutionProcessor(1);
-		if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+		if((readUCHAR(StreamBase + 0x00) & 0x1)==0x1) {
 			break;
 		}
 	}
-	if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+	if((readUCHAR(StreamBase + 0x00) & 0x1)==0x0) {
 		DOUT (DBG_ERROR, ("HDA: can not start resetting stream"));
 	}
 	KeStallExecutionProcessor(5);
-	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+	writeUCHAR(StreamBase + 0x00, 0x00);
 	ticks = 0;
 	while(ticks++<10) {
 		KeStallExecutionProcessor(1);
@@ -2835,19 +2858,25 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (void) {
 			break;
 		}
 	}
-	if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x1) {
+	if((readUCHAR(StreamBase + 0x00) & 0x1)==0x1) {
 		DOUT (DBG_ERROR, ("HDA: can not stop resetting stream"));
 		ntStatus = STATUS_TIMEOUT;
 	}
 	KeStallExecutionProcessor(5);
 
 	//clear error bits
-	writeUCHAR(OutputStreamBase + 0x03, 0x1C);
+	writeUCHAR(StreamBase + 0x03, 0x1C);
     return ntStatus;
 }
 
-STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
-	DOUT (DBG_SYSINFO, ("HDA: starting output stream pos %d", readULONG(OutputStreamBase + 0x04)));
+// Start playing or capturing from first Input or Output stream
+STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(BOOLEAN In) {
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_start_sound] %s ", In ? "input" : "output"));
+
+	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;  
+
+	DOUT (DBG_SYSINFO, ("HDA: starting output stream pos %s %d",
+		In ? "input" : "output", readULONG(StreamBase + 0x04)));
 	//
     // Make sure there is a wave port driver.
     //
@@ -2855,42 +2884,57 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(void) {
         // Tell it it needs to do some work.
         m_pPortWave->Notify(m_pServiceGroupWave);
 		
-		//Stream tag #1, stream is an output
-		writeUCHAR(OutputStreamBase + 0x02, 0x14);
+		if (In) {
+			//Stream tag #2, stream is an input
+			writeUCHAR(StreamBase + 0x02, 0x20);
 
-		//start playing output stream 1 with BDL IOC interrupts
-		writeUCHAR(OutputStreamBase + 0x00, 0x06);
+			//start capturing input stream with BDL IOC interrupts
+			writeUCHAR(StreamBase + 0x00, 0x06);
+		} else {
+			//Stream tag #1, stream is an output even if bidi
+			writeUCHAR(StreamBase + 0x02, 0x18);
+
+			//start playing stream with BDL IOC interrupts
+			writeUCHAR(StreamBase + 0x00, 0x06);
+		}
     } else {
 		DOUT (DBG_ERROR, ("Can't start playback with no wave port!"));
 	}
 
 }
 
-STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(void) {
-	DOUT (DBG_SYSINFO, ("HDA: stopping output stream pos %d", readULONG(OutputStreamBase + 0x04)));
-	writeUCHAR(OutputStreamBase + 0x00, 0x00);
+STDMETHODIMP_(void) CAdapterCommon::hda_stop_sound(BOOLEAN In) {
+
+	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
+
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_stop_sound] %s pos %d",
+		In ? "input" : "output", readULONG(StreamBase + 0x04)));
+
+	writeUCHAR(StreamBase + 0x00, 0x00);
 	ULONG ticks = 0;
 	while(ticks++ < 40) {
 		//wait till the run bit reads 0 to confirm it has stopped
 		//should be within 40 us
 		KeStallExecutionProcessor(1);
-		if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x0) {
+		if((readUCHAR(StreamBase + 0x00) & 0x2)==0x0) {
 			break;
 		}
 	}
-	if((readUCHAR(OutputStreamBase + 0x00) & 0x2)==0x2) {
+	if((readUCHAR(StreamBase + 0x00) & 0x2)==0x2) {
 		DOUT (DBG_ERROR, ("HDA: can not stop stream"));
 	}
-	DOUT (DBG_SYSINFO, ("HDA: stopped stream pos %d", readULONG(OutputStreamBase + 0x04)));
+	DOUT (DBG_SYSINFO, ("HDA: stopped stream pos %d", readULONG(StreamBase + 0x04)));
 }
 
 
-STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
-	//todo: support multiple streams
-	USHORT stream_id = FirstOutputStream; // stream 4 for most chipsets		
+STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) {
+
+	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
+	USHORT stream_id = In ? FirstInputStream : FirstOutputStream; // stream 4 for most chipsets	
+	
 	if (useDmaPos){
 		ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosBuffer.AlignedVirtualAddress) + (stream_id * 8));
-		ULONG lpos = readULONG(OutputStreamBase + 0x04);
+		ULONG lpos = readULONG(StreamBase + 0x04);
 
 		//check if DMA position buffer is moving or if it's stuck at 0
 		//TODO: dpos ever updating from 0 is not sufficient to confirm it works all the time
@@ -2911,7 +2955,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(void) {
 		}
 	} else {
 		//using LPIB
-		return readULONG(OutputStreamBase + 0x04);
+		return readULONG(StreamBase + 0x04);
 	}
 }
 

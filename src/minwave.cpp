@@ -1,7 +1,8 @@
 /*****************************************************************************
  * miniport.cpp - HDA wave miniport implementation
  *****************************************************************************
- * Copyright (c) Microsoft Corporation 1997-1999.  All rights reserved.
+ * Copyright (c) 1997-1999 Microsoft Corporation. (Later released under MIT License)
+ * Copyright 2025-2026 Drew Hoffman (Released under MIT License)
  */
 
 #include "minwave.h"
@@ -85,23 +86,18 @@ ProcessResources
     //
     // Get counts for the types of resources.
     //
-    ULONG   countMemory    = ResourceList->NumberOfMemories();
+    ULONG   countMemory = ResourceList->NumberOfMemories();
     ULONG   countIRQ    = ResourceList->NumberOfInterrupts();
 
 	//
     // Make sure we have the expected number of resources.
 	// 
-    //
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 
-	if  (   (countMemory < 1)
-        ||  (countIRQ < 1)
-        )
-    {
-        _DbgPrintF(DEBUGLVL_TERSE,("unknown configuraton; check your code!"));
+	if  ( (countMemory < 1) || (countIRQ < 1) ) {
+        _DbgPrintF(DEBUGLVL_TERSE,("Expected device resources not found!"));
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
-
 
 	//Create the two DMA channel objects
 	ntStatus = CreateDmaChannel(ResourceList, FALSE);
@@ -112,13 +108,12 @@ ProcessResources
 
 	ntStatus = CreateDmaChannel(ResourceList, TRUE);
 	
-
     return ntStatus;
 }
 
 NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 	IN      PRESOURCELIST   ResourceList,
-	IN		BOOLEAN			Capture
+	IN		BOOLEAN			isCapture
 )
 {
 	PAGED_CODE();
@@ -142,8 +137,7 @@ NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 
 	//PcNewDmaChannel is missing from Win2K DDK so i can't use my own DeviceDescription
 
-    if (!NT_SUCCESS (ntStatus))
-    {
+    if (!NT_SUCCESS (ntStatus)) {
         DOUT (DBG_ERROR, ("Failed on NewMasterDmaChannel!"));
         return ntStatus;
     }
@@ -183,8 +177,7 @@ NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 			ntStatus = STATUS_BUFFER_TOO_SMALL;
 		}
     }
-	if (NT_SUCCESS(ntStatus))
-    {
+	if (NT_SUCCESS(ntStatus)) {
 		PVOID pSystemAddress = DmaChannel->SystemAddress();
 		ULONG bufferSize = DmaChannel->AllocatedBufferSize();
 
@@ -202,7 +195,7 @@ NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 
 	//assign to the correct places in the object
 	
-	if(Capture){
+	if(isCapture) {
 		DmaChannelCapture = DmaChannel;
 	} else {
 		DmaChannelRender = DmaChannel;
@@ -272,14 +265,13 @@ ValidateFormat
     {
         ntStatus = STATUS_SUCCESS;
 
-		if (AdapterCommon->hda_is_supported_sample_rate(waveFormat->nSamplesPerSec) == TRUE){
+		if (AdapterCommon->hda_is_supported_sample_rate(waveFormat->nSamplesPerSec)) {
 			ntStatus = STATUS_SUCCESS;
 		} else {
 			ntStatus = STATUS_UNSUCCESSFUL;
 		}
 
-		//try programming the given sample rate and see if it works
-		//ntStatus = AdapterCommon->ProgramDataFormat(waveFormat->nSamplesPerSec, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+		//do not actually try to set the sample rate now.
     }
     else
     {
@@ -907,7 +899,7 @@ NewStream
     IN      PUNKNOWN                    OuterUnknown,
     IN      POOL_TYPE                   PoolType,
     IN      ULONG                       Channel,
-    IN      BOOLEAN                     Capture,
+    IN      BOOLEAN                     isCapture,
     IN      PKSDATAFORMAT               DataFormat,
     OUT     PDMACHANNEL *               OutDmaChannel,
     OUT     PSERVICEGROUP *             OutServiceGroup
@@ -930,7 +922,7 @@ NewStream
     // Make sure the hardware is not already in use.
 	// Get the required DMA channel if it's not already in use.
     //
-    if (Capture) {
+    if (isCapture) {
         if (AllocatedCapture){
             ntStatus = STATUS_INVALID_DEVICE_REQUEST;
         } else {
@@ -944,23 +936,25 @@ NewStream
 		}
     }
 
-    //
-    // Determine if the format is valid.
-    //
-    if (NT_SUCCESS(ntStatus))
-    {
-        ntStatus = ValidateFormat(DataFormat);
-    }
+	if (!NT_SUCCESS(ntStatus)){
+		return ntStatus;
+	}
 
-	//TODO: NTSTATUS overwritten here!
-	//so an invalid format can get through to the Assert later
+    //
+    // Determine if the data format is valid.
+    //
+
+    ntStatus = ValidateFormat(DataFormat);
+
+	if (!NT_SUCCESS(ntStatus)){
+		_DbgPrintF( DEBUGLVL_VERBOSE, 
+            ("Data format is invalid, stream not created") );
+		return ntStatus;
+	}
     	
-    if (! dmaChannel)
-    {
+    if (! dmaChannel) {
         ntStatus = STATUS_INVALID_DEVICE_REQUEST;
-    }
-    else
-    {
+    } else {
         //
         // Instantiate a stream.
         //
@@ -976,14 +970,14 @@ NewStream
                 (
                     this,
                     Channel,
-                    Capture,
+                    isCapture,
                     DataFormat,
                     dmaChannel
                 );
 
             if (NT_SUCCESS(ntStatus))
             {
-                if (Capture)
+                if (isCapture)
                 {
                     AllocatedCapture = TRUE;
                 }
@@ -1090,7 +1084,7 @@ CMiniportWaveCyclicStreamHDA::
         //
         // Clear allocation flags in the miniport.
         //
-        if (Capture)
+        if (isCapture)
         {
             Miniport->AllocatedCapture = FALSE;
         }
@@ -1099,8 +1093,9 @@ CMiniportWaveCyclicStreamHDA::
             Miniport->AllocatedRender = FALSE;
         }
 		
-		//stop hw stream before destruction
-		Miniport->AdapterCommon->hda_stop_stream();
+		//stop hw streams before destruction
+		Miniport->AdapterCommon->hda_stop_stream(TRUE);
+		Miniport->AdapterCommon->hda_stop_stream(FALSE);
 
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
         Miniport->Release();
@@ -1129,12 +1124,12 @@ Init
 	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
 
 	//TODO: Temporary block on creating capture streams
-	/*
+	
 	if(Capture_){
 		_DbgPrintF(DEBUGLVL_TERSE,("Capture stream unsupported"));
 		return STATUS_UNSUCCESSFUL;
 	}
-	*/
+	
 
     ASSERT(Miniport_);
     ASSERT(DataFormat);
@@ -1155,7 +1150,7 @@ Init
     DmaChannel->AddRef();
 
     Channel         = Channel_;
-    Capture         = Capture_;
+    isCapture         = Capture_;
 	
 	FormatSampleRate	= waveFormat->nSamplesPerSec;
     FormatChannels		= waveFormat->nChannels;
@@ -1171,7 +1166,7 @@ Init
 	/*
 	if(NT_SUCCESS(ntStatus)){
 			//if everything is ok, set up the stream
-			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, Capture);
+			ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(DmaChannel, isCapture);
 			if (NT_SUCCESS(ntStatus)) {
 				StreamDescriptorValid = TRUE;
 			}
@@ -1279,7 +1274,7 @@ SetFormat
             _DbgPrintF(DEBUGLVL_VERBOSE,("  SampleRate: %d",waveFormat->nSamplesPerSec));
 			
 			//don't actually set the sample rate on the controller, this is done right when going into Run
-			//Miniport->AdapterCommon->ProgramDataFormat(FormatSampleRate, waveFormat->nChannels, waveFormat->wBitsPerSample, Capture);
+			//Miniport->AdapterCommon->ProgramDataFormat(FormatSampleRate, waveFormat->nChannels, waveFormat->wBitsPerSample, isCapture);
 			
 			FormatDirty = TRUE;
 			StreamDescriptorValid = FALSE;
@@ -1314,13 +1309,13 @@ GetPosition
 			//bias the stream position forward when in Run mode
 			//to account for the DMA engine block size and the codec's buffer.
 			//or don't? may be causing a wraparound problem starting short sounds in the last ~4k of the buffer
-			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position() //+ 128 + 16 
+			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position( isCapture ) //+ 128 + 16 
 				)
 				% DmaChannel->BufferSize()
 				; 
 		}
 		else {
-			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position()
+			*Position = Miniport->AdapterCommon->hda_get_actual_stream_position( isCapture )
 				% DmaChannel->BufferSize()
 				;
 		}
@@ -1415,7 +1410,7 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 
                 ULONG bufferSize = DmaChannel->BufferSize();
                 ULONG position = bufferSize ?
-                        (Miniport->AdapterCommon->hda_get_actual_stream_position() % bufferSize) :
+                        (Miniport->AdapterCommon->hda_get_actual_stream_position( isCapture ) % bufferSize) :
                         0;
 
                 // If playback pauses with the hardware pointer in the
@@ -1429,7 +1424,7 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                 
                 if (recreateDescriptor) {
 
-                    ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+                    ntStatus = Miniport->AdapterCommon->hda_stop_stream(isCapture);
                     StreamDescriptorValid = FALSE;
 
 					if (!NT_SUCCESS(ntStatus)) {
@@ -1441,7 +1436,7 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 						FormatSampleRate, 
 						FormatChannels, 
 						FormatBitDepth,
-						Capture);
+						isCapture);
 
                     if (NT_SUCCESS(ntStatus)) {
 						StreamDescriptorValid = TRUE;
@@ -1452,14 +1447,20 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                 } else {
                     // Stop DMA but keep the programmed descriptor when the
                     // pointer is safely away from the buffer wrap point.
-                    Miniport->AdapterCommon->hda_stop_sound();
+                    Miniport->AdapterCommon->hda_stop_sound(isCapture);
 
 					// do clear out the buffer
                     Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
                 }
-            }
+            } else {
+				// Acquire -> Pause
+			}
 
-			// Acquire -> Pause
+            break;
+
+        case KSSTATE_RUN: // Pause -> Run
+			
+			//setup stream descriptor if necessary
 
 			if (!StreamDescriptorValid) {
                 ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
@@ -1467,23 +1468,21 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 							FormatSampleRate, 
 							FormatChannels, 
 							FormatBitDepth,
-							Capture);
+							isCapture);
                 if (NT_SUCCESS(ntStatus)) {				
-                    StreamDescriptorValid = TRUE;					
+                    StreamDescriptorValid = TRUE;
+					FormatDirty = FALSE;
                 } 
             }
-
-            break;
-
-        case KSSTATE_RUN: // Pause -> Run
                 
 			Miniport->AdapterCommon->ProgramDataFormat(
 				FormatSampleRate, 
 				FormatChannels, 
 				FormatBitDepth, 
-				Capture);
+				isCapture);
+
 			// Start DMA.
-			Miniport->AdapterCommon->hda_start_sound();
+			Miniport->AdapterCommon->hda_start_sound(isCapture);
                       
             break;
     }
@@ -1513,7 +1512,7 @@ STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
     {
     case KSSTATE_STOP:
         // 1. Stop DMA
-        ntStatus = Miniport->AdapterCommon->hda_stop_stream();
+        ntStatus = Miniport->AdapterCommon->hda_stop_stream(isCapture);
         State = KSSTATE_STOP;
         break;
 
@@ -1534,7 +1533,7 @@ STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
 						FormatSampleRate, 
 						FormatChannels, 
 						FormatBitDepth, 
-						Capture);
+						isCapture);
 			}
 
             // Write BDL base address, CBL, and LVI into controller registers
@@ -1543,7 +1542,7 @@ STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
 							FormatSampleRate, 
 							FormatChannels, 
 							FormatBitDepth,
-							Capture);
+							isCapture);
 
 			if (NT_SUCCESS(ntStatus)) {				
                     StreamDescriptorValid = TRUE;					
@@ -1554,7 +1553,7 @@ STDMETHODIMP CMiniportWaveCyclicStreamHDA::SetState(IN KSSTATE NewState)
 
     case KSSTATE_RUN:
         // Fast start: Just enable the RUN bit
-        Miniport->AdapterCommon->hda_start_sound();
+        Miniport->AdapterCommon->hda_start_sound(isCapture);
         State = KSSTATE_RUN;
         break;
     }

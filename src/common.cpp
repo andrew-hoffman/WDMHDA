@@ -28,10 +28,10 @@ typedef struct _HDA_BDL_ENTRY {
     ULONG Flags; // Bit 0 = Interrupt on Completion (IOC)
 } HDA_BDL_ENTRY, *PHDA_BDL_ENTRY;
 
-#define HDA_BDL_IOC_ENABLE         0x00000001UL
-#define HDA_MAX_BDL_ENTRIES        256
-#define HDA_BYTES_PER_PAGE         4096
-#define HDA_ALIGNMENT_REQUIREMENT  256
+#define HDA_BDL_IOC_ENABLE          0x00000001UL
+#define HDA_MAX_BDL_ENTRIES         256
+#define HDA_BYTES_PER_PAGE          4096
+#define HDA_ALIGNMENT_REQUIREMENT   256
 
 //Functions for common buffers
 #define HDA_COMMON_BUFFER_ALIGNMENT 128 //must be power of 2
@@ -2885,20 +2885,20 @@ STDMETHODIMP_(void) CAdapterCommon::hda_start_sound(BOOLEAN In) {
         m_pPortWave->Notify(m_pServiceGroupWave);
 		
 		if (In) {
-			//Stream tag #2, stream is an input
-			writeUCHAR(StreamBase + 0x02, 0x20);
+			//tag with input stream tag, no other options
+			writeUCHAR(StreamBase + 0x02, (HDA_INPUT_STREAM_TAG << 4) | 0x0);
 
 			//start capturing input stream with BDL IOC interrupts
 			writeUCHAR(StreamBase + 0x00, 0x06);
 		} else {
-			//Stream tag #1, stream is an output even if bidi
-			writeUCHAR(StreamBase + 0x02, 0x18);
+			//tag with output stream tag, set stream to output if it is bidi
+			writeUCHAR(StreamBase + 0x02, (HDA_OUTPUT_STREAM_TAG << 4) | 0x8);
 
 			//start playing stream with BDL IOC interrupts
 			writeUCHAR(StreamBase + 0x00, 0x06);
 		}
     } else {
-		DOUT (DBG_ERROR, ("Can't start playback with no wave port!"));
+		DOUT (DBG_ERROR, ("Can't start stream: no wave port!"));
 	}
 
 }

@@ -123,6 +123,12 @@
 //base registers of the nth output stream
 #define HDA_STREAMBASE(n) ((0x80+(0x20*n)))
 
+// Stream tags:
+// pick a number from 1-15
+// only using 1 of each for now
+#define HDA_INPUT_STREAM_TAG		2
+#define HDA_OUTPUT_STREAM_TAG		14
+
 #define SDCTL_RUN 0x2
 #define SDCTL_IE 0x10
 

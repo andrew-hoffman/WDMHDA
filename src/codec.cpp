@@ -829,13 +829,13 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_num
 		hda_send_verb(output_node_number, 0x200, 0x11);
 		//turn on power for Audio Output
 		hda_send_verb(output_node_number, 0x705, 0x00);
-		//connect Audio Output to stream 1 channel 0
-		hda_send_verb(output_node_number, 0x706, 0x10);
+		//connect Audio Output to appropriate stream, channel 0
+		hda_send_verb(output_node_number, 0x706, (HDA_OUTPUT_STREAM_TAG << 4) | 0x0);
 	} else {
 		//turn on power for Audio Output
 		hda_send_verb(output_node_number, 0x705, 0x00);
-		//connect Audio Output to stream 1 channel 0
-		hda_send_verb(output_node_number, 0x706, 0x10);
+		//connect Audio Output to appropriate stream, channel 0
+		hda_send_verb(output_node_number, 0x706, (HDA_OUTPUT_STREAM_TAG << 4) | 0x0);
 		//disable unsolicited responses
 		hda_send_verb(output_node_number, 0x708, 0x00);
 		//disable any processing

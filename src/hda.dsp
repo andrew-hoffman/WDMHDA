@@ -62,11 +62,12 @@ LINK32=link.exe
 # PROP Use_Debug_Libraries 1
 # PROP Output_Dir "Debug"
 # PROP Intermediate_Dir "Debug"
+# PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /GZ /c
 # ADD CPP /nologo /W3 /Gm /GX /ZI /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /FR /YX /FD /GZ /c
 # ADD BASE RSC /l 0x409 /d "_DEBUG"
-# ADD RSC /l 0x409 /d "_DEBUG"
+# ADD RSC /l 0x409 /fo"hda.res" /d "_DEBUG"
 BSC32=bscmake.exe
 # ADD BASE BSC32 /nologo
 # ADD BSC32 /nologo
@@ -106,6 +107,10 @@ SOURCE=.\debug.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\hdac_vendor.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\ioctls.h
 # End Source File
 # Begin Source File
@@ -130,7 +135,19 @@ SOURCE=.\mydma.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\inc\punknown.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\resource.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\stdunk\stdunk.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\inc\stdunk.h
 # End Source File
 # Begin Source File
 

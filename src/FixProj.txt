@@ -1,0 +1,92 @@
+
+Processing project file C:\NTDDK\src\wdm\audio\WDMHDA.vcp\src\HDA.dsp with profile DDK2K
+  Changed Debug and Release configurations to Checked and Free
+  Merging options for the Checked build
+    Removed include path "$(ddkpath)\inc"
+    Removed include path "$(ddkpath)\inc\ddk"
+    Removed include path "$(ddkpath)\inc\ddk\wdm"
+    Added include path "$(ddkpath)\inc"
+    Added include path "$(ddkpath)\inc\ddk"
+    Added include path "$(ddkpath)\inc\ddk\wdm"
+    Added profile option DWINVER=0x0500
+    Replaced project option D_WIN32_IE=0x0400 with profile option D_WIN32_IE=0x0501
+    Replaced project option FI"$(DDKPATH)\inc\warning.h" with profile option FI"$(ddkpath)\inc\warning.h"
+    Added profile option GB
+    Added profile option GR-
+    Added profile option GX-
+    Added profile option Gi-
+    Added profile option Gm-
+    Added profile option Od
+    Added profile option Oy-
+    Added profile option Zp8
+    Removed project library portcls.lib, which is only for applications
+    Removed project library libcntpr.lib, which is only for applications
+    Replaced project option base:"0x10000" with profile option base:0x10000
+    Replaced project option debug with profile option debug:full
+    Deleted project option debug:notmapped,full
+    Replaced project option debugtype:both with profile option debugtype:cv
+    Replaced project option driver with profile option driver:wdm
+    Replaced project option entry:"DriverEntry@8" with profile option entry:DriverEntry@8
+    Replaced project option ignore:4001,4037,4039,4049,4065,4070,4078,4087,4089,4096 with profile option ignore:4001,4037,4039,4049,4044,4065,4070,4078,4087,4089,4198
+    Added profile option incremental:no
+    Deleted project option libpath:"$(ddkpath)\lib\i386"
+    Deleted project option machine:i386
+    Deleted project option map
+    Deleted project option merge:.rdata=.text
+    Added profile option nocomment
+    Replaced project option opt:ref with profile option opt:icf
+    Added profile option opt:ref
+    Preserved project option osversion:4.00
+    Deleted project option pdb:none
+    Added profile option stack:262144,4096
+    Preserved project option subsystem:native,4.00
+    Deleted project option subsystem:windows
+    Replaced project option version:4.0 with profile option version:5.00
+  Merging options for the Free build
+    Removed include path "$(ddkpath)\inc"
+    Removed include path "$(ddkpath)\inc\ddk"
+    Removed include path "$(ddkpath)\inc\ddk\wdm"
+    Added include path "$(ddkpath)\inc"
+    Added include path "$(ddkpath)\inc\ddk"
+    Added include path "$(ddkpath)\inc\ddk\wdm"
+    Replaced project option DFPO=0 with profile option DFPO=1
+    Added profile option DWINVER=0x0500
+    Replaced project option D_WIN32_IE=0x0400 with profile option D_WIN32_IE=0x0501
+    Replaced project option FI"$(DDKPATH)\inc\warning.h" with profile option FI"$(ddkpath)\inc\warning.h"
+    Added profile option GB
+    Added profile option GR-
+    Added profile option GX-
+    Added profile option Gi-
+    Added profile option Gm-
+    Added profile option Gy
+    Added profile option Oy
+    Added profile option QIf
+    Added profile option Z7
+    Added profile option Zp8
+    Removed project library portcls.lib, which is only for applications
+    Removed project library libcntpr.lib, which is only for applications
+    Replaced project option base:"0x10000" with profile option base:0x10000
+    Replaced project option debug:notmapped,minimal with profile option debug:full
+    Added profile option debugtype:cv
+    Replaced project option driver with profile option driver:wdm
+    Replaced project option entry:"DriverEntry@8" with profile option entry:DriverEntry@8
+    Replaced project option ignore:4001,4037,4039,4049,4065,4070,4078,4087,4089,4096 with profile option ignore:4001,4037,4039,4049,4044,4065,4070,4078,4087,4089,4198
+    Added profile option incremental:no
+    Deleted project option libpath:"$(ddkpath)\lib\i386"
+    Deleted project option machine:i386
+    Deleted project option map
+    Deleted project option merge:.rdata=.text
+    Added profile option nocomment
+    Replaced project option opt:ref with profile option opt:icf
+    Added profile option opt:ref
+    Preserved project option osversion:4.00
+    Deleted project option pdb:none
+    Added profile option stack:262144,4096
+    Preserved project option subsystem:native,4.00
+    Deleted project option subsystem:windows
+    Replaced project option version:4.0 with profile option version:5.00
+  Added include paths to resource compiler rules
+  Saved existing project as 'C:\NTDDK\src\wdm\audio\WDMHDA.vcp\src\HDA.dsp.sav'
+  Rewrote project file after updates
+  Deleted the 'C:\NTDDK\src\wdm\audio\WDMHDA.vcp\src\HDA.dsw' file
+  Deleted the 'C:\NTDDK\src\wdm\audio\WDMHDA.vcp\src\HDA.opt' file

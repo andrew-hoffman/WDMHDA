@@ -1,5 +1,6 @@
 /src/buildchk.*
 /src/buildfre.*
+/src/debug/**
 /src/obj/**
 /src/objchk/**
 /src/objfre/**

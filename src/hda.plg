@@ -3,16 +3,44 @@
 <pre>
 <h1>Build Log</h1>
 <h3>
---------------------Configuration: HDA - Win32 Free--------------------
+--------------------Configuration: HDA - Win32 Checked--------------------
 </h3>
 <h3>Command Lines</h3>
-Creating temporary file "C:\WINDOWS\TEMP\RSP3363.BAT" with contents
+Creating temporary file "C:\WINDOWS\TEMP\RSP71B5.TMP" with contents
+[
+/nologo /Gz /MLd /W3 /Z7 /Oi /Gy /I "..\..\inc" /I "C:\NTDDK\inc" /I "C:\NTDDK\inc\ddk" /I "C:\NTDDK\inc\ddk\wdm" /FI"C:\NTDDK\inc\warning.h" /D CONDITION_HANDLING=1 /D DBG=1 /D DEVL=1 /D "DRIVER" /D FPO=0 /D "NDEBUG" /D NT_INST=0 /D NT_UP=1 /D "RDRDBG" /D "SRVDBG" /D "STD_CALL" /D "UNDER_NT" /D "UNICODE" /D "WIN32" /D WIN32=100 /D WIN32_LEAN_AND_MEAN=1 /D WINNT=1 /D WINVER=0x0500 /D "_DEBUG" /D _DLL=1 /D "_IDWBUILD" /D "_MBCS" /D _NT1X_=100 /D "_UNICODE" /D "_WIN32" /D _WIN32_IE=0x0501 /D _WIN32_WINNT=0x0500 /D "_WINDOWS" /D _X86_=1 /D i386=1 /FR"debug\\" /Fp"objchk\i386/HDA.pch" /YX /Fo"objchk\i386/" /Fd"objchk\i386/" /FD -GF -QI0f -QIf -QIfdiv- -Zel -cbstring /c 
+"C:\Ntddk\src\wdm\audio\WDMHDA.git\src\adapter.cpp"
+"C:\Ntddk\src\wdm\audio\WDMHDA.git\src\codec.cpp"
+"C:\Ntddk\src\wdm\audio\WDMHDA.git\src\common.cpp"
+"C:\Ntddk\src\wdm\audio\WDMHDA.git\src\mintopo.cpp"
+"C:\Ntddk\src\wdm\audio\WDMHDA.git\src\minwave.cpp"
+]
+Creating command line "cl.exe @C:\WINDOWS\TEMP\RSP71B5.TMP" 
+Creating temporary file "C:\WINDOWS\TEMP\RSP71B6.TMP" with contents
+[
+portcls.lib ks.lib wdm.lib wmilib.lib ..\..\lib\i386\stdunk.lib /nologo /base:"0x10000" /version:5.0 /stack:0x40000,0x1000 /entry:"DriverEntry@8" /incremental:no /pdb:"objchk\i386/hda.pdb" /map:"objchk\i386/hda.map" /machine:IX86 /nodefaultlib /out:"objchk\i386\hda.sys" /libpath:"C:\NTDDK\libchk\i386" -align:0x20 -debug:full -driver:wdm -force:multiple -fullbuild -ignore:4001,4037,4039,4049,4044,4065,4070,4078,4087,4089,4198 -merge:_PAGE=PAGE -merge:_TEXT=.text -nocomment -opt:icf -opt:ref -optidata -osversion:4.00 -release -section:init,d -subsystem:native,4.00 
+.\objchk\i386\adapter.obj
+.\objchk\i386\codec.obj
+.\objchk\i386\common.obj
+.\objchk\i386\mintopo.obj
+.\objchk\i386\minwave.obj
+.\objchk\i386\HDA.res
+]
+Creating command line "link.exe @C:\WINDOWS\TEMP\RSP71B6.TMP"
+Creating temporary file "C:\WINDOWS\TEMP\RSP71B7.BAT" with contents
 [
 @echo off
-"c:\my documents\microsoft press\windows driver model samples"\nmsym -translate:source,package,always .\objfre\i386\hda.sys
-rebase -b 10000 -x junk .\objfre\i386\hda.sys
+"c:\my documents\microsoft press\windows driver model samples"\nmsym -translate:source,package,always .\objchk\i386\hda.sys
+copy .\objchk\i386\hda.sys C:\WINDOWS\system32\drivers
 ]
-Creating command line "C:\WINDOWS\TEMP\RSP3363.BAT"
+Creating command line "C:\WINDOWS\TEMP\RSP71B7.BAT"
+Compiling...
+adapter.cpp
+codec.cpp
+common.cpp
+mintopo.cpp
+minwave.cpp
+Linking...
 <h3>Output Window</h3>
 Finishing up...
 When you installed the WDM Book samples, you indicated that

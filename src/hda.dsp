@@ -142,6 +142,46 @@ SOURCE=.\minwave.cpp
 # Begin Group "Header Files"
 
 # PROP Default_Filter "h;hpp;hxx;hm;inl"
+# Begin Source File
+
+SOURCE=.\codec.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\common.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\debug.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\hdac_vendor.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\ioctls.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\mintopo.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\minwave.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\mydma.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\resource.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\tables.h
+# End Source File
 # End Group
 # Begin Group "Resource Files"
 

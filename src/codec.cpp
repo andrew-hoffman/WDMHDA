@@ -1036,22 +1036,33 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramDataFormat
 {
     PAGED_CODE ();
 
+	DOUT (DBG_PRINT, ("[HDA_Codec::ProgramDataFormat]"));
+
 	if (InShutdown) return STATUS_UNSUCCESSFUL;
+
+	if (Input) {
+		DOUT (DBG_PRINT, ("input is not this far yet"));
+		return STATUS_UNSUCCESSFUL;
+	}
 
     WORD     wOldRateReg, wCodecReg;
 	ULONG status = 0;
 	ULONG successes = 0;
-
-    DOUT (DBG_PRINT, ("[HDA_Codec::ProgramDataFormat]"));
 
 	if (out_paths.count == 0){
 			DOUT (DBG_ERROR, ("No output paths inited yet!"));
             return STATUS_UNSUCCESSFUL;
 	}
 
+	if (!hda_is_supported_channel_size((UCHAR)BitDepth) ) {
+		// Not a supported sample rate
+		DOUT (DBG_VSR, ("Bit depth %d not supported by codec", BitDepth));
+		return STATUS_NOT_SUPPORTED;
+	}
+
 	if (!hda_is_supported_sample_rate(dwSampleRate)) {
 		// Not a supported sample rate
-		DOUT (DBG_VSR, ("Sample rate %d hz not supported by HDA", dwSampleRate));
+		DOUT (DBG_VSR, ("Sample rate %d hz not supported by codec", dwSampleRate));
 		return STATUS_NOT_SUPPORTED;
 	}
 

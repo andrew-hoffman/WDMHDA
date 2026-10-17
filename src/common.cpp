@@ -3066,23 +3066,24 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		Channels,
 		10);
 	
-	//print BDL entries and make sure we've got it right
+
 
 	if(entries == 0){
 		DOUT(DBG_ERROR, ("no BDL entries created"));
 		return STATUS_UNSUCCESSFUL;
 	}
+	
+	//print BDL entries and make sure we've got it right
+	/*
 	for(i = 0; i < ((entries * 4) + 1); i += 4){
 		DOUT(DBG_SYSINFO, 
 		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
 				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));
 	}
-	
-
 	DOUT(DBG_SYSINFO, ("BDL set up"));
-
+	*/
 	
-	//Flush audio buffer and BDL out of cache to RAM
+	//Flush BDL out of cache to RAM
 	//to be sure controller will read correct data.
 	//KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 
@@ -3100,9 +3101,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 	DOUT(DBG_SYSINFO, ("rirb sts %X",rirbsts));
 	writeUCHAR(0x5D, 0x5);
 
-	//enable interrupts from output stream 1
-	//TODO account for other streams in use
-	writeULONG(0x20, ((1 << 31) | (1 << FirstOutputStream)) );
+	//enable interrupts from the stream
+	writeULONG(0x20, ((1 << 31) | (1 << (in ? FirstInputStream : FirstOutputStream) )) );
 	
 	// Memory Fence: Ensures all flushes are globally visible 
 	// before the ISR/DPC returns
@@ -3112,7 +3112,8 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		    _emit 0xF0
 		}
 
-	DOUT(DBG_SYSINFO, ("stream descriptor ready"));
+	DOUT(DBG_SYSINFO, ("stream descriptor %d ready",
+		(in ? FirstInputStream : FirstOutputStream) ));
 
 	// wait for Play state to actually start the stream though.
 	
@@ -3155,8 +3156,8 @@ ULONG CAdapterCommon::hda_setup_bdl(
     ULONG entry_count = 0;
 
     // Sanity checks
-    if (!bdl_table || max_bdl_entries == 0 || total_buffer_bytes == 0) {
-		DOUT(DBG_ERROR, ("insanity"));
+    if (!bdl_table || (max_bdl_entries == 0) || (total_buffer_bytes == 0)) {
+		DOUT(DBG_ERROR, ("BDL parameters incorrect"));
         return 0;
     }
 

@@ -23,7 +23,7 @@
 #include "DMusicKS.h"
 
 //level for debug prints: blab > verbose > terse > none
-#define DEBUG_LEVEL DEBUGLVL_TERSE
+#define DEBUG_LEVEL DEBUGLVL_VERBOSE
 #include "ksdebug.h"
 #include "debug.h"
 

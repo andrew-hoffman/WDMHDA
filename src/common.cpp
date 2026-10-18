@@ -3021,7 +3021,17 @@ STDMETHODIMP_(void) CAdapterCommon::clearULONGBit(USHORT reg, ULONG flag)
 	writeULONG(reg, readULONG(reg) & ~flag);
 }
 
-//set up the appropriate BDL for the input or output DmaChannel
+
+BOOLEAN out_sd_valid;
+
+
+// Sets up the Stream Descriptor for a channel
+// to use the appropriate Buffer Descriptor List
+// Must be called evry time the stream descriptor has been reset
+// which is on stream creation, and every time the stream write pointer
+// has been reset by clearing the Stream Descriptor.
+// which you have to do to reset the Play pointer to zero.
+
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 	PDMACHANNEL DmaChannel,
 	IN  DWORD   dwSampleRate,
@@ -3046,6 +3056,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		return STATUS_POWER_STATE_INVALID;
 	}
 
+	if ((!DmaChannel) 
+		|| (dwSampleRate < 8000) 
+		|| (Channels <= 0 ) 
+		|| (BitDepth < 8) )
+	{
+		return STATUS_INVALID_PARAMETER;
+	}	
+
 	//get the physical and virtual address pointers from the dma channel object
 	BufLogicalAddress = DmaChannel->PhysicalAddress();
 	BufVirtualAddress = DmaChannel->SystemAddress();
@@ -3065,8 +3083,6 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		BitDepth,
 		Channels,
 		10);
-	
-
 
 	if(entries == 0){
 		DOUT(DBG_ERROR, ("no BDL entries created"));
@@ -3112,16 +3128,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 		    _emit 0xF0
 		}
 
-	DOUT(DBG_SYSINFO, ("stream descriptor %d ready",
-		(in ? FirstInputStream : FirstOutputStream) ));
-
 	// wait for Play state to actually start the stream though.
 	
     return ntStatus;
 }
 
 
-//new impl, Gemini assisted
+
 /**
  * hda_setup_bdl
  *

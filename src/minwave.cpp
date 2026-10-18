@@ -251,10 +251,10 @@ ValidateFormat
                 KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
             )
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
-        &&  (   (waveFormat->wBitsPerSample == 8) ||
+        &&  (   //(waveFormat->wBitsPerSample == 8) ||
 				(waveFormat->wBitsPerSample == 16)
             )
-        &&  (   (waveFormat->nChannels == 1) ||
+        &&  (   //(waveFormat->nChannels == 1) ||
 				(waveFormat->nChannels == 2)
 				
             )
@@ -479,7 +479,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
             STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
         },
         2,      // Max number of channels.
-        8,      // Minimum number of bits per sample.
+        16,      // Minimum number of bits per sample.
         16,     // Maximum number of bits per channel.
         8000,   // Minimum rate. 
         48000   // Maximum rate.
@@ -1251,10 +1251,13 @@ SetFormat
         if (NT_SUCCESS(ntStatus))
         {
             PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
-			// keep previous stream descriptor if it is valid, same sample rate etc. 			
+			// keep previous stream descriptor if it is valid, same sample rate etc. 
+			/*
 			BOOLEAN formatChanged = (FormatSampleRate != waveFormat->nSamplesPerSec) 
 				|| (FormatBitDepth != waveFormat->wBitsPerSample) 
 				|| (FormatChannels = waveFormat->nChannels);
+			*/
+			BOOLEAN formatChanged = TRUE;
 
 			if (formatChanged) {
 				FormatDirty = TRUE;
@@ -1457,10 +1460,10 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                     // Stop DMA but keep the programmed descriptor when the
                     // pointer is safely away from the buffer wrap point.
                     Miniport->AdapterCommon->hda_stop_sound(isCapture);
-
-					// do clear out the buffer
-                    Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
                 }
+				// always clear out the buffer
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+
             } else {
 
 				// Acquire -> Pause 

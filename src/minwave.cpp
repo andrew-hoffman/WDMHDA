@@ -888,7 +888,11 @@ DataRangeIntersection
  *****************************************************************************
  * Creates a new stream.  This function is called when a streaming pin is
  * created.
+ *
+ *In WaveOut mode the stream is often destroyed at the end of one sound
+ *In DirectSound mode it may be reused including at different sample rates.
  */
+
 STDMETHODIMP
 CMiniportWaveCyclicHDA::
 NewStream
@@ -1080,20 +1084,19 @@ CMiniportWaveCyclicStreamHDA::
     if (Miniport)
     {
         //
-        // Clear allocation flags in the miniport.
+        // Clear allocation flags in the miniport
+		// stop the hw streams (destroying their descriptors)
         //
         if (isCapture)
         {
             Miniport->AllocatedCapture = FALSE;
+			Miniport->AdapterCommon->hda_stop_stream(TRUE);
         }
         else
         {
             Miniport->AllocatedRender = FALSE;
+			Miniport->AdapterCommon->hda_stop_stream(FALSE);
         }
-		
-		//stop hw streams before destruction
-		Miniport->AdapterCommon->hda_stop_stream(TRUE);
-		Miniport->AdapterCommon->hda_stop_stream(FALSE);
 
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
         Miniport->Release();
@@ -1242,6 +1245,8 @@ SetFormat
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
+	//TODO: i made another arrow antipattern
+
     if(State != KSSTATE_RUN) //can't change format while stream is running
     {
         ntStatus = Miniport->ValidateFormat(Format);
@@ -1251,43 +1256,59 @@ SetFormat
         if (NT_SUCCESS(ntStatus))
         {
             PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
-			// keep previous stream descriptor if it is valid, same sample rate etc. 
+			// keep previous BDL if it is valid, same sample rate etc. 
 			/*
-			BOOLEAN formatChanged = (FormatSampleRate != waveFormat->nSamplesPerSec) 
+			BOOLEAN formatChanged = 
+				   (FormatSampleRate != waveFormat->nSamplesPerSec) 
 				|| (FormatBitDepth != waveFormat->wBitsPerSample) 
-				|| (FormatChannels = waveFormat->nChannels);
+				|| (FormatChannels != waveFormat->nChannels);
 			*/
 			BOOLEAN formatChanged = TRUE;
 
 			if (formatChanged) {
 				FormatDirty = TRUE;
-				FormatSampleRate = waveFormat->nSamplesPerSec;
-				FormatBitDepth = waveFormat->wBitsPerSample;
-				FormatChannels = waveFormat->nChannels;
+
 			}
 			
             _DbgPrintF(DEBUGLVL_VERBOSE,("  %d hz %d bit %d ch",
-				waveFormat->nSamplesPerSec,waveFormat->wBitsPerSample,waveFormat->nChannels));
-			
-			if (FormatDirty || (!StreamDescriptorValid)) {
-				ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
-							DmaChannel,
-							FormatSampleRate, 
-							FormatChannels, 
-							FormatBitDepth,
-							isCapture);
-				if (NT_SUCCESS(ntStatus)) {				
-					StreamDescriptorValid = TRUE;
-					FormatDirty = FALSE;
-				} 
-			}
-			
-			Miniport->AdapterCommon->ProgramDataFormat(
-				FormatSampleRate,
-				waveFormat->nChannels,
+				waveFormat->nSamplesPerSec,
 				waveFormat->wBitsPerSample,
-				isCapture);			
+				waveFormat->nChannels));
 			
+			if (FormatDirty) {
+
+				//set up the BDL
+
+				BdlEntries = Miniport->AdapterCommon->hda_setup_bdl(
+						DmaChannel,
+						isCapture,
+						waveFormat->nSamplesPerSec,
+						waveFormat->wBitsPerSample,
+						waveFormat->nChannels,
+						Miniport->NotificationInterval //probably 10 ms
+						);
+
+				if (BdlEntries) {				
+
+					ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
+						waveFormat->nSamplesPerSec,
+						waveFormat->nChannels,
+						waveFormat->wBitsPerSample,
+						isCapture);	
+
+					if (NT_SUCCESS(ntStatus)) {
+						FormatDirty = FALSE;
+						FormatSampleRate = waveFormat->nSamplesPerSec;
+						FormatBitDepth = waveFormat->wBitsPerSample;
+						FormatChannels = waveFormat->nChannels;
+
+						ntStatus = STATUS_SUCCESS;
+					}
+
+				} else {
+					ntStatus = STATUS_UNSUCCESSFUL;
+				}
+			}			
         }
     }
 
@@ -1312,15 +1333,13 @@ GetPosition
 
 	ASSERT(Position);
 
-    if (DmaChannel)
-    {
-		if (State == KSSTATE_RUN){
+    if (DmaChannel) {
+		if (State == KSSTATE_RUN) {
 			//bias the stream position forward when in Run mode
 			//to account for the DMA engine block size and the codec's buffer.
 			//or don't? may be causing a wraparound problem starting short sounds in the last ~4k of the buffer
 			*Position = (Miniport->AdapterCommon->hda_get_actual_stream_position( isCapture ) //+ 128 + 16 
-				)
-				% DmaChannel->BufferSize()
+				) % DmaChannel->BufferSize()
 				; 
 		}
 		else {
@@ -1329,8 +1348,7 @@ GetPosition
 				;
 		}
     }
-    else
-    {
+    else {
         *Position = 0;
     }
 
@@ -1379,9 +1397,15 @@ Return:
  * CMiniportWaveCyclicStreamHDA::SetState()
  *****************************************************************************
  * Sets the state of the channel
- */
 
-//the KMixer will often take the stream up to Pause and then back down again as a dry-run before playing sound
+ States always progress in in the order of:
+ DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
+ (Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
+
+ The KMixer will often take the stream up to Pause and then back down again
+ as a dry-run before playing sound. 
+*/
+
 
 STDMETHODIMP
 CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
@@ -1391,10 +1415,14 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
+	//validations
 	if (! DmaChannel) {
-		//bail out early
+		_DbgPrintF(DEBUGLVL_TERSE,("no dma channel"));
         return STATUS_INVALID_DEVICE_REQUEST;
-    }
+    } else if (!DmaChannel->BufferSize()) {
+		_DbgPrintF(DEBUGLVL_TERSE,("no dma buffer"));
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
 
     if (State == NewState) {
 		return ntStatus;
@@ -1403,18 +1431,18 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
     switch (NewState) {
 		
 		case KSSTATE_STOP:
-			// don't destroy the stream descriptor,
-			// this is done anyway when the WaveCyclicStream is destroyed.
-			
-			// do clear out the buffer
 
             Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+			//stream descriptor will be destroyed when the WaveCyclicStream is.
+
             break;
 
 		case KSSTATE_ACQUIRE:
+
 			break;
 
         case KSSTATE_PAUSE:
+
             if (State == KSSTATE_RUN) { 
 				
 				//Run -> Pause 
@@ -1430,8 +1458,10 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                 // entering Pause keeps the later transition back to Run
                 // lightweight enough for short system sounds.
 
-                BOOLEAN recreateDescriptor = (!bufferSize ||
+                BOOLEAN recreateDescriptor = FALSE;
+					/*(!StreamDescriptorValid ||
 						(position >= (bufferSize - (bufferSize / 5))));
+					*/
                 
                 if (recreateDescriptor) {
 
@@ -1443,25 +1473,22 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                     }
 
                     ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
-						DmaChannel,
-						FormatSampleRate, 
-						FormatChannels, 
-						FormatBitDepth,
-						isCapture);
+						DmaChannel,	BdlEntries,	isCapture);
 
                     if (NT_SUCCESS(ntStatus)) {
 						StreamDescriptorValid = TRUE;
-						FormatDirty = FALSE;
                     } else {
                         break;
                     }
 
                 } else {
-                    // Stop DMA but keep the programmed descriptor when the
-                    // pointer is safely away from the buffer wrap point.
+                    // Stop DMA but keep the programmed descriptor
+					// (and write pointer nonzero)
+					// when the pointer is safely away from the buffer wrap point.
                     Miniport->AdapterCommon->hda_stop_sound(isCapture);
                 }
-				// always clear out the buffer
+
+				// always clear out the buffer (does anything expect us to keep it?)
                 Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 
             } else {
@@ -1476,6 +1503,21 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 			
 			// Pause -> Run
 
+			// create stream descriptor just in case we need to
+			//this should have been done already
+			
+			if (!StreamDescriptorValid) {
+
+				ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
+					DmaChannel, BdlEntries, isCapture);
+
+                if (NT_SUCCESS(ntStatus)) {
+					StreamDescriptorValid = TRUE;
+                } else {
+                    break;
+                }
+			}
+
 			// Just Start DMA.
 			Miniport->AdapterCommon->hda_start_sound(isCapture);
                       
@@ -1485,12 +1527,6 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
     State = NewState;  
     return ntStatus;
 }
-
-
-/* States always progress in in the order of:
-DmaChannel created -> KSSTATE_STOP -> KSSTATE_ACQUIRE -> KSSTATE_PAUSE -> KSSTATE_RUN (Playing)
-(Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
-*/
 
 
 #pragma code_seg()

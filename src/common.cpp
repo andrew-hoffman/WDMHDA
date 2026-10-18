@@ -318,15 +318,14 @@ private:
 	);
 	static STDMETHODIMP_(VOID) JackPollWorker(PVOID Context);
 
-	ULONG hda_setup_bdl(
-    PHDA_BDL_ENTRY bdl_table,
-    ULONG          max_bdl_entries,
-    PHYSICAL_ADDRESS physical_address,
-    ULONG          total_buffer_bytes,
-    ULONG          sample_rate,
-    ULONG          bit_depth,
-    ULONG          channels,
-    ULONG          target_interval_ms);
+	STDMETHODIMP_(USHORT) hda_setup_bdl(
+		PDMACHANNEL    DmaChannel, 
+		BOOLEAN        in,
+		ULONG          sample_rate,
+		USHORT         bit_depth,
+		USHORT         channels,
+		ULONG          target_interval_ms
+	);
 
 
 public:
@@ -422,9 +421,7 @@ public:
 	STDMETHODIMP_(void)		hda_disable_pin_output(ULONG codec, ULONG pin_node);
 	STDMETHODIMP_(NTSTATUS)	hda_setup_stream_descriptor(
 		PDMACHANNEL DmaChannel,
-		IN  DWORD   dwSampleRate,
-		IN  USHORT  Channels,
-		IN  USHORT  BitDepth, 
+		IN  USHORT  entries, 
 		IN  BOOLEAN in
 		);
 
@@ -3034,14 +3031,9 @@ BOOLEAN out_sd_valid;
 
 STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 	PDMACHANNEL DmaChannel,
-	IN  DWORD   dwSampleRate,
-	IN  USHORT  Channels,
-	IN  USHORT  BitDepth,
-	IN  BOOLEAN in) {
-	
-	// Output audio buffer information
-	PVOID BufVirtualAddress;
-	PHYSICAL_ADDRESS BufLogicalAddress;
+	IN  USHORT  entries,
+	IN  BOOLEAN in	
+	) {
 
 	HDA_DMA_COMMON_BUFFER Bdl = in ? InputBdl : OutputBdl; 
 	USHORT StreamBase = in ? InputStreamBase : OutputStreamBase;
@@ -3051,60 +3043,21 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 
 	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_setup_stream_descriptor]"));
 
-	if( m_PowerState > PowerDeviceD1 ) {
+	if (m_PowerState > PowerDeviceD1) {
 		DOUT (DBG_ERROR, ("Device in low power state D%d, not ok to touch it", m_PowerState));
 		return STATUS_POWER_STATE_INVALID;
 	}
 
-	if ((!DmaChannel) 
-		|| (dwSampleRate < 8000) 
-		|| (Channels <= 0 ) 
-		|| (BitDepth < 8) )
-	{
+	if (!DmaChannel || !StreamBase) {
 		return STATUS_INVALID_PARAMETER;
-	}	
+	}
 
-	//get the physical and virtual address pointers from the dma channel object
-	BufLogicalAddress = DmaChannel->PhysicalAddress();
-	BufVirtualAddress = DmaChannel->SystemAddress();
-	ULONG audBufSize = DmaChannel->BufferSize();
-
-	DOUT(DBG_SYSINFO, ("Audio Buffer Virt Addr = 0x%X,", BufVirtualAddress));
-	DOUT(DBG_SYSINFO, ("Audio Buffer Phys Addr = 0x%X,", BufLogicalAddress.QuadPart));
-	DOUT(DBG_SYSINFO, ("Audio Buffer Size = %d,", audBufSize));
-
-	//Setup BDL
-	ULONG entries = hda_setup_bdl(
-		(PHDA_BDL_ENTRY)Bdl.AlignedVirtualAddress,
-		256,
-		BufLogicalAddress,
-		audBufSize,
-		dwSampleRate,
-		BitDepth,
-		Channels,
-		10);
-
-	if(entries == 0){
+	if (entries == 0) {
 		DOUT(DBG_ERROR, ("no BDL entries created"));
 		return STATUS_UNSUCCESSFUL;
 	}
-	
-	//print BDL entries and make sure we've got it right
-	/*
-	for(i = 0; i < ((entries * 4) + 1); i += 4){
-		DOUT(DBG_SYSINFO, 
-		("BDL %d: Phys Addr 0x%08lX %08lX Length %d Flags %X", 
-				(i/4), Bdl.AlignedVirtualAddress[i+1], Bdl.AlignedVirtualAddress[i], Bdl.AlignedVirtualAddress[i+2], Bdl.AlignedVirtualAddress[i+3]));
-	}
-	DOUT(DBG_SYSINFO, ("BDL set up"));
-	*/
-	
-	//Flush BDL out of cache to RAM
-	//to be sure controller will read correct data.
-	//KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 
-	//CacheLineFlush(BufVirtualAddress, audBufSize);
-	CacheLineFlush(Bdl.RawVirtualAddress, Bdl.RawLength);
+	ULONG audBufSize = DmaChannel->BufferSize();
 
 	//set registers on stream descriptor
 	writeULONG(StreamBase + 0x18, Bdl.AlignedLogicalAddress.LowPart);
@@ -3119,14 +3072,13 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 
 	//enable interrupts from the stream
 	writeULONG(0x20, ((1 << 31) | (1 << (in ? FirstInputStream : FirstOutputStream) )) );
-	
+
 	// Memory Fence: Ensures all flushes are globally visible 
 	// before the ISR/DPC returns
-		__asm {
-		    _emit 0x0F // MFENCE
+	__asm { _emit 0x0F // MFENCE
 		    _emit 0xAE
 		    _emit 0xF0
-		}
+	}
 
 	// wait for Play state to actually start the stream though.
 	
@@ -3141,9 +3093,9 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
  * Populates a HD Audio Buffer Descriptor List (BDL) for a WaveCyclic audio buffer.
  *
  * @param bdl_table         Pointer to contiguous memory holding the BDL array.
- * @param max_bdl_entries   Max entries available in bdl_table (typically 256).
+
  * @param physical_address  Base physical address of the contiguous audio buffer.
- * @param total_buffer_bytes Total size of the audio buffer in bytes (multiple of 4096).
+ * @param audBufSize Total size of the audio buffer in bytes (multiple of 4096).
  * @param sample_rate       Audio sample rate (e.g., 44100, 48000).
  * @param bit_depth         Bits per sample (e.g., 16, 24, 32).
  * @param channels          Number of audio channels (e.g., 2).
@@ -3151,28 +3103,55 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
  *
  * @return Total number of BDL entries populated, or 0 on error.
  */
-ULONG CAdapterCommon::hda_setup_bdl(
-    PHDA_BDL_ENTRY bdl_table,
-    ULONG          max_bdl_entries,
-    PHYSICAL_ADDRESS physical_address,
-    ULONG          total_buffer_bytes,
+STDMETHODIMP_(USHORT) CAdapterCommon::hda_setup_bdl(
+	PDMACHANNEL    DmaChannel, 
+	BOOLEAN        in,
     ULONG          sample_rate,
-    ULONG          bit_depth,
-    ULONG          channels,
-    ULONG          target_interval_ms)
-{
+    USHORT          bit_depth,
+    USHORT          channels,
+    ULONG          target_interval_ms
+){	
+
+	ULONG i = 0;
+	HDA_DMA_COMMON_BUFFER Bdl = in ? InputBdl : OutputBdl; 
+
+	DOUT (DBG_PRINT, ("[CAdapterCommon::hda_setup_bdl]"));
+
+	if (m_PowerState > PowerDeviceD1) {
+		DOUT (DBG_ERROR, ("Device in low power state D%d, not ok to touch it", m_PowerState));
+		return 0;
+	}
+
+	//sanity checks 1
+	if (!DmaChannel
+		|| (sample_rate < 8000)
+		|| (bit_depth < 8) 
+		|| (channels <= 0) || (channels > 8)
+		|| (target_interval_ms == 0)
+		) {
+		DOUT (DBG_ERROR, ("invalid parameters"));
+		return 0;
+	}
+
+	PHDA_BDL_ENTRY bdl_table = (PHDA_BDL_ENTRY)Bdl.AlignedVirtualAddress;
+
+	//get the physical and virtual address pointers from the dma channel object
+	PHYSICAL_ADDRESS physical_address = DmaChannel->PhysicalAddress();
+	PVOID BufVirtualAddress = DmaChannel->SystemAddress();
+	ULONG audBufSize = DmaChannel->BufferSize();
+	
+	// sanity checks 2
+	if (!bdl_table || !BufVirtualAddress || !audBufSize) {
+		DOUT (DBG_ERROR, ("invalid parameters"));
+		return 0;
+	}
+
     ULONG bytes_per_frame = 0;
     ULONG bytes_per_sec = 0;
     ULONG target_chunk_bytes = 0;
     ULONG aligned_chunk_bytes = 0;
     ULONG current_offset = 0;
-    ULONG entry_count = 0;
-
-    // Sanity checks
-    if (!bdl_table || (max_bdl_entries == 0) || (total_buffer_bytes == 0)) {
-		DOUT(DBG_ERROR, ("BDL parameters incorrect"));
-        return 0;
-    }
+    USHORT entry_count = 0;
 
     // 1. Calculate frame size and PCM byte rate
     bytes_per_frame = (bit_depth / 8) * channels;
@@ -3213,11 +3192,11 @@ ULONG CAdapterCommon::hda_setup_bdl(
 	DOUT(DBG_ERROR, ("aligned chunk bytes again %d", aligned_chunk_bytes));
 
     // 4. Fill BDL Entries
-    while (current_offset < total_buffer_bytes) {
-        ULONG remaining_bytes = total_buffer_bytes - current_offset;
+    while (current_offset < audBufSize) {
+        ULONG remaining_bytes = audBufSize - current_offset;
         ULONG current_chunk_bytes = aligned_chunk_bytes;
 
-        if (entry_count >= max_bdl_entries) {
+        if (entry_count >= HDA_MAX_BDL_ENTRIES) {
             // Out of BDL slots
 			DOUT(DBG_ERROR, ("out of BDL slots %d", entry_count));
             return 0;
@@ -3250,6 +3229,12 @@ ULONG CAdapterCommon::hda_setup_bdl(
             break;
         }
     }
+
+	//DOUT(DBG_SYSINFO, ("BDL set up"));
+	
+	//Flush BDL out of cache to RAM
+	//to be sure controller will read correct data.
+	CacheLineFlush(Bdl.RawVirtualAddress, Bdl.RawLength);
 
     return entry_count;
 }
@@ -3405,6 +3390,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceWord(UCHAR offset, USHOR
 
 STDMETHODIMP_(void) CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteCount){
 	// Manual Cache Invalidation for AMD 6xx-9xx Coherency..
+	// KeFlushIoBuffers is defined to nothing in the NT DDK so do this with asm
 	if (g_bHasClFlush) {        
         // We use a 64-byte stride (standard x86 cache line size)
 		ULONG_PTR start = (ULONG_PTR)Destination & ~((ULONG_PTR)63);

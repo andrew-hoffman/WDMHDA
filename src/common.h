@@ -98,17 +98,6 @@
 //
 #define MIXBIT_MIC_AGC          0
 
-//
-// MPU401 ports
-//
-#define MPU401_REG_STATUS   0x01    // Status register
-#define MPU401_DRR          0x40    // Output ready (for command or data)
-#define MPU401_DSR          0x80    // Input ready (for data)
-
-#define MPU401_REG_DATA     0x00    // Data in
-#define MPU401_REG_COMMAND  0x01    // Commands
-#define MPU401_CMD_RESET    0xFF    // Reset command
-#define MPU401_CMD_UART     0x3F    // Switch to UART mod
 
 /*****************************************************************************
  * Defines for HD Audio Controller
@@ -124,10 +113,10 @@
 #define HDA_STREAMBASE(n) ((0x80+(0x20*n)))
 
 // Stream tags:
-// pick a number from 1-15
-// only using 1 of each for now
-#define HDA_INPUT_STREAM_TAG		2
-#define HDA_OUTPUT_STREAM_TAG		14
+// number from 1-15 (0 is invalid)
+// only using 1 of each type of stream for now
+#define HDA_INPUT_STREAM_TAG		1
+#define HDA_OUTPUT_STREAM_TAG		5
 
 #define SDCTL_RUN 0x2
 #define SDCTL_IE 0x10
@@ -264,11 +253,19 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
 	STDMETHOD_(NTSTATUS,hda_setup_stream_descriptor)
     (   THIS_
         IN  PDMACHANNEL DmaChannel,
-		IN  DWORD   dwSampleRate,
-		IN  USHORT  Channels,
-		IN  USHORT  BitDepth,
+		IN  USHORT  entries,
 		IN      BOOLEAN In
     )   PURE;
+	
+	STDMETHOD_(USHORT,hda_setup_bdl)
+    (   THIS_
+		PDMACHANNEL    DmaChannel, 
+		BOOLEAN        in,
+		ULONG          sample_rate,
+		USHORT         bit_depth,
+		USHORT         channels,
+		ULONG          target_interval_ms
+	)   PURE;
 
     STDMETHOD_(void,MixerRegWrite)
     (   THIS_

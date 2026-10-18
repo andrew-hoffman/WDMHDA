@@ -1084,7 +1084,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramDataFormat
 		DOUT (DBG_PRINT, ("bad channels"));
 		return STATUS_UNSUCCESSFUL;
 	}
-	if( (BitDepth != 8) && (BitDepth != 16) ){
+	if( (BitDepth != 8) && (BitDepth != 16) && (BitDepth != 32)){
 		DOUT (DBG_PRINT, ("bad bit depth"));
 		return STATUS_UNSUCCESSFUL;
 	}

@@ -11,7 +11,7 @@ Signature="$CHICAGO$"
 Class=MEDIA
 ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
 provider=%MFG%
-DriverVer=10/10/2026,5.00.2195.24
+DriverVer=10/18/2026,5.00.2195.24
 
 [SourceDisksNames]
 222=%DiskDescription%,,,
@@ -112,6 +112,11 @@ HKR,Settings,UseAltOut,0x00010001,0
 HKR,Settings,UseSPDIF,0x00010001,1
 HKR,Settings,UseDisabledPins,0x00010001,0
 HKR,Settings,UseDmaPos,0x00010001,0
+
+; Allow 96 khz audio. Works on 98 but lowers performance
+HKR,Settings,AllowHighRate,0x00010001,0
+; Allow 32-bit bit-depth. Does not work on 98! need >= 2k SP3
+HKR,Settings,AllowHighDepth,0x00010001,0
 
 [DestinationDirs]
 HDA.CopyList      = 10,system32\drivers ; %SystemRoot%\system32\drivers

@@ -34,7 +34,7 @@ typedef struct _HDA_BDL_ENTRY {
 #define HDA_ALIGNMENT_REQUIREMENT   256
 
 //Functions for common buffers
-#define HDA_COMMON_BUFFER_ALIGNMENT 128 //must be power of 2
+#define HDA_COMMON_BUFFER_ALIGNMENT 256 //must be power of 2
 
 typedef struct _HDA_DMA_COMMON_BUFFER {
 	volatile PULONG AlignedVirtualAddress;
@@ -508,6 +508,8 @@ static BOOLEAN useSPDIF;
 static BOOLEAN useDisabledPins;
 static BOOLEAN useDmaPos;
 static BOOLEAN forcePioMode;
+static BOOLEAN allowHighRate;
+static BOOLEAN allowHighDepth;
 
 static REG_BOOL_SETTING g_BooleanSettings[] =
 {
@@ -518,6 +520,8 @@ static REG_BOOL_SETTING g_BooleanSettings[] =
     { L"UseDisabledPins",     &useDisabledPins,     FALSE },
     { L"UseDmaPos",           &useDmaPos,           FALSE },
 	{ L"ForcePioMode",        &forcePioMode,        FALSE },
+	{ L"AllowHighRate",       &allowHighRate,       FALSE },
+	{ L"AllowHighDepth",      &allowHighDepth,      FALSE }
 };
 
 
@@ -2566,11 +2570,15 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::ProgramDataFormat
 		dwSampleRate, Channels, BitDepth, Input ? "Input" : "Output"));
 
 	//validate parameters
+	if(dwSampleRate < 8000){
+		DOUT (DBG_PRINT, ("bad rate"));
+		return STATUS_UNSUCCESSFUL;
+	}
 	if((Channels == 0) || (Channels > 2)){
 		DOUT (DBG_PRINT, ("bad channels"));
 		return STATUS_UNSUCCESSFUL;
 	}
-	if( (BitDepth != 8) && (BitDepth != 16) ){
+	if( (BitDepth != 8) && (BitDepth != 16) && (BitDepth != 32)){
 		DOUT (DBG_PRINT, ("bad bit depth"));
 		return STATUS_UNSUCCESSFUL;
 	}

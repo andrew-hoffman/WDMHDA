@@ -251,15 +251,16 @@ ValidateFormat
                 KSDATAFORMAT_SPECIFIER_WAVEFORMATEX
             )
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
-        &&  (   //(waveFormat->wBitsPerSample == 8) ||
-				(waveFormat->wBitsPerSample == 16)
+        &&  (   (waveFormat->wBitsPerSample == 8) 
+				|| (waveFormat->wBitsPerSample == 16)
+				// || (waveFormat->wBitsPerSample == 32)
             )
-        &&  (   //(waveFormat->nChannels == 1) ||
+        &&  (   (waveFormat->nChannels == 1) ||
 				(waveFormat->nChannels == 2)
 				
             )
         &&  (   (waveFormat->nSamplesPerSec >= 8000)
-            &&  (waveFormat->nSamplesPerSec <= 48000)
+            &&  (waveFormat->nSamplesPerSec <= 96000)
             )
         )
     {
@@ -479,10 +480,11 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
             STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
         },
         2,      // Max number of channels.
-        16,      // Minimum number of bits per sample.
-        16,     // Maximum number of bits per channel.
+        8,      // Minimum number of bits per sample.
+        16,     // Maximum number of bits per channel. 98 cannot use more
         8000,   // Minimum rate. 
-        48000   // Maximum rate.
+        96000   // Maximum rate. 
+		//if 96000 is supported it will be used Always
     }
 };
 
@@ -1500,9 +1502,9 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                     Miniport->AdapterCommon->hda_stop_sound(isCapture);
                 }
 
-				// always clear out the buffer
+				// clear out the buffer
 				// (does anything expect us to keep buffer contents in Pause?)
-                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+                //Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 
             } else {
 

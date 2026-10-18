@@ -1160,9 +1160,6 @@ Init
 	
 	StreamDescriptorValid = FALSE;
     RestoreInputMixer = FALSE;
-
-
-    FormatSampleRate = waveFormat->nSamplesPerSec;
 	
 	SetFormat( DataFormat );
 
@@ -1267,7 +1264,6 @@ SetFormat
 
 			if (formatChanged) {
 				FormatDirty = TRUE;
-
 			}
 			
             _DbgPrintF(DEBUGLVL_VERBOSE,("  %d hz %d bit %d ch",
@@ -1301,6 +1297,9 @@ SetFormat
 						FormatSampleRate = waveFormat->nSamplesPerSec;
 						FormatBitDepth = waveFormat->wBitsPerSample;
 						FormatChannels = waveFormat->nChannels;
+
+						//invalidate any previous stream descriptor
+						StreamDescriptorValid = FALSE;
 
 						ntStatus = STATUS_SUCCESS;
 					}
@@ -1458,15 +1457,28 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                 // entering Pause keeps the later transition back to Run
                 // lightweight enough for short system sounds.
 
-                BOOLEAN recreateDescriptor = FALSE;
-					/*(!StreamDescriptorValid ||
+                BOOLEAN recreateDescriptor = (!StreamDescriptorValid ||
 						(position >= (bufferSize - (bufferSize / 5))));
-					*/
                 
                 if (recreateDescriptor) {
-
+					
+					//StopStream is the only way to reset the hardware pointer
+					//but it also clears the descriptor.
                     ntStatus = Miniport->AdapterCommon->hda_stop_stream(isCapture);
+
                     StreamDescriptorValid = FALSE;
+
+					if (!NT_SUCCESS(ntStatus)) {
+                        break;
+                    }
+					
+					//reset the data format
+					//descriptor loses this on a reset
+					ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
+						FormatSampleRate,
+						FormatChannels,
+						FormatBitDepth,
+						isCapture);
 
 					if (!NT_SUCCESS(ntStatus)) {
                         break;
@@ -1475,11 +1487,11 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                     ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
 						DmaChannel,	BdlEntries,	isCapture);
 
-                    if (NT_SUCCESS(ntStatus)) {
-						StreamDescriptorValid = TRUE;
-                    } else {
+                    if (!NT_SUCCESS(ntStatus)) {
                         break;
                     }
+
+					StreamDescriptorValid = TRUE;
 
                 } else {
                     // Stop DMA but keep the programmed descriptor
@@ -1488,7 +1500,8 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                     Miniport->AdapterCommon->hda_stop_sound(isCapture);
                 }
 
-				// always clear out the buffer (does anything expect us to keep it?)
+				// always clear out the buffer
+				// (does anything expect us to keep buffer contents in Pause?)
                 Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 
             } else {
@@ -1503,22 +1516,31 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 			
 			// Pause -> Run
 
-			// create stream descriptor just in case we need to
-			//this should have been done already
+			// create stream descriptor just in case we still need to
 			
 			if (!StreamDescriptorValid) {
+
+				ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
+					FormatSampleRate,
+					FormatChannels,
+					FormatBitDepth,
+					isCapture);
+
+				if (!NT_SUCCESS(ntStatus)) {
+                    break;
+                }
 
 				ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
 					DmaChannel, BdlEntries, isCapture);
 
-                if (NT_SUCCESS(ntStatus)) {
-					StreamDescriptorValid = TRUE;
-                } else {
+                if (!NT_SUCCESS(ntStatus)) {
                     break;
                 }
+
+				StreamDescriptorValid = TRUE;
 			}
 
-			// Just Start DMA.
+			// Start DMA.
 			Miniport->AdapterCommon->hda_start_sound(isCapture);
                       
             break;

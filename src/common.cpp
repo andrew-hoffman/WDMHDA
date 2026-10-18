@@ -2851,7 +2851,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_stop_stream (BOOLEAN In) {
 	ticks = 0;
 	while(ticks++<10) {
 		KeStallExecutionProcessor(1);
-			if((readUCHAR(OutputStreamBase + 0x00) & 0x1)==0x0) {
+			if((readUCHAR(StreamBase + 0x00) & 0x1)==0x0) {
 			break;
 		}
 	}
@@ -3069,9 +3069,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 	UCHAR rirbsts = readUCHAR(0x5D);
 	DOUT(DBG_SYSINFO, ("rirb sts %X",rirbsts));
 	writeUCHAR(0x5D, 0x5);
-
+	
+	//global interrupt enable
+	setULONGBit(0x20, 1UL << 31 );
 	//enable interrupts from the stream
-	writeULONG(0x20, ((1 << 31) | (1 << (in ? FirstInputStream : FirstOutputStream) )) );
+	setULONGBit(0x20, 1UL << (in ? FirstInputStream : FirstOutputStream) );
 
 	// Memory Fence: Ensures all flushes are globally visible 
 	// before the ISR/DPC returns

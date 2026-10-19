@@ -142,12 +142,20 @@
 #define NVIDIA_HDA_TRANSREG_ADDR 0x4e
 #define NVIDIA_HDA_ENABLE_COHBITS 0x0f
 
-typedef struct _REG_BOOL_SETTING
-{
-    PCWSTR   ValueName;     // Registry value name under \Settings
-    BOOLEAN* Variable;      // Storage location to write into
-    BOOLEAN  DefaultValue;  // Value used if registry entry is missing/invalid
-} REG_BOOL_SETTING;
+#define BDLE_FLAG_IOC  0x01
+
+// Standard HD Audio BDL Entry layout (16 bytes)
+typedef struct _HDA_BDL_ENTRY {
+    ULONG AddressLow;
+    ULONG AddressHigh;
+    ULONG LengthBytes;
+    ULONG Flags; // Bit 0 = Interrupt on Completion (IOC)
+} HDA_BDL_ENTRY, *PHDA_BDL_ENTRY;
+
+#define HDA_BDL_IOC_ENABLE          0x00000001UL
+#define HDA_MAX_BDL_ENTRIES         256
+#define HDA_BYTES_PER_PAGE          4096
+#define HDA_ALIGNMENT_REQUIREMENT   256
 
 typedef struct
 {

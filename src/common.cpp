@@ -13,25 +13,12 @@
 #include "stdunk.h"
 #include "common.h"
 #include "codec.h"
+#include "registry.h"
 #include <wchar.h>
-
 
 #define STR_MODULENAME "HDACommon: "
 
-#define BDLE_FLAG_IOC  0x01
 
-// Standard HD Audio BDL Entry layout (16 bytes)
-typedef struct _HDA_BDL_ENTRY {
-    ULONG AddressLow;
-    ULONG AddressHigh;
-    ULONG LengthBytes;
-    ULONG Flags; // Bit 0 = Interrupt on Completion (IOC)
-} HDA_BDL_ENTRY, *PHDA_BDL_ENTRY;
-
-#define HDA_BDL_IOC_ENABLE          0x00000001UL
-#define HDA_MAX_BDL_ENTRIES         256
-#define HDA_BYTES_PER_PAGE          4096
-#define HDA_ALIGNMENT_REQUIREMENT   256
 
 //Functions for common buffers
 #define HDA_COMMON_BUFFER_ALIGNMENT 256 //must be power of 2
@@ -268,44 +255,12 @@ private:
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte);
 	STDMETHODIMP_(NTSTATUS) WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord);
 
-	//Registry r/w
-	STDMETHODIMP_(BOOLEAN) ReadRegistryBoolean(
-    IN  PCWSTR   ValueName,
-    IN  BOOLEAN  DefaultValue
-	);
+	//Registry manipulation
 	STDMETHODIMP_(NTSTATUS) WriteHardwareIdsToRegistry(
 		IN HDA_Codec* Codec
 	);
-	STDMETHODIMP_(NTSTATUS) OpenRegistryKey(
-		OUT PREGISTRYKEY* RegistryKey,
-		IN BOOLEAN DeviceKey,
-		IN ACCESS_MASK DesiredAccess
-	);
-	STDMETHODIMP_(NTSTATUS) OpenRegistrySubKey(
-		IN PREGISTRYKEY ParentKey,
-		IN PCWSTR Name,
-		IN ACCESS_MASK DesiredAccess,
-		OUT PREGISTRYKEY* RegistryKey,
-		OUT PULONG Disposition OPTIONAL
-	);
-	STDMETHODIMP_(NTSTATUS) ReadRegistryDword(
-		IN PREGISTRYKEY RegistryKey,
-		IN PCWSTR ValueName,
-		OUT PULONG Value
-	);
-	STDMETHODIMP_(NTSTATUS) ReadRegistryValue(
-		IN PREGISTRYKEY RegistryKey,
-		IN PCWSTR ValueName,
-		IN ULONG ValueType,
-		OUT PVOID Value,
-		IN ULONG ValueLength,
-		OUT PULONG ResultLength OPTIONAL
-	);
-	STDMETHODIMP_(NTSTATUS) WriteRegistryDword(
-		IN PREGISTRYKEY RegistryKey,
-		IN PCWSTR ValueName,
-		IN ULONG Value
-	);
+
+	//registry functions moved to registry.cpp
 
 	STDMETHODIMP_(NTSTATUS) StartJackPolling (void);
 	STDMETHODIMP_(VOID) StopJackPolling (void);
@@ -500,30 +455,6 @@ MIXERSETTING DefaultMixerSettings[] =
     { L"RightBass",       DSP_MIX_BASSIDX_R,          0x80 },
 };
 
-//driver settings via registry keys
-static BOOLEAN skipControllerReset;
-static BOOLEAN skipCodecReset;
-static BOOLEAN useAltOut;
-static BOOLEAN useSPDIF;
-static BOOLEAN useDisabledPins;
-static BOOLEAN useDmaPos;
-static BOOLEAN forcePioMode;
-static BOOLEAN allowHighRate;
-static BOOLEAN allowHighDepth;
-
-static REG_BOOL_SETTING g_BooleanSettings[] =
-{
-    { L"SkipControllerReset", &skipControllerReset, FALSE },
-    { L"SkipCodecReset",      &skipCodecReset,      FALSE },
-    { L"UseAltOut",           &useAltOut,           FALSE },
-    { L"UseSPDIF",            &useSPDIF,            TRUE  },
-    { L"UseDisabledPins",     &useDisabledPins,     FALSE },
-    { L"UseDmaPos",           &useDmaPos,           FALSE },
-	{ L"ForcePioMode",        &forcePioMode,        FALSE },
-	{ L"AllowHighRate",       &allowHighRate,       FALSE },
-	{ L"AllowHighDepth",      &allowHighDepth,      FALSE }
-};
-
 
 #pragma code_seg("PAGE")
 
@@ -614,13 +545,8 @@ Init
 	ResetCommonBufferDescriptor(&OutputBdl);
 	ResetCommonBufferDescriptor(&DmaPosBuffer);
 	
-	//Read settings from registry
-	
-	for (i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
-		*g_BooleanSettings[i].Variable =
-            ReadRegistryBoolean(g_BooleanSettings[i].ValueName, 
-			g_BooleanSettings[i].DefaultValue);
-    }
+	//Read settings from registry	
+	Registry::ReadSettings(DeviceObject);
 
 	// Check for SSE2 / CLFLUSH support
 	ULONG edx_feat;
@@ -689,7 +615,7 @@ Init
 		case 0x15AD: //VMWare
 			DbgPrint( "VMWare\n");
 			//force PIO mode because VMWare works better like this
-			forcePioMode = true;
+			Registry::forcePioMode = true;
 			break;
 		case 0x1002: //ATI
 		case 0x1022: //AMD
@@ -1430,7 +1356,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//maybe skip controller reset if flag is set and there's
 	//already a codec in statests
 
-	if ((statests != 0) && skipControllerReset) {
+	if ((statests != 0) && Registry::skipControllerReset) {
 		DOUT(DBG_SYSINFO, ("Skipping reset"));
 	} else {
 		
@@ -1506,7 +1432,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//also other codecs can show up later with docking.
 	//would need to enable WAKEEN interrupts (register 0x0C) to handle later additions
 
-	if (forcePioMode){
+	if (Registry::forcePioMode){
 		goto hda_use_pio_interface;
 	}
  
@@ -1639,7 +1565,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		writeULONG (0x74, 0);
 	}
 
-	if (useDmaPos){
+	if (Registry::useDmaPos){
 		// turn on dma position transfer
 		writeULONG (0x70, DmaPosBuffer.AlignedLogicalAddress.LowPart | 0x1);
 	}
@@ -1825,7 +1751,7 @@ CAdapterCommon::TryInitializeCodecSlot(
 	if (codecCount < ARRAY_COUNT(pCodecs)) {
 
 		HDA_Codec* pCodec = 
-			new(NonPagedPool) HDA_Codec(useSPDIF, useAltOut, codec_number, pci_sid, this);
+			new(NonPagedPool) HDA_Codec(Registry::useSPDIF, Registry::useAltOut, codec_number, pci_sid, this);
 
 		if (pCodec) {
 			pCodecs[codecCount++] = pCodec;
@@ -1839,7 +1765,9 @@ CAdapterCommon::TryInitializeCodecSlot(
 			} else {
 				NTSTATUS registryStatus = WriteHardwareIdsToRegistry(pCodec);
 				if (!NT_SUCCESS(registryStatus)) {
-					DOUT(DBG_ERROR, ("Unable to save HDA hardware IDs to the device registry key: 0x%08X", registryStatus));
+					DOUT(DBG_ERROR, (
+						"Unable to save HDA hardware IDs to the device registry key: 0x%08X",
+						registryStatus));
 				}
 				return status;
 			}
@@ -1850,137 +1778,7 @@ CAdapterCommon::TryInitializeCodecSlot(
 	return STATUS_UNSUCCESSFUL;
 }
 
-/*****************************************************************************
- * Registry helpers
- *
- * Keep PortCls key creation, subkey creation, and DWORD access in one place
- * so future registry users share the same lifetime and error handling.
- *****************************************************************************/
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::OpenRegistryKey(
-	OUT PREGISTRYKEY* RegistryKey,
-	IN BOOLEAN DeviceKey,
-	IN ACCESS_MASK DesiredAccess
-)
-{
-	if (RegistryKey == NULL) {
-		return STATUS_INVALID_PARAMETER;
-	}
 
-	*RegistryKey = NULL;
-	return PcNewRegistryKey(RegistryKey,
-		NULL,
-		DeviceKey ? DeviceRegistryKey : DriverRegistryKey,
-		DesiredAccess,
-		m_pDeviceObject,
-		NULL,
-		NULL,
-		0,
-		NULL);
-}
-
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::OpenRegistrySubKey(
-	IN PREGISTRYKEY ParentKey,
-	IN PCWSTR Name,
-	IN ACCESS_MASK DesiredAccess,
-	OUT PREGISTRYKEY* RegistryKey,
-	OUT PULONG Disposition OPTIONAL
-)
-{
-	UNICODE_STRING KeyName;
-	ULONG LocalDisposition;
-
-	if (ParentKey == NULL || Name == NULL || RegistryKey == NULL) {
-		return STATUS_INVALID_PARAMETER;
-	}
-
-	*RegistryKey = NULL;
-	RtlInitUnicodeString(&KeyName, Name);
-	return ParentKey->NewSubKey(RegistryKey,
-		NULL,
-		DesiredAccess,
-		&KeyName,
-		REG_OPTION_NON_VOLATILE,
-		Disposition ? Disposition : &LocalDisposition);
-}
-
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::ReadRegistryValue(
-	IN PREGISTRYKEY RegistryKey,
-	IN PCWSTR ValueName,
-	IN ULONG ValueType,
-	OUT PVOID Value,
-	IN ULONG ValueLength,
-	OUT PULONG ResultLength OPTIONAL
-)
-{
-	UNICODE_STRING Name;
-	typedef struct _REGISTRY_VALUE_BUFFER {
-		KEY_VALUE_PARTIAL_INFORMATION Information;
-		ULONG Data;
-	} REGISTRY_VALUE_BUFFER;
-	REGISTRY_VALUE_BUFFER Buffer;
-	ULONG Length;
-	NTSTATUS Status;
-
-	if (RegistryKey == NULL || ValueName == NULL || Value == NULL || ValueLength == 0) {
-		return STATUS_INVALID_PARAMETER;
-	}
-
-	RtlInitUnicodeString(&Name, ValueName);
-	Status = RegistryKey->QueryValueKey(&Name,
-		KeyValuePartialInformation,
-		&Buffer.Information,
-		sizeof(Buffer),
-		&Length);
-	if (!NT_SUCCESS(Status)) {
-		return Status;
-	}
-	if (Buffer.Information.Type != ValueType) {
-		return STATUS_OBJECT_TYPE_MISMATCH;
-	}
-	if (Buffer.Information.DataLength > ValueLength) {
-		return STATUS_BUFFER_TOO_SMALL;
-	}
-
-	RtlCopyMemory(Value, Buffer.Information.Data, Buffer.Information.DataLength);
-	if (ResultLength) *ResultLength = Buffer.Information.DataLength;
-	return STATUS_SUCCESS;
-}
-
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::ReadRegistryDword(
-	IN PREGISTRYKEY RegistryKey,
-	IN PCWSTR ValueName,
-	OUT PULONG Value
-)
-{
-	ULONG ResultLength;
-	NTSTATUS Status;
-
-	Status = ReadRegistryValue(RegistryKey, ValueName, REG_DWORD, Value,
-		sizeof(*Value), &ResultLength);
-	return (NT_SUCCESS(Status) && ResultLength != sizeof(*Value)) ?
-		STATUS_OBJECT_TYPE_MISMATCH : Status;
-}
-
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::WriteRegistryDword(
-	IN PREGISTRYKEY RegistryKey,
-	IN PCWSTR ValueName,
-	IN ULONG Value
-)
-{
-	UNICODE_STRING Name;
-
-	if (RegistryKey == NULL || ValueName == NULL) {
-		return STATUS_INVALID_PARAMETER;
-	}
-
-	RtlInitUnicodeString(&Name, ValueName);
-	return RegistryKey->SetValueKey(&Name, REG_DWORD, &Value, sizeof(Value));
-}
 
 /*****************************************************************************
  * CAdapterCommon::WriteHardwareIdsToRegistry
@@ -2008,21 +1806,21 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 	}
 	
 	//Device Key is under HKLM\Enum\PCI\<device ID string>
-	Status = OpenRegistryKey(&DeviceKey, TRUE, KEY_ALL_ACCESS);
+	Status = Registry::OpenDeviceKey(&DeviceKey, m_pDeviceObject, TRUE, KEY_ALL_ACCESS);
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
 	
 	//write controller ven, dev, susbystem IDs;
 	//already in the device key as the device string though
-	Status = WriteRegistryDword(DeviceKey, L"ControllerVendorId", pci_ven);
+	Status = Registry::WriteDword(DeviceKey, L"ControllerVendorId", pci_ven);
 	if (!NT_SUCCESS(Status)) goto Exit;
-	Status = WriteRegistryDword(DeviceKey, L"ControllerDeviceId", pci_dev);
+	Status = Registry::WriteDword(DeviceKey, L"ControllerDeviceId", pci_dev);
 	if (!NT_SUCCESS(Status)) goto Exit;
-	Status = WriteRegistryDword(DeviceKey, L"ControllerSubsystemId", pci_sid);
+	Status = Registry::WriteDword(DeviceKey, L"ControllerSubsystemId", pci_sid);
 	if (!NT_SUCCESS(Status)) goto Exit;
 
-	Status = OpenRegistrySubKey(DeviceKey, L"Codecs", KEY_ALL_ACCESS, &CodecsKey, &Disposition);
+	Status = Registry::OpenSubKey(DeviceKey, L"Codecs", KEY_ALL_ACCESS, &CodecsKey, &Disposition);
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
@@ -2032,25 +1830,25 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 
 	_snwprintf(CodecAddressName, ARRAY_COUNT(CodecAddressName), L"%02X", Codec->GetCodecAddress());
 	CodecAddressName[ARRAY_COUNT(CodecAddressName) - 1] = L'\0';
-	Status = OpenRegistrySubKey(CodecsKey, CodecAddressName, KEY_ALL_ACCESS, &CodecAddressKey, &Disposition);
+	Status = Registry::OpenSubKey(CodecsKey, CodecAddressName, KEY_ALL_ACCESS, &CodecAddressKey, &Disposition);
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
 
 	_snwprintf(CodecIdName, ARRAY_COUNT(CodecIdName), L"%08X", Codec->GetCodecId());
 	CodecIdName[ARRAY_COUNT(CodecIdName) - 1] = L'\0';
-	Status = OpenRegistrySubKey(CodecAddressKey, CodecIdName, KEY_ALL_ACCESS, &CodecKey, &Disposition);
+	Status = Registry::OpenSubKey(CodecAddressKey, CodecIdName, KEY_ALL_ACCESS, &CodecKey, &Disposition);
 	if (!NT_SUCCESS(Status)) {
 		goto Exit;
 	}
 	
 	//write codec's vendor, device, & subsystem IDs.
 	//Todo: Log more topology info and read config verb overrides back
-	Status = WriteRegistryDword(CodecKey, L"VendorId", Codec->GetCodecVendorId());
+	Status = Registry::WriteDword(CodecKey, L"VendorId", Codec->GetCodecVendorId());
 	if (!NT_SUCCESS(Status)) goto Exit;
-	Status = WriteRegistryDword(CodecKey, L"DeviceId", Codec->GetCodecDeviceId());
+	Status = Registry::WriteDword(CodecKey, L"DeviceId", Codec->GetCodecDeviceId());
 	if (!NT_SUCCESS(Status)) goto Exit;
-	Status = WriteRegistryDword(CodecKey, L"SubsystemId", Codec->GetCodecSubsystemId());
+	Status = Registry::WriteDword(CodecKey, L"SubsystemId", Codec->GetCodecSubsystemId());
 
 Exit: //cleanup
 	if (CodecKey) CodecKey->Release();
@@ -2061,40 +1859,7 @@ Exit: //cleanup
 }
 
 
-// Reads any Boolean value from the Registry Settings key.
-// If nonexistent, returns DefaultValue
-STDMETHODIMP_(BOOLEAN)
-CAdapterCommon::ReadRegistryBoolean(
-    IN  PCWSTR   ValueName,
-    IN  BOOLEAN  DefaultValue
-	)
-{
-    PAGED_CODE();
-
-    PREGISTRYKEY   DriverKey   = NULL;
-    PREGISTRYKEY   SettingsKey = NULL;
-    NTSTATUS       Status;
-    BOOLEAN        Result = DefaultValue;
-	ULONG Value;
-
-	Status = OpenRegistryKey(&DriverKey, FALSE, KEY_READ);
-	if (!NT_SUCCESS(Status)) goto Exit;
-
-	Status = OpenRegistrySubKey(DriverKey, L"Settings", KEY_READ, &SettingsKey, NULL);
-	if (!NT_SUCCESS(Status)) goto Exit;
-
-	Status = ReadRegistryDword(SettingsKey, ValueName, &Value);
-	if (NT_SUCCESS(Status)) Result = Value ? TRUE : FALSE;
-
-Exit:
-    if (SettingsKey) SettingsKey->Release();
-    if (DriverKey)   DriverKey->Release();
-
-    return Result;
-}
-
-
-//***End of pageable code!***
+//***End of pageable code!********************************************************
 //everything above this must have PAGED_CODE ();
 #pragma code_seg() 
 
@@ -2449,12 +2214,14 @@ RestoreMixerSettingsFromRegistry
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[RestoreMixerSettingsFromRegistry]"));
     
-    NTSTATUS ntStatus = OpenRegistryKey(&DriverKey, FALSE, KEY_ALL_ACCESS);
+    NTSTATUS ntStatus = Registry::OpenDeviceKey(
+		&DriverKey, m_pDeviceObject, FALSE, KEY_ALL_ACCESS);
+
     if(NT_SUCCESS(ntStatus))
     {
         ULONG           Disposition;
 
-        ntStatus = OpenRegistrySubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
+        ntStatus = Registry::OpenSubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
                                       &SettingsKey, &Disposition);
         if(NT_SUCCESS(ntStatus))
         {
@@ -2471,7 +2238,7 @@ RestoreMixerSettingsFromRegistry
                 for(UINT i = 0; i < SIZEOF_ARRAY(DefaultMixerSettings); i++)
                 {
                     ULONG Value;
-                    ntStatus = ReadRegistryDword(SettingsKey, DefaultMixerSettings[i].KeyName, &Value);
+                    ntStatus = Registry::ReadDword(SettingsKey, DefaultMixerSettings[i].KeyName, &Value);
                     if (NT_SUCCESS(ntStatus)) {
                         MixerRegWrite(DefaultMixerSettings[i].RegisterIndex, BYTE(Value));
                     } else {
@@ -2513,11 +2280,11 @@ SaveMixerSettingsToRegistry
 		return STATUS_UNSUCCESSFUL;
 	}
     
-    NTSTATUS ntStatus = OpenRegistryKey(&DriverKey, FALSE, KEY_ALL_ACCESS);
+    NTSTATUS ntStatus = Registry::OpenDeviceKey(&DriverKey, m_pDeviceObject, FALSE, KEY_ALL_ACCESS);
     if(! NT_SUCCESS(ntStatus) || DriverKey == NULL) {
 		return STATUS_UNSUCCESSFUL;
     }
-    ntStatus = OpenRegistrySubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
+    ntStatus = Registry::OpenSubKey(DriverKey, L"Settings", KEY_ALL_ACCESS,
                                   &SettingsKey, NULL);
     if(! NT_SUCCESS(ntStatus) || SettingsKey == NULL) {
 		DriverKey->Release();
@@ -2532,7 +2299,7 @@ SaveMixerSettingsToRegistry
 			continue;
 		}
 
-        ntStatus = WriteRegistryDword(SettingsKey, DefaultMixerSettings[i].KeyName,
+        ntStatus = Registry::WriteDword(SettingsKey, DefaultMixerSettings[i].KeyName,
                                       ULONG(MixerSettings[reg]));
         if(!NT_SUCCESS(ntStatus)) {
 			break;
@@ -2937,7 +2704,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
 	USHORT stream_id = In ? FirstInputStream : FirstOutputStream; // stream 4 for most chipsets	
 	
-	if (useDmaPos){
+	if (Registry::useDmaPos){
 		ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosBuffer.AlignedVirtualAddress) + (stream_id * 8));
 		ULONG lpos = readULONG(StreamBase + 0x04);
 
@@ -2951,7 +2718,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 			//LPIB is moving but DMA isn't
 			if (++bad_dpos_count > 9){
 				DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
-				useDmaPos = FALSE;
+				Registry::useDmaPos = FALSE;
 				return lpos;
 			}
 			return dpos;

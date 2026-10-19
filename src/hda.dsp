@@ -138,6 +138,10 @@ SOURCE=.\mintopo.cpp
 
 SOURCE=.\minwave.cpp
 # End Source File
+# Begin Source File
+
+SOURCE=.\registry.cpp
+# End Source File
 # End Group
 # Begin Group "Header Files"
 
@@ -173,6 +177,10 @@ SOURCE=.\minwave.h
 # Begin Source File
 
 SOURCE=.\mydma.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\registry.h
 # End Source File
 # Begin Source File
 

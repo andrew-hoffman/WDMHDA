@@ -19,7 +19,8 @@ LINKER_FLAGS=-map
 SOURCES=\
         adapter.cpp     \
         common.cpp      \
-	codec.cpp       \
+		codec.cpp       \
         mintopo.cpp     \
         minwave.cpp     \
+        registry.cpp    \
         HDA.rc

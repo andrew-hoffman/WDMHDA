@@ -115,7 +115,8 @@ HKR,Settings,UseDmaPos,0x00010001,0
 
 ; Allow 96 khz audio. Works on 98 but lowers performance
 HKR,Settings,AllowHighRate,0x00010001,0
-; Allow 32-bit bit-depth. Does not work on 98! need >= 2k SP3
+; Allow 32-bit bit-depth. Does NOT work on 98!! needs >= 2k SP3
+; And it still won't work if your audio codec does not support it
 HKR,Settings,AllowHighDepth,0x00010001,0
 
 [DestinationDirs]

@@ -27,9 +27,18 @@ The source tree MUST be checked out with CRLF line endings or the Visual Studio 
 
 Install it on the "PCI Card" device in Device Manager using the "Have Disk" option with `hda.inf`
 
+## Alternative: Build from within Visual Studio 6.0
+
+To set up environment variables either run setvars.bat or add those environment lines to your config.sys
+You may need to have the sample CD from Walter Oney's "Programming the Windows Driver Model" 2nd Ed.
+installed and set the paths accordingly if you installed it somewhere different. 
+Then open the workspace .dsw file in Visual Studio 6 and build from there with F7. 
+
+You can receive debug messages using Sysinternals DebugView for Windows 98 but you
+will have to disable the driver, restart, and enable again to read the initialization messages.
+
 To set up a kernel debugger see https://bikodbg.com/blog/2021/08/win98-ddk/
-You can also receive debug messages using Sysinternals DebugView for Windows 98
-you will have to disable the driver, restart, and enable again to read the initialization messages.
+
 
 
 ## Quick Guide to source files:

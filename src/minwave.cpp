@@ -6,7 +6,9 @@
  */
 
 #include "minwave.h"
+#include "registry.h"
 #include "mydma.h"
+
 
 #define STR_MODULENAME "HDAwave: "
 
@@ -221,7 +223,8 @@ ValidateFormat
     ASSERT(Format);
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ValidateFormat]"));
-
+	_DbgPrintF(DEBUGLVL_VERBOSE,("rate %d, depth %d",
+		Registry::allowHighRate, Registry::allowHighDepth));
     NTSTATUS ntStatus;
 
     //
@@ -253,14 +256,18 @@ ValidateFormat
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
         &&  (   (waveFormat->wBitsPerSample == 8) 
 				|| (waveFormat->wBitsPerSample == 16)
-				// || (waveFormat->wBitsPerSample == 32)
+				|| (Registry::allowHighDepth 
+					&& waveFormat->wBitsPerSample == 32) 
             )
         &&  (   (waveFormat->nChannels == 1) ||
 				(waveFormat->nChannels == 2)
 				
             )
-        &&  (   (waveFormat->nSamplesPerSec >= 8000)
-            &&  (waveFormat->nSamplesPerSec <= 96000)
+        &&  (waveFormat->nSamplesPerSec >= 8000)
+		&&  (   Registry::allowHighRate ?
+					(waveFormat->nSamplesPerSec <= 96000)
+				  : 
+					(waveFormat->nSamplesPerSec <= 48000)
             )
         )
     {
@@ -275,6 +282,7 @@ ValidateFormat
     }
 
     else {
+		_DbgPrintF(DEBUGLVL_VERBOSE, ("Invalid rate parameter"));
         ntStatus = STATUS_INVALID_PARAMETER;
     }
 
@@ -481,10 +489,13 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         },
         2,      // Max number of channels.
         8,      // Minimum number of bits per sample.
-        16,     // Maximum number of bits per channel. 98 cannot use more
+
+		32,     // Maximum number of bits per channel. 
+		// Win 98 cannot use more than 16 bits!
+		// Windows 2000 SP3 and up may be able to use 32 bit depth
+
         8000,   // Minimum rate. 
-        96000   // Maximum rate. 
-		//if 96000 is supported it will be used Always
+		96000 	// Maximum rate. 
     }
 };
 
@@ -1404,7 +1415,7 @@ Return:
  (Playing) KSSTATE_RUN -> KSSTATE_PAUSE -> KSSTATE_ACQUIRE -> KSSTATE_STOP -> DmaChannel Destroyed
 
  The KMixer will often take the stream up to Pause and then back down again
- as a dry-run before playing sound. 
+ as a dry-run before playing sound. Especially if audio acceleration is off.
 */
 
 
@@ -1433,7 +1444,8 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 		
 		case KSSTATE_STOP:
 
-            Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+			// don't need to silence if we already did that in Pause.
+            //Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 			//stream descriptor will be destroyed when the WaveCyclicStream is.
 
             break;
@@ -1503,8 +1515,10 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                 }
 
 				// clear out the buffer
-				// (does anything expect us to keep buffer contents in Pause?)
-                //Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
+				// does anything expect us to keep buffer contents in Pause?
+				// if we don't clear it then there's trouble
+				// with system sounds while media is paused...
+                Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 
             } else {
 

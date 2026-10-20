@@ -519,12 +519,12 @@ Init
 	JackPollWorkQueued = 0;
 	JackPollTimerStarted = FALSE;
 
-	//Make sure cache line size set in device object is >= 128 byte for alignment reasons
+	//Make sure cache line size set in device object matches HDA requirement
     DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
 				DeviceObject -> AlignmentRequirement));
 
-	if (DeviceObject -> AlignmentRequirement < FILE_128_BYTE_ALIGNMENT) {
-		DeviceObject -> AlignmentRequirement = FILE_128_BYTE_ALIGNMENT;
+	if (DeviceObject -> AlignmentRequirement < FILE_256_BYTE_ALIGNMENT) {
+		DeviceObject -> AlignmentRequirement = FILE_256_BYTE_ALIGNMENT;
 		    DOUT(DBG_SYSINFO, ("Adjusted it to %d", 
 				DeviceObject -> AlignmentRequirement));
 	}
@@ -2947,8 +2947,7 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_setup_bdl(
     target_chunk_bytes = (ULONG)(((ULONGLONG)bytes_per_sec * target_interval_ms) / 1000);
 	DOUT(DBG_ERROR, ("target chunk bytes %d", target_chunk_bytes));
 
-    // 3. Align chunk size to 128 bytes AND integer frame boundaries
-    //    First align down to 128 bytes
+    // 3. Align chunk size to requirement
     aligned_chunk_bytes = target_chunk_bytes & ~(HDA_ALIGNMENT_REQUIREMENT - 1);
 	DOUT(DBG_ERROR, ("aligned chunk bytes %d", aligned_chunk_bytes));
 
@@ -2957,7 +2956,7 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_setup_bdl(
         aligned_chunk_bytes -= (aligned_chunk_bytes % bytes_per_frame);
     }
 
-    // Fallback safeguard: if 10ms is tiny, enforce at least 128 bytes
+    // Fallback safeguard: if 10ms is tiny, enforce at least cache line size
     if (aligned_chunk_bytes < HDA_ALIGNMENT_REQUIREMENT) {
         aligned_chunk_bytes = HDA_ALIGNMENT_REQUIREMENT;
         // Align up to frame boundary if necessary
@@ -2987,7 +2986,7 @@ STDMETHODIMP_(USHORT) CAdapterCommon::hda_setup_bdl(
         // Compute physical address for this chunk
         ULONGLONG chunk_phys_addr = physical_address.QuadPart + current_offset;
 
-        // Double check 128-byte alignment rule on start address
+        // Double check alignment rule on start address
         if ((chunk_phys_addr & (HDA_ALIGNMENT_REQUIREMENT - 1)) != 0) {
 			DOUT(DBG_ERROR, ("Misalignment"))
             return 0; // Misaligned physical address

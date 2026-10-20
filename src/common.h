@@ -23,7 +23,7 @@
 #include "DMusicKS.h"
 
 //level for debug prints: blab > verbose > terse > none
-#define DEBUG_LEVEL DEBUGLVL_VERBOSE
+#define DEBUG_LEVEL DEBUGLVL_BLAB
 #include "ksdebug.h"
 #include "debug.h"
 
@@ -155,7 +155,9 @@ typedef struct _HDA_BDL_ENTRY {
 #define HDA_BDL_IOC_ENABLE          0x00000001UL
 #define HDA_MAX_BDL_ENTRIES         256
 #define HDA_BYTES_PER_PAGE          4096
-#define HDA_ALIGNMENT_REQUIREMENT   256
+
+#define HDA_ALIGNMENT_REQUIREMENT   256 
+//spec says 128 but vmware wants buffer start on 256 byte boundary sometimes
 
 typedef struct
 {

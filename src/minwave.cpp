@@ -102,13 +102,25 @@ ProcessResources
     }
 
 	//Create the two DMA channel objects
+
+	//render channel
 	ntStatus = CreateDmaChannel(ResourceList, FALSE);
 	
 	if(!NT_SUCCESS(ntStatus)){
 		return ntStatus;
 	}
 
+	//capture channel 
 	ntStatus = CreateDmaChannel(ResourceList, TRUE);
+
+	if(!NT_SUCCESS(ntStatus)){
+		//if capture doesn't succeed, also release the render channel
+		if (DmaChannelRender){
+			DmaChannelRender->Release();
+			DmaChannelRender = NULL;
+		}
+		return ntStatus;
+	}
 	
     return ntStatus;
 }
@@ -158,7 +170,7 @@ NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 	}
 
 	//
-    // Allocate the buffer. start MUST be aligned to 128 bytes
+    // Allocate the buffer. start MUST be aligned to HDA_ALIGNMENT_REQUIREMENT
 	// this may fail or return a smaller buffer than requested
     //
 
@@ -173,8 +185,8 @@ NTSTATUS CMiniportWaveCyclicHDA::CreateDmaChannel (
 		DOUT (DBG_SYSINFO, ("Allocated DMA buffer of size %d", DmaChannel->AllocatedBufferSize() ));
 		DOUT (DBG_SYSINFO, ("Physical address %X", DmaChannel->PhysicalAddress().LowPart ));
 		
-		//require 128 byte alignment
-		if ( (DmaChannel->PhysicalAddress().LowPart & 0x7F) != 0) {
+		//confirm alignment
+		if ( (DmaChannel->PhysicalAddress().LowPart & (HDA_ALIGNMENT_REQUIREMENT-1)) != 0) {
 			DOUT (DBG_ERROR, ("DMA Buffer not properly aligned!" ));
 			ntStatus = STATUS_BUFFER_TOO_SMALL;
 		}
@@ -223,8 +235,8 @@ ValidateFormat
     ASSERT(Format);
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ValidateFormat]"));
-	_DbgPrintF(DEBUGLVL_VERBOSE,("rate %d, depth %d",
-		Registry::allowHighRate, Registry::allowHighDepth));
+	//_DbgPrintF(DEBUGLVL_VERBOSE,("rate %d, depth %d",
+	//	Registry::allowHighRate, Registry::allowHighDepth));
     NTSTATUS ntStatus;
 
     //
@@ -490,12 +502,12 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
         2,      // Max number of channels.
         8,      // Minimum number of bits per sample.
 
-		32,     // Maximum number of bits per channel. 
+		16,     // Maximum number of bits per channel. 
 		// Win 98 cannot use more than 16 bits!
 		// Windows 2000 SP3 and up may be able to use 32 bit depth
 
         8000,   // Minimum rate. 
-		96000 	// Maximum rate. 
+		48000 	// Maximum rate. 
     }
 };
 
@@ -1136,15 +1148,7 @@ Init
     PAGED_CODE();
 	
 	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicStreamHDA::Init]"));
-
-	//TODO: Temporary block on creating capture streams
 	
-	if(Capture_){
-		_DbgPrintF(DEBUGLVL_TERSE,("Capture stream unsupported"));
-		return STATUS_UNSUCCESSFUL;
-	}
-	
-
     ASSERT(Miniport_);
     ASSERT(DataFormat);
 	//is this assert valid? crashes on trying to capture in Sound Recorder
@@ -1163,16 +1167,20 @@ Init
     DmaChannel = DmaChannel_;
     DmaChannel->AddRef();
 
-    Channel         = Channel_;
-    isCapture         = Capture_;
+    Channel				= Channel_;
+    isCapture			= Capture_;
 	
-	FormatSampleRate	= waveFormat->nSamplesPerSec;
-    FormatChannels		= waveFormat->nChannels;
-    FormatBitDepth		= waveFormat->wBitsPerSample;
-    State				= KSSTATE_STOP;
-	
+	FormatDirty			  = TRUE;
 	StreamDescriptorValid = FALSE;
-    RestoreInputMixer = FALSE;
+    RestoreInputMixer     = FALSE;
+	State				  = KSSTATE_STOP;
+
+	//setFormat will set the stream format to match the DataFormat
+	//so we don't set it here
+	FormatSampleRate	= 0;
+    FormatChannels		= 0;
+    FormatBitDepth		= 0;
+	BdlEntries			= 0;	
 	
 	SetFormat( DataFormat );
 
@@ -1266,14 +1274,12 @@ SetFormat
         if (NT_SUCCESS(ntStatus))
         {
             PWAVEFORMATEX waveFormat = PWAVEFORMATEX(Format + 1);
-			// keep previous BDL if it is valid, same sample rate etc. 
-			/*
+			
+			// keep previous BDL if it is valid & same sample rate etc. 
 			BOOLEAN formatChanged = 
 				   (FormatSampleRate != waveFormat->nSamplesPerSec) 
 				|| (FormatBitDepth != waveFormat->wBitsPerSample) 
 				|| (FormatChannels != waveFormat->nChannels);
-			*/
-			BOOLEAN formatChanged = TRUE;
 
 			if (formatChanged) {
 				FormatDirty = TRUE;
@@ -1443,7 +1449,8 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
     switch (NewState) {
 		
 		case KSSTATE_STOP:
-
+			
+			//StreamDescriptorValid = FALSE;
 			// don't need to silence if we already did that in Pause.
             //Silence(DmaChannel->SystemAddress(), DmaChannel->BufferSize());
 			//stream descriptor will be destroyed when the WaveCyclicStream is.

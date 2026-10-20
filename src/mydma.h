@@ -14,7 +14,7 @@ private:
 	PVOID        m_AlignedSystemAddress;
 	PHYSICAL_ADDRESS m_AlignedPhysicalAddress;
 
-	enum { DMA_BUFFER_ALIGNMENT = 128 };
+	enum { DMA_BUFFER_ALIGNMENT = HDA_ALIGNMENT_REQUIREMENT };
 
 public:
     CMyDmaChannel(IDmaChannel* RealChannel) {
@@ -63,7 +63,7 @@ public:
 			return STATUS_INVALID_BUFFER_SIZE;
 		}
 
-		//align the buffer start address to 128-bytes as required in the HDA spec.
+		//align the buffer start address as required in the HDA spec.
 		//if the real dma channel's buffer is not aligned, this is allowed to return a smaller buffer
 		//it will shrink by one page.
 

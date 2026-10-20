@@ -117,10 +117,7 @@ private:
     CMiniportWaveCyclicHDA *    Miniport;       // Miniport that created us.
 
     ULONG                       Channel;        // Index into channel list.
-    BOOLEAN                     isCapture;      // Capture or render.
-	
-	
-	BOOLEAN						FormatDirty;
+
 	ULONG						FormatSampleRate; //in hz, 8000-48000 valid
 	USHORT						FormatBitDepth;	  //sample bit depth (only 8 or 16 bits valid)
 	USHORT						FormatChannels;   //number of channels (only 1-2 valid yet)
@@ -129,7 +126,9 @@ private:
     KSSTATE                     State;          // Stop, pause, run.
 
     PDMACHANNEL		            DmaChannel;     // DMA channel to use.
-
+	
+	BOOLEAN                     isCapture;      // Capture or render.
+	BOOLEAN						FormatDirty;
 	BOOLEAN                     StreamDescriptorValid; // Hardware stream descriptor is programmed.
     BOOLEAN                     RestoreInputMixer;  // Restore input mixer.
     UCHAR                       InputMixerLeft; // Cache for left input mixer.

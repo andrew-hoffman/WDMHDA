@@ -486,6 +486,9 @@ Init
  *****************************************************************************
  * Structures indicating range of valid format values for streaming pins.
  */
+
+//TODO: make dynamic if possible
+
 static
 KSDATARANGE_AUDIO PinDataRangesStream[] =
 {
@@ -507,7 +510,7 @@ KSDATARANGE_AUDIO PinDataRangesStream[] =
 		// Windows 2000 SP3 and up may be able to use 32 bit depth
 
         8000,   // Minimum rate. 
-		48000 	// Maximum rate. 
+		48000	// Maximum rate. 
     }
 };
 
@@ -713,6 +716,12 @@ GetDescription
     ASSERT(OutFilterDescriptor);
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::GetDescription]"));
+	
+	//TODO: build all these topology descriptors dynamically
+	//so i can account for available format and OS support
+	//available number of pins
+	//and difference in fmt support between input and output
+	//because providing high bit depth breaks Win98
 
     *OutFilterDescriptor = &MiniportFilterDescriptor;
 
@@ -1151,9 +1160,6 @@ Init
 	
     ASSERT(Miniport_);
     ASSERT(DataFormat);
-	//is this assert valid? crashes on trying to capture in Sound Recorder
-	//as well as on virtualbox.
-    ASSERT(NT_SUCCESS(Miniport_->ValidateFormat(DataFormat)));
     ASSERT(DmaChannel_);
 
     PWAVEFORMATEX waveFormat = PWAVEFORMATEX(DataFormat + 1);
@@ -1182,6 +1188,11 @@ Init
     FormatBitDepth		= 0;
 	BdlEntries			= 0;	
 	
+	/* even if this format setting fails,
+	 we need to return success from this function
+	 or the DmaChannel will get deleted.
+	 TODO: figure out a better way
+	 */
 	SetFormat( DataFormat );
 
     return ntStatus;
@@ -1539,7 +1550,8 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 			
 			// Pause -> Run
 
-			// create stream descriptor just in case we still need to
+			// create stream descriptor
+			// if it was invalidated by a change while in Pause
 			
 			if (!StreamDescriptorValid) {
 

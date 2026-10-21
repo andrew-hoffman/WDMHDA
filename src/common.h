@@ -154,6 +154,7 @@ typedef struct _HDA_BDL_ENTRY {
 
 #define HDA_BDL_IOC_ENABLE          0x00000001UL
 #define HDA_MAX_BDL_ENTRIES         256
+#define HDA_BDL_SIZE				(HDA_MAX_BDL_ENTRIES * sizeof(HDA_BDL_ENTRY))
 #define HDA_BYTES_PER_PAGE          4096
 
 #define HDA_ALIGNMENT_REQUIREMENT   256 

@@ -486,8 +486,6 @@ NewAdapterCommon
         PADAPTERCOMMON
     );
 }   
- 
-	ULONG BdlSize = 256 * 16; //256 entries, 16 bytes each
 
 /*****************************************************************************
  * CAdapterCommon::Init()
@@ -519,7 +517,7 @@ Init
 	JackPollWorkQueued = 0;
 	JackPollTimerStarted = FALSE;
 
-	//Make sure cache line size set in device object matches HDA requirement
+	//Make sure cache line size set in FDO device object matches HDA requirement
     DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
 				DeviceObject -> AlignmentRequirement));
 
@@ -912,7 +910,7 @@ Init
 	pDeviceDescription -> Dma64BitAddresses = is64OK; //it might. doesnt matter to win98
 	pDeviceDescription -> DmaChannel		= 0;
 	pDeviceDescription -> InterfaceType		= PCIBus; //assumed to be cache-coherent
-	pDeviceDescription -> MaximumLength		= (BdlSize * 2) + 4096 + 8192;
+	pDeviceDescription -> MaximumLength		= (HDA_BDL_SIZE * 2) + 4096 + 8192;
 
 	//number of "map registers" doesn't matter at all here, but i need somewhere to put it
 	ULONG nMapRegisters = 0;
@@ -970,7 +968,7 @@ Init
 	//allocate input BDL
 	ntStatus = AllocateAlignedCommonBuffer(
 		DMA_Adapter,
-		BdlSize,
+		HDA_BDL_SIZE,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&InputBdl);
 
@@ -987,7 +985,7 @@ Init
 	//allocate output BDL
 	ntStatus = AllocateAlignedCommonBuffer(
 		DMA_Adapter,
-		BdlSize,
+		HDA_BDL_SIZE,
 		HDA_COMMON_BUFFER_ALIGNMENT,
 		&OutputBdl);
 

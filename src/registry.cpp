@@ -37,7 +37,7 @@ namespace Registry {
 	};
 }
 
-//#pragma code_seg("PAGE")
+#pragma code_seg("PAGE") //all registry code must be called at PASSIVE_LEVEL
 
 /*****************************************************************************
  * Registry helpers
@@ -54,6 +54,8 @@ Registry::OpenDeviceKey(
 	IN ACCESS_MASK DesiredAccess
 )
 {
+	PAGED_CODE();
+
 	if (RegistryKey == NULL) {
 		return STATUS_INVALID_PARAMETER;
 	}
@@ -79,6 +81,8 @@ Registry::OpenSubKey(
 	OUT PULONG Disposition OPTIONAL
 )
 {
+	PAGED_CODE();
+
 	UNICODE_STRING KeyName;
 	ULONG LocalDisposition;
 
@@ -114,6 +118,8 @@ Registry::ReadValue(
 	OUT PULONG ResultLength OPTIONAL
 )
 {
+	PAGED_CODE();
+
 	UNICODE_STRING Name;
 	typedef struct _REGISTRY_VALUE_BUFFER {
 		KEY_VALUE_PARTIAL_INFORMATION Information;
@@ -188,6 +194,8 @@ Registry::ReadDword(
 	OUT PULONG Value
 )
 {
+	PAGED_CODE();
+
 	ULONG ResultLength;
 	NTSTATUS Status;
 
@@ -204,6 +212,8 @@ Registry::WriteDword(
 	IN ULONG Value
 )
 {
+	PAGED_CODE();
+
 	UNICODE_STRING Name;
 
 	if (RegistryKey == NULL || ValueName == NULL) {

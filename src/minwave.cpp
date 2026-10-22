@@ -393,7 +393,7 @@ CMiniportWaveCyclicHDA::
 /*****************************************************************************
  * CMiniportWaveCyclicHDA::Init()
  *****************************************************************************
- * Initializes a the miniport.
+ * Initialize-a the Miniport.
  */
 STDMETHODIMP
 CMiniportWaveCyclicHDA::
@@ -417,7 +417,7 @@ Init
     //
     Port = Port_;
     Port->AddRef();
-	
+
 	//build the data range tables
 	BuildPinDataRanges();
 
@@ -765,6 +765,9 @@ GetDescription
 
 	ASSERT(OutFilterDescriptor);
 
+	//build the data range tables
+	BuildPinDataRanges();
+
     *OutFilterDescriptor = &DynFilterDescriptor;
 
     return STATUS_SUCCESS;
@@ -909,15 +912,11 @@ DataRangeIntersection
             }
         }
 		
-		// removed - HDA is full duplex
-		
         SampleFrequency = min( AudioRange->MaximumSampleFrequency,
                  ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency );
 
 
         WaveFormatEx->nSamplesPerSec = SampleFrequency;
-		
-		// removed - HDA doesn't need to budget DMA channels
 
         BitsPerSample = (USHORT) min( AudioRange->MaximumBitsPerSample,
                           ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample );

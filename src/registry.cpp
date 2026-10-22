@@ -239,11 +239,7 @@ VOID Registry::DetectOsVersion()
 {
 	PAGED_CODE();
 
-	ULONG MajorVersion = 0;
-	ULONG MinorVersion = 0;
-
-	PsGetVersion(&MajorVersion, &MinorVersion, NULL, NULL);
-
-	// NT 5.0+ = Windows 2000 and later
-	isWin2kOrLater = (MajorVersion >= 5) ? TRUE : FALSE;
+	//WDM 1.10 available = Windows 2000 and later
+	//todo: check service pack as well
+	isWin2kOrLater = IoIsWdmVersionAvailable(1, 0x10);
 }

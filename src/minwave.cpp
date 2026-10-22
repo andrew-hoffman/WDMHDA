@@ -417,6 +417,9 @@ Init
     //
     Port = Port_;
     Port->AddRef();
+	
+	//build the data range tables
+	BuildPinDataRanges();
 
     //
     // We want the IAdapterCommon interface on the adapter common object,

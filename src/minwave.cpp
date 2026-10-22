@@ -761,9 +761,9 @@ GetDescription
 {
     PAGED_CODE();
 
-    ASSERT(OutFilterDescriptor);
-
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::GetDescription]"));
+
+	ASSERT(OutFilterDescriptor);
 
     *OutFilterDescriptor = &DynFilterDescriptor;
 
@@ -1283,25 +1283,9 @@ SetNotificationFreq
 
 	//write frame size to out pointer
     *FramingSize = target_chunk_bytes;
-
-	/*
-	// Align chunk size to 256 bytes AND integer frame boundaries
-    //    First align down to 256 bytes
-    ULONG aligned_chunk_bytes = target_chunk_bytes & ~(255);
-	DOUT(DBG_ERROR, ("aligned chunk bytes %d", aligned_chunk_bytes));
-
-    // Fallback safeguard: if 10ms is tiny, enforce at least 256 bytes
-    if (aligned_chunk_bytes < 256) {
-        aligned_chunk_bytes = 256;
-        // Align up to frame boundary if necessary
-        //if (aligned_chunk_bytes % bytes_per_frame != 0) {
-        //    aligned_chunk_bytes += (bytes_per_frame - (aligned_chunk_bytes % bytes_per_frame));
-        //}
-    }
-
-	//write aligned frame size to out pointer
-    *FramingSize = aligned_chunk_bytes;
-	*/
+	
+	//Alignment to actual chunk sizes is not needed. the notification method can deal with
+	//up to 2x slop on the actual vs requested rate of interrupts
 
 	//we could recalculate the actual interval in terms of our aligned chunk sizes but it is not used
     return Miniport->NotificationInterval;

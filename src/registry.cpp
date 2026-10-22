@@ -23,6 +23,7 @@ namespace Registry {
 	BOOLEAN allowHighRate;
 	BOOLEAN allowHighDepth;
 	BOOLEAN allowBlindProbe;
+	BOOLEAN isWin2kOrLater;
 
 	static REG_BOOL_SETTING g_BooleanSettings[] =
 	{
@@ -224,4 +225,25 @@ Registry::WriteDword(
 
 	RtlInitUnicodeString(&Name, ValueName);
 	return RegistryKey->SetValueKey(&Name, REG_DWORD, &Value, sizeof(Value));
+}
+
+/*****************************************************************************
+ * Registry::DetectOsVersion()
+ *****************************************************************************
+ * Detects the running OS version and caches the result.
+ * PsGetVersion is available on both Win9x WDM and NT-based kernels.
+ * Windows 2000 = NT 5.0, Windows 98 = 4.x
+ * Win98/ME cannot handle >16 bit audio in the pin data ranges.
+ */
+VOID Registry::DetectOsVersion()
+{
+	PAGED_CODE();
+
+	ULONG MajorVersion = 0;
+	ULONG MinorVersion = 0;
+
+	PsGetVersion(&MajorVersion, &MinorVersion, NULL, NULL);
+
+	// NT 5.0+ = Windows 2000 and later
+	isWin2kOrLater = (MajorVersion >= 5) ? TRUE : FALSE;
 }

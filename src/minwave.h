@@ -49,6 +49,16 @@ private:
 
     PSERVICEGROUP       ServiceGroup;               // For notification.
 
+    //
+    // Dynamic topology descriptor members.
+    // Built at Init() time based on registry settings and OS version.
+    //
+    KSDATARANGE_AUDIO   DynPinDataRangesStream[1];
+    PKSDATARANGE        DynPinDataRangePointersStream[1];
+
+    PCPIN_DESCRIPTOR    DynMiniportPins[4];
+    PCFILTER_DESCRIPTOR DynFilterDescriptor;
+
     /*************************************************************************
      * CMiniportWaveCyclicHDA methods
      *
@@ -71,6 +81,8 @@ private:
     (
         IN      PKSDATAFORMAT   Format
     );
+
+    void BuildPinDataRanges();
 
 public:
     /*************************************************************************

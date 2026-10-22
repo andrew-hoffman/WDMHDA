@@ -22,6 +22,7 @@ namespace Registry {
 	BOOLEAN forcePioMode;
 	BOOLEAN allowHighRate;
 	BOOLEAN allowHighDepth;
+	BOOLEAN allowBlindProbe;
 
 	static REG_BOOL_SETTING g_BooleanSettings[] =
 	{
@@ -33,7 +34,8 @@ namespace Registry {
 		{ L"UseDmaPos",           &useDmaPos,           FALSE },
 		{ L"ForcePioMode",        &forcePioMode,        FALSE },
 		{ L"AllowHighRate",       &allowHighRate,       FALSE },
-		{ L"AllowHighDepth",      &allowHighDepth,      FALSE }
+		{ L"AllowHighDepth",      &allowHighDepth,      FALSE },
+		{ L"AllowBlindProbe",     &allowBlindProbe,     FALSE }
 	};
 }
 

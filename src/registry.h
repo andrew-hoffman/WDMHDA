@@ -22,6 +22,7 @@ namespace Registry {
 	extern BOOLEAN forcePioMode;
 	extern BOOLEAN allowHighRate;
 	extern BOOLEAN allowHighDepth;
+	extern BOOLEAN allowBlindProbe;
 
     NTSTATUS OpenDeviceKey(
 		OUT PREGISTRYKEY* RegistryKey, 

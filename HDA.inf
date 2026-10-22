@@ -118,6 +118,8 @@ HKR,Settings,AllowHighRate,0x00010001,0
 ; Allow 32-bit bit-depth. Does NOT work on 98!! needs >= 2k SP3
 ; And it still won't work if your audio codec does not support it
 HKR,Settings,AllowHighDepth,0x00010001,0
+; Allow blind probe of all 16 codec slots if STATESTS is 0 (off by default to prevent hangs)
+HKR,Settings,AllowBlindProbe,0x00010001,0
 
 [DestinationDirs]
 HDA.CopyList      = 10,system32\drivers ; %SystemRoot%\system32\drivers

@@ -211,6 +211,7 @@ private:
     BOOLEAN m_bCORBInitialized;  // CORB initialized flag
     BOOLEAN m_bRIRBInitialized;  // RIRB initialized flag
     PDEVICE_OBJECT m_pDeviceObject;     // Device object used for registry access.
+    PDEVICE_OBJECT m_pPDO;              // Physical Device Object for PCI bus access.
     DEVICE_POWER_STATE m_PowerState;    // Current power state of the device.
 
     PINTERRUPTSYNC          m_pInterruptSync;
@@ -531,6 +532,7 @@ Init
     // Save the device object
     //
     m_pDeviceObject = DeviceObject;
+    m_pPDO = PDO;
 
 	//init mutex & spin lock protecting the communication to the codec
 	ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -941,7 +943,7 @@ Init
 	DOUT(DBG_SYSINFO, ("RIRB Phys Addr = 0x%X,", RirbBuffer.AlignedLogicalAddress.QuadPart));
 
 	if (is64OK == FALSE) {
-		if ( RirbBuffer.AlignedLogicalAddress.HighPart == 0)
+		if ( RirbBuffer.AlignedLogicalAddress.HighPart != 0)
 			return STATUS_INVALID_PARAMETER;
 	}
 
@@ -961,7 +963,7 @@ Init
 	DOUT(DBG_SYSINFO, ("Corb Phys Addr = 0x%X,", CorbBuffer.AlignedLogicalAddress.QuadPart));
 
 	if (is64OK == FALSE) {
-		if ( CorbBuffer.AlignedLogicalAddress.HighPart == 0)
+		if ( CorbBuffer.AlignedLogicalAddress.HighPart != 0)
 			return STATUS_INVALID_PARAMETER;
 	}
 
@@ -978,7 +980,7 @@ Init
 	}
 
 	if (is64OK == FALSE) {
-		if ( InputBdl.AlignedLogicalAddress.HighPart == 0)
+		if ( InputBdl.AlignedLogicalAddress.HighPart != 0)
 			return STATUS_INVALID_PARAMETER;
 	}
 
@@ -995,7 +997,7 @@ Init
 	}
 
 	if (is64OK == FALSE) {
-		if ( OutputBdl.AlignedLogicalAddress.HighPart == 0)
+		if ( OutputBdl.AlignedLogicalAddress.HighPart != 0)
 			return STATUS_INVALID_PARAMETER;
 	}
 
@@ -1012,7 +1014,7 @@ Init
 	}
 
 	if (is64OK == FALSE) {
-		if ( DmaPosBuffer.AlignedLogicalAddress.HighPart == 0)
+		if ( DmaPosBuffer.AlignedLogicalAddress.HighPart != 0)
 			return STATUS_INVALID_PARAMETER;
 	}
 
@@ -1073,12 +1075,7 @@ Init
 		return ntStatus;
 	}
 
-	ntStatus = StartJackPolling();
-	if (!NT_SUCCESS(ntStatus)) {
-		DbgPrint("Headphone polling failed: 0x%X\n", ntStatus);
-	}
-	
-
+	// Jack polling is deferred until a stream is created in minwave.cpp
 	DbgPrint("Init Finished Successfully!\n");
     return ntStatus;
 }
@@ -1602,8 +1599,14 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//check codecs enumerated in STATESTS first if available
 
 	//TODO: rewrite without the gotos!
-	if(statests == 0)
-		goto blind_probe;
+	if(statests == 0) {
+		if (Registry::allowBlindProbe) {
+			goto blind_probe;
+		} else {
+			DOUT (DBG_SYSINFO, ("STATESTS reported 0 codecs and AllowBlindProbe is 0, trying PIO"));
+			goto hda_use_pio_interface;
+		}
+	}
 	
 	DOUT (DBG_SYSINFO, ("Probing codecs found in STATESTS with CORB/RIRB"));
 	statestsCodecCandidates = 0;
@@ -1623,6 +1626,11 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		DOUT (DBG_SYSINFO, ("Initialized %d codecs", codecCount));
 		return STATUS_SUCCESS;
     }
+
+	if (!Registry::allowBlindProbe) {
+		DOUT (DBG_SYSINFO, ("No codecs initialized from STATESTS, skipping blind probe on CORB/RIRB"));
+		goto hda_use_pio_interface;
+	}
 
 blind_probe:
 
@@ -1698,7 +1706,12 @@ hda_use_pio_interface:
 		}
 	}
 
-	//Otherwise probe codecs blindly
+	//Otherwise probe codecs blindly if allowed
+	if (!Registry::allowBlindProbe) {
+		DOUT (DBG_SYSINFO, ("Skipping blind probe on PIO (AllowBlindProbe is 0)"));
+		return STATUS_UNSUCCESSFUL;
+	}
+
 	DOUT (DBG_SYSINFO, ("Probing codecs by PIO blind"));
 	for (codec_number = 0; codec_number < 16; codec_number++) {
 		
@@ -3094,7 +3107,12 @@ CAdapterCommon::ReadWriteConfigSpace(
     PDEVICE_OBJECT targetObject;
 
     KeInitializeEvent(&event, NotificationEvent, FALSE);
-    targetObject = IoGetAttachedDeviceReference(DeviceObject);
+    if (m_pPDO) {
+        targetObject = m_pPDO;
+        ObReferenceObject(targetObject);
+    } else {
+        targetObject = IoGetAttachedDeviceReference(DeviceObject);
+    }
     irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
                                        targetObject,
                                        NULL,

@@ -1132,6 +1132,12 @@ CMiniportWaveCyclicStreamHDA::
 			Miniport->AdapterCommon->hda_stop_stream(FALSE);
         }
 
+        // If no streams remain active, stop polling the headphone jack
+        if (!Miniport->AllocatedCapture && !Miniport->AllocatedRender)
+        {
+            Miniport->AdapterCommon->StopJackPolling();
+        }
+
         Miniport->AdapterCommon->SaveMixerSettingsToRegistry();
         Miniport->Release();
     }
@@ -1194,6 +1200,11 @@ Init
 	 TODO: figure out a better way
 	 */
 	SetFormat( DataFormat );
+
+	// Start jack polling on stream setup rather than during driver install
+	if (Miniport && Miniport->AdapterCommon) {
+		Miniport->AdapterCommon->StartJackPolling();
+	}
 
     return ntStatus;
 }

@@ -321,6 +321,14 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      PVOID Destination,
         IN      ULONG ByteCount
     )   PURE;
+
+	STDMETHOD_(NTSTATUS,StartJackPolling)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(VOID,StopJackPolling)
+    (   THIS
+    )   PURE;
 };
 
 typedef IAdapterCommon *PADAPTERCOMMON;

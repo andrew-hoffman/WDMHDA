@@ -393,7 +393,7 @@ CMiniportWaveCyclicHDA::
 /*****************************************************************************
  * CMiniportWaveCyclicHDA::Init()
  *****************************************************************************
- * Initializes a the miniport.
+ * Initialize-a the Miniport.
  */
 STDMETHODIMP
 CMiniportWaveCyclicHDA::
@@ -417,6 +417,9 @@ Init
     //
     Port = Port_;
     Port->AddRef();
+
+	//build the data range tables
+	BuildPinDataRanges();
 
     //
     // We want the IAdapterCommon interface on the adapter common object,
@@ -485,45 +488,29 @@ Init
  * PinDataRangesStream
  *****************************************************************************
  * Structures indicating range of valid format values for streaming pins.
+ *
+ * NOTE: These are no longer used directly by the filter descriptor.
+ * BuildPinDataRanges() copies this template and adjusts MaxBitsPerSample
+ * and MaxSampleFrequency based on registry keys and OS version.
  */
 
-//TODO: make dynamic if possible
-
 static
-KSDATARANGE_AUDIO PinDataRangesStream[] =
+KSDATARANGE_AUDIO PinDataRangesStreamTemplate =
 {
     {
-        {
-            sizeof(KSDATARANGE_AUDIO),
-            0,
-            0,
-            0,
-            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
-            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
-            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
-        },
-        2,      // Max number of channels.
-        8,      // Minimum number of bits per sample.
-
-		16,     // Maximum number of bits per channel. 
-		// Win 98 cannot use more than 16 bits!
-		// Windows 2000 SP3 and up may be able to use 32 bit depth
-
-        8000,   // Minimum rate. 
-		48000	// Maximum rate. 
-    }
-};
-
-/*****************************************************************************
- * PinDataRangePointersStream
- *****************************************************************************
- * List of pointers to structures indicating range of valid format values
- * for streaming pins.
- */
-static
-PKSDATARANGE PinDataRangePointersStream[] =
-{
-    PKSDATARANGE(&PinDataRangesStream[0])
+        sizeof(KSDATARANGE_AUDIO),
+        0,
+        0,
+        0,
+        STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+        STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+        STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+    },
+    2,      // Max number of channels.
+    8,      // Minimum number of bits per sample.
+    16,     // Maximum number of bits per sample (default, adjusted dynamically).
+    8000,   // Minimum rate. 
+    48000   // Maximum rate (default, adjusted dynamically).
 };
 
 /*****************************************************************************
@@ -558,90 +545,7 @@ PKSDATARANGE PinDataRangePointersBridge[] =
 };
 
 /*****************************************************************************
- * MiniportPins
- *****************************************************************************
- * List of pins.
- */
-static
-PCPIN_DESCRIPTOR 
-MiniportPins[] =
-{
-    // Wave In Streaming Pin (Capture)
-    {
-        1,1,0,
-        NULL,
-        {
-            0,
-            NULL,
-            0,
-            NULL,
-            SIZEOF_ARRAY(PinDataRangePointersStream),
-            PinDataRangePointersStream,
-            KSPIN_DATAFLOW_OUT,
-            KSPIN_COMMUNICATION_SINK,
-            (GUID *) &PINNAME_CAPTURE,
-            &KSAUDFNAME_RECORDING_CONTROL,  // this name shows up as the recording panel name in SoundVol.
-            0
-        }
-    },
-    // Wave In Bridge Pin (Capture - From Topology)
-    {
-        0,0,0,
-        NULL,
-        {
-            0,
-            NULL,
-            0,
-            NULL,
-            SIZEOF_ARRAY(PinDataRangePointersBridge),
-            PinDataRangePointersBridge,
-            KSPIN_DATAFLOW_IN,
-            KSPIN_COMMUNICATION_NONE,
-            (GUID *) &KSCATEGORY_AUDIO,
-            NULL,
-            0
-        }
-    },
-    // Wave Out Streaming Pin (Renderer)
-    {
-        1,1,0,
-        NULL,
-        {
-            0,
-            NULL,
-            0,
-            NULL,
-            SIZEOF_ARRAY(PinDataRangePointersStream),
-            PinDataRangePointersStream,
-            KSPIN_DATAFLOW_IN,
-            KSPIN_COMMUNICATION_SINK,
-            (GUID *) &KSCATEGORY_AUDIO,
-            NULL,
-            0
-        }
-    },
-    // Wave Out Bridge Pin (Renderer)
-    {
-        0,0,0,
-        NULL,
-        {
-            0,
-            NULL,
-            0,
-            NULL,
-            SIZEOF_ARRAY(PinDataRangePointersBridge),
-            PinDataRangePointersBridge,
-            KSPIN_DATAFLOW_OUT,
-            KSPIN_COMMUNICATION_NONE,
-            (GUID *) &KSCATEGORY_AUDIO,
-            NULL,
-            0
-        }
-    }
-};
-
-/*****************************************************************************
- * TopologyNodes
+ * MiniportNodes
  *****************************************************************************
  * List of nodes.
  */
@@ -677,32 +581,176 @@ PCCONNECTION_DESCRIPTOR MiniportConnections[] =
 };
 
 /*****************************************************************************
- * MiniportFilterDescriptor
+ * CMiniportWaveCyclicHDA::BuildPinDataRanges()
  *****************************************************************************
- * Complete miniport description.
+ * Builds the pin data ranges, pin descriptors, and filter descriptor
+ * dynamically based on registry settings and OS version.
+ *
+ * Gates:
+ *   - 32-bit depth requires BOTH Registry::allowHighDepth AND
+ *     Registry::isWin2kOrLater (Win98 cannot handle >16 bit in pin ranges)
+ *   - 96 kHz rate requires Registry::allowHighRate
+ *     (avoids format negotiation lag when hardware only supports 48 kHz)
  */
-static
-PCFILTER_DESCRIPTOR 
-MiniportFilterDescriptor =
+void
+CMiniportWaveCyclicHDA::BuildPinDataRanges()
 {
-    0,                                  // Version
-    NULL,                               // AutomationTable
-    sizeof(PCPIN_DESCRIPTOR),           // PinSize
-    SIZEOF_ARRAY(MiniportPins),         // PinCount
-    MiniportPins,                       // Pins
-    sizeof(PCNODE_DESCRIPTOR),          // NodeSize
-    SIZEOF_ARRAY(MiniportNodes),        // NodeCount
-    MiniportNodes,                      // Nodes
-    SIZEOF_ARRAY(MiniportConnections),  // ConnectionCount
-    MiniportConnections,                // Connections
-    0,                                  // CategoryCount
-    NULL                                // Categories
-};
+    PAGED_CODE();
+
+    //
+    // Step 1: Build the streaming pin data range from the template,
+    //         adjusting max bit depth and sample rate.
+    //
+    DynPinDataRangesStream[0] = PinDataRangesStreamTemplate;
+
+    // 32-bit depth: requires both the registry key AND Windows 2000+
+    if (Registry::allowHighDepth && Registry::isWin2kOrLater) {
+        DynPinDataRangesStream[0].MaximumBitsPerSample = 32;
+        _DbgPrintF(DEBUGLVL_VERBOSE,
+            ("BuildPinDataRanges: 32-bit depth enabled (OS is Win2K+)"));
+    } else {
+        DynPinDataRangesStream[0].MaximumBitsPerSample = 16;
+        if (Registry::allowHighDepth && !Registry::isWin2kOrLater) {
+            _DbgPrintF(DEBUGLVL_TERSE,
+                ("BuildPinDataRanges: 32-bit depth requested but OS is Win9x, clamped to 16"));
+        }
+    }
+
+    // 96 kHz rate: requires only the registry key
+    if (Registry::allowHighRate) {
+        DynPinDataRangesStream[0].MaximumSampleFrequency = 96000;
+        _DbgPrintF(DEBUGLVL_VERBOSE,
+            ("BuildPinDataRanges: 96 kHz max rate enabled"));
+    } else {
+        DynPinDataRangesStream[0].MaximumSampleFrequency = 48000;
+    }
+
+    //
+    // Step 2: Build the pointer array for streaming data ranges.
+    //
+    DynPinDataRangePointersStream[0] =
+        PKSDATARANGE(&DynPinDataRangesStream[0]);
+
+    //
+    // Step 3: Build the pin descriptors.
+    //         Uses the dynamic streaming data range pointers for streaming pins
+    //         and the static bridge pointers for bridge pins.
+    //
+
+    // Pin 0: Wave In Streaming Pin (Capture)
+    RtlZeroMemory(&DynMiniportPins[0], sizeof(PCPIN_DESCRIPTOR));
+    DynMiniportPins[0].MaxGlobalInstanceCount = 1;
+    DynMiniportPins[0].MaxFilterInstanceCount = 1;
+    DynMiniportPins[0].MinFilterInstanceCount = 0;
+    DynMiniportPins[0].AutomationTable = NULL;
+    DynMiniportPins[0].KsPinDescriptor.InterfacesCount = 0;
+    DynMiniportPins[0].KsPinDescriptor.Interfaces = NULL;
+    DynMiniportPins[0].KsPinDescriptor.MediumsCount = 0;
+    DynMiniportPins[0].KsPinDescriptor.Mediums = NULL;
+    DynMiniportPins[0].KsPinDescriptor.DataRangesCount =
+        SIZEOF_ARRAY(DynPinDataRangePointersStream);
+    DynMiniportPins[0].KsPinDescriptor.DataRanges =
+        DynPinDataRangePointersStream;
+    DynMiniportPins[0].KsPinDescriptor.DataFlow = KSPIN_DATAFLOW_OUT;
+    DynMiniportPins[0].KsPinDescriptor.Communication = KSPIN_COMMUNICATION_SINK;
+    DynMiniportPins[0].KsPinDescriptor.Category =
+        (GUID *) &PINNAME_CAPTURE;
+    DynMiniportPins[0].KsPinDescriptor.Name =
+        &KSAUDFNAME_RECORDING_CONTROL;
+    DynMiniportPins[0].KsPinDescriptor.Reserved = 0;
+
+    // Pin 1: Wave In Bridge Pin (Capture - From Topology)
+    RtlZeroMemory(&DynMiniportPins[1], sizeof(PCPIN_DESCRIPTOR));
+    DynMiniportPins[1].MaxGlobalInstanceCount = 0;
+    DynMiniportPins[1].MaxFilterInstanceCount = 0;
+    DynMiniportPins[1].MinFilterInstanceCount = 0;
+    DynMiniportPins[1].AutomationTable = NULL;
+    DynMiniportPins[1].KsPinDescriptor.InterfacesCount = 0;
+    DynMiniportPins[1].KsPinDescriptor.Interfaces = NULL;
+    DynMiniportPins[1].KsPinDescriptor.MediumsCount = 0;
+    DynMiniportPins[1].KsPinDescriptor.Mediums = NULL;
+    DynMiniportPins[1].KsPinDescriptor.DataRangesCount =
+        SIZEOF_ARRAY(PinDataRangePointersBridge);
+    DynMiniportPins[1].KsPinDescriptor.DataRanges =
+        PinDataRangePointersBridge;
+    DynMiniportPins[1].KsPinDescriptor.DataFlow = KSPIN_DATAFLOW_IN;
+    DynMiniportPins[1].KsPinDescriptor.Communication =
+        KSPIN_COMMUNICATION_NONE;
+    DynMiniportPins[1].KsPinDescriptor.Category =
+        (GUID *) &KSCATEGORY_AUDIO;
+    DynMiniportPins[1].KsPinDescriptor.Name = NULL;
+    DynMiniportPins[1].KsPinDescriptor.Reserved = 0;
+
+    // Pin 2: Wave Out Streaming Pin (Renderer)
+    RtlZeroMemory(&DynMiniportPins[2], sizeof(PCPIN_DESCRIPTOR));
+    DynMiniportPins[2].MaxGlobalInstanceCount = 1;
+    DynMiniportPins[2].MaxFilterInstanceCount = 1;
+    DynMiniportPins[2].MinFilterInstanceCount = 0;
+    DynMiniportPins[2].AutomationTable = NULL;
+    DynMiniportPins[2].KsPinDescriptor.InterfacesCount = 0;
+    DynMiniportPins[2].KsPinDescriptor.Interfaces = NULL;
+    DynMiniportPins[2].KsPinDescriptor.MediumsCount = 0;
+    DynMiniportPins[2].KsPinDescriptor.Mediums = NULL;
+    DynMiniportPins[2].KsPinDescriptor.DataRangesCount =
+        SIZEOF_ARRAY(DynPinDataRangePointersStream);
+    DynMiniportPins[2].KsPinDescriptor.DataRanges =
+        DynPinDataRangePointersStream;
+    DynMiniportPins[2].KsPinDescriptor.DataFlow = KSPIN_DATAFLOW_IN;
+    DynMiniportPins[2].KsPinDescriptor.Communication = KSPIN_COMMUNICATION_SINK;
+    DynMiniportPins[2].KsPinDescriptor.Category =
+        (GUID *) &KSCATEGORY_AUDIO;
+    DynMiniportPins[2].KsPinDescriptor.Name = NULL;
+    DynMiniportPins[2].KsPinDescriptor.Reserved = 0;
+
+    // Pin 3: Wave Out Bridge Pin (Renderer)
+    RtlZeroMemory(&DynMiniportPins[3], sizeof(PCPIN_DESCRIPTOR));
+    DynMiniportPins[3].MaxGlobalInstanceCount = 0;
+    DynMiniportPins[3].MaxFilterInstanceCount = 0;
+    DynMiniportPins[3].MinFilterInstanceCount = 0;
+    DynMiniportPins[3].AutomationTable = NULL;
+    DynMiniportPins[3].KsPinDescriptor.InterfacesCount = 0;
+    DynMiniportPins[3].KsPinDescriptor.Interfaces = NULL;
+    DynMiniportPins[3].KsPinDescriptor.MediumsCount = 0;
+    DynMiniportPins[3].KsPinDescriptor.Mediums = NULL;
+    DynMiniportPins[3].KsPinDescriptor.DataRangesCount =
+        SIZEOF_ARRAY(PinDataRangePointersBridge);
+    DynMiniportPins[3].KsPinDescriptor.DataRanges =
+        PinDataRangePointersBridge;
+    DynMiniportPins[3].KsPinDescriptor.DataFlow = KSPIN_DATAFLOW_OUT;
+    DynMiniportPins[3].KsPinDescriptor.Communication =
+        KSPIN_COMMUNICATION_NONE;
+    DynMiniportPins[3].KsPinDescriptor.Category =
+        (GUID *) &KSCATEGORY_AUDIO;
+    DynMiniportPins[3].KsPinDescriptor.Name = NULL;
+    DynMiniportPins[3].KsPinDescriptor.Reserved = 0;
+
+    //
+    // Step 4: Build the filter descriptor.
+    //
+    DynFilterDescriptor.Version = 0;
+    DynFilterDescriptor.AutomationTable = NULL;
+    DynFilterDescriptor.PinSize = sizeof(PCPIN_DESCRIPTOR);
+    DynFilterDescriptor.PinCount = SIZEOF_ARRAY(DynMiniportPins);
+    DynFilterDescriptor.Pins = DynMiniportPins;
+    DynFilterDescriptor.NodeSize = sizeof(PCNODE_DESCRIPTOR);
+    DynFilterDescriptor.NodeCount = SIZEOF_ARRAY(MiniportNodes);
+    DynFilterDescriptor.Nodes = MiniportNodes;
+    DynFilterDescriptor.ConnectionCount = SIZEOF_ARRAY(MiniportConnections);
+    DynFilterDescriptor.Connections = MiniportConnections;
+    DynFilterDescriptor.CategoryCount = 0;
+    DynFilterDescriptor.Categories = NULL;
+
+    _DbgPrintF(DEBUGLVL_VERBOSE,
+        ("BuildPinDataRanges: maxDepth=%d maxRate=%d",
+         DynPinDataRangesStream[0].MaximumBitsPerSample,
+         DynPinDataRangesStream[0].MaximumSampleFrequency));
+}
 
 /*****************************************************************************
  * CMiniportWaveCyclicHDA::GetDescription()
  *****************************************************************************
- * Gets the topology.
+ * Gets the topology. Returns the dynamically-built filter descriptor
+ * whose pin data ranges reflect the current OS version and registry settings.
  */
 STDMETHODIMP
 CMiniportWaveCyclicHDA::
@@ -713,17 +761,14 @@ GetDescription
 {
     PAGED_CODE();
 
-    ASSERT(OutFilterDescriptor);
-
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::GetDescription]"));
-	
-	//TODO: build all these topology descriptors dynamically
-	//so i can account for available format and OS support
-	//available number of pins
-	//and difference in fmt support between input and output
-	//because providing high bit depth breaks Win98
 
-    *OutFilterDescriptor = &MiniportFilterDescriptor;
+	ASSERT(OutFilterDescriptor);
+
+	//build the data range tables
+	BuildPinDataRanges();
+
+    *OutFilterDescriptor = &DynFilterDescriptor;
 
     return STATUS_SUCCESS;
 }
@@ -867,15 +912,11 @@ DataRangeIntersection
             }
         }
 		
-		// removed - HDA is full duplex
-		
         SampleFrequency = min( AudioRange->MaximumSampleFrequency,
                  ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumSampleFrequency );
 
 
         WaveFormatEx->nSamplesPerSec = SampleFrequency;
-		
-		// removed - HDA doesn't need to budget DMA channels
 
         BitsPerSample = (USHORT) min( AudioRange->MaximumBitsPerSample,
                           ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumBitsPerSample );
@@ -1241,25 +1282,9 @@ SetNotificationFreq
 
 	//write frame size to out pointer
     *FramingSize = target_chunk_bytes;
-
-	/*
-	// Align chunk size to 256 bytes AND integer frame boundaries
-    //    First align down to 256 bytes
-    ULONG aligned_chunk_bytes = target_chunk_bytes & ~(255);
-	DOUT(DBG_ERROR, ("aligned chunk bytes %d", aligned_chunk_bytes));
-
-    // Fallback safeguard: if 10ms is tiny, enforce at least 256 bytes
-    if (aligned_chunk_bytes < 256) {
-        aligned_chunk_bytes = 256;
-        // Align up to frame boundary if necessary
-        //if (aligned_chunk_bytes % bytes_per_frame != 0) {
-        //    aligned_chunk_bytes += (bytes_per_frame - (aligned_chunk_bytes % bytes_per_frame));
-        //}
-    }
-
-	//write aligned frame size to out pointer
-    *FramingSize = aligned_chunk_bytes;
-	*/
+	
+	//Alignment to actual chunk sizes is not needed. the notification method can deal with
+	//up to 2x slop on the actual vs requested rate of interrupts
 
 	//we could recalculate the actual interval in terms of our aligned chunk sizes but it is not used
     return Miniport->NotificationInterval;

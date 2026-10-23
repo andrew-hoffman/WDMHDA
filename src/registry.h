@@ -24,6 +24,9 @@ namespace Registry {
 	extern BOOLEAN allowHighDepth;
 	extern BOOLEAN allowBlindProbe;
 
+	// OS version detection (cached at driver load)
+	extern BOOLEAN isWin2kOrLater;
+
     NTSTATUS OpenDeviceKey(
 		OUT PREGISTRYKEY* RegistryKey, 
 		IN PDEVICE_OBJECT m_pDeviceObject, 
@@ -63,6 +66,7 @@ namespace Registry {
 		IN PCWSTR ValueName,
 		IN ULONG Value
 		);
+	VOID     DetectOsVersion();
 }
 
 #endif

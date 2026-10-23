@@ -547,6 +547,7 @@ Init
 	
 	//Read settings from registry	
 	Registry::ReadSettings(DeviceObject);
+	Registry::DetectOsVersion();
 
 	// Check for SSE2 / CLFLUSH support
 	ULONG edx_feat;

@@ -1,3 +1,7 @@
+# WDMHDA 0.25 2026-10-24
+- fixed higher sample rate support better
+- fixed installation freeze bug
+
 # WDMHDA 0.24 2026-10-18
 - add support for higher sample rates up to 96 khz (if Registry option is enabled)
 - add support for 32-bit bit depth 
@@ -6,7 +10,7 @@
 	- 20 and 24 bit audio is not supported yet either
 		see the Registry keys to change in the inf file.
 - Rewrote a lot of code to allow more than one stream and wider range of sample rates
-- Fixed many bugs with sequencing, shouldn;t get little blips of audio or crackles anymore
+- Fixed many bugs with sequencing, shouldn't get little blips of audio or crackles anymore
 
 # WDMHDA 0.23 2026-09-21
 - Change version numbering schema, Alpha is no longer appropriate

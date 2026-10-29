@@ -32,17 +32,17 @@ To allow playback of Redbook CD Audio, Digital CD Audio must be enabled:
 
 ## Current Limitations:
 
-- Only supports 16-bit stereo audio at 22-48khz sample rates (formats up to 96khz 32-bit could technically be added but 9x doesn't make the best choices about resampling)
+- Only supports up to 16-bit stereo audio at 48khz sample rate (formats up to 96khz 32-bit can be enabled by Registry keys but 9x doesn't make the best choices about resampling)
 - Playback only, recording is not supported
 - Single audio stream, no hardware mixing
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
-- Jack retasking is not supported, all jacks will be set as outputs if they can be. (Try all outputs, the audio output may only play through the Surround output on your motherboard.)
+- Jack retasking is not supported, all jacks will be set as outputs if they can be. (Try all outputs, the audio output may only play through the Surround output on your motherboard.) Connecting to a headphone output will mute the speaker outputs but line-outs will not be affected.
 - Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
-- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
-DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
-The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.
-- May Freeze, crash, fail to start or outputs horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
+- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL. You can use @sdz_mods 's VOPL3 to add OPL emulation.
+DOSBox can also be used to run games with OPL emulation.
+There is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
+- May freeze, crash, fail to start or output horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 

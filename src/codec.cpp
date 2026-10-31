@@ -51,7 +51,8 @@ typedef struct _HDA_CODEC_QUIRK_ENTRY {
 	ULONG gpio;
 } HDA_CODEC_QUIRK_ENTRY;
 
-static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG controller_subsystem_id, ULONG *p_gpio = NULL)
+static ULONG hda_lookup_codec_quirks
+(ULONG controller_subsystem_id, ULONG codec_id, ULONG subsystem_id, ULONG *p_gpio = NULL)
 {
 	static const HDA_CODEC_QUIRK_ENTRY quirk_table[] = {
 		
@@ -60,9 +61,8 @@ static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG c
 	// Dell Latitude E6400 (and others) with IDT 92HD71B7X: enable GPIO 0 for EAPD amplifier power
 	{ HDA_MATCH_ALL, HDA_CODEC_IDT92HD71B7, HDA_MATCH_ALL, 0, 0, HDAA_GPIO_SET(0) },
 
-	//TODO: need Controller and/or Codec SVID for EEE PC 701 to gate this fix
-	//there are 700+ other motherboards using this codec.
-	//{ HDA_MATCH_ALL, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
+	//Asus EEE PC 701
+	{ 0x104382A1, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
 
 	//Remainder of list taken from FreeBSD.
 
@@ -273,7 +273,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
 	codec_address, codec_ven, codec_dev);
 
-	//Realtek ALC280 may need a delay here
+	//Realtek ALC280 needs a longer delay after reset
 	//otherwise any read but the codec ID gives an error.
 	KeStallExecutionProcessor(500);
 
@@ -296,7 +296,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 			}
 		}
 	}
-	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
+	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found in this codec"));
 	return STATUS_NOT_FOUND;	
 }
 
@@ -324,7 +324,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 	ULONG codec_gpio_quirk = 0;
 	codec_subsystem_id = hda_send_verb(afg_node_number, VERB_GET_SUBSYSTEM_ID, 0x00);
-	codec_quirks = hda_lookup_codec_quirks(codec_id, codec_subsystem_id, controller_subsystem_id, &codec_gpio_quirk);
+	codec_quirks = hda_lookup_codec_quirks(
+		controller_subsystem_id, codec_id, codec_subsystem_id, &codec_gpio_quirk);
 	DOUT (DBG_SYSINFO, ("Codec subsystem ID: 0x%08x", codec_subsystem_id));
 	DOUT (DBG_SYSINFO, ("Codec quirks: 0x%08x", codec_quirks));
 	DOUT (DBG_SYSINFO, ("Codec GPIO quirks: 0x%08x", codec_gpio_quirk));
@@ -423,6 +424,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 			//disable every audio output (for now) by connecting it to stream 0
 			hda_send_verb(node, 0x706, 0x00);
+			//if initing a path with a pin complex numerically earlier
+			//this will disable it again.
+			//TODO: remove this when moving beyond one-shot parser
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
 			DbgPrint( ("Input Converter"));
@@ -510,8 +514,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 					DbgPrint( (" (dock)"));
 				}
 	
-				// Save the front/primary line-out node to initialize after all converters
-				// have been reset to stream 0. Sequence 0 is the front channel in an
+				// Save the front/primary line-out node to initialize later after
+				// the pass thru all nodes. Sequence 0 is the front channel in an
 				// association group; prefer it over rear/sub/side (sequence > 0).
 				// If no sequence-0 line-out is found, fall back to the first one seen.
 				if (pin_line_out_node_number == 0 || pin_sequence == 0) {
@@ -1384,7 +1388,8 @@ void HDA_Codec::ApplyEeeInit()
     SetOutAmpLR(4, FALSE, 0x00);
 }
 
-//TODO: multiple headphone & speaker nodes
+//TODO: support multiple headphone, speaker, & line-out nodes. 
+//currently only handles one of each
 
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 

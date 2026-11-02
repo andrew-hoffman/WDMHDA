@@ -155,15 +155,7 @@ private:
 	PDEVICE_DESCRIPTION pDeviceDescription;
 	
 	//PCI IDs
-	ULONG pci_id;
-	USHORT pci_ven;
-	USHORT pci_dev;
-	
-	ULONG pci_sid;
-	USHORT pci_ssid;
-	USHORT pci_svid;
 
-	PUCHAR pConfigMem;
 	USHORT codec_ven;
 	USHORT codec_dev;
 
@@ -211,7 +203,6 @@ private:
     BOOLEAN m_bCORBInitialized;  // CORB initialized flag
     BOOLEAN m_bRIRBInitialized;  // RIRB initialized flag
     PDEVICE_OBJECT m_pDeviceObject;     // Device object used for registry access.
-    PDEVICE_OBJECT m_pPDO;              // Physical Device Object for PCI bus access.
     DEVICE_POWER_STATE m_PowerState;    // Current power state of the device.
 
     PINTERRUPTSYNC          m_pInterruptSync;
@@ -293,10 +284,9 @@ public:
      * IAdapterCommon methods
      */
 
-	/* TODO: IAdapterCommon is currently a **singleton** 
-	but there may be multiple instances of this driver loaded at once
-	on systems with a dGPU with HDMI display audio support for instance
-	and currently that causes a CRASH.
+	/* TODO: loading this driver for multiple controllers at once,
+	on systems with a dGPU with HDMI display audio support for instance,
+	currently causes a CRASH.
 
 	There should be one IAdapterCommon object per HDA controller.
 	Each AdapterCommon may access multiple Codecs and that works fine already
@@ -305,8 +295,7 @@ public:
     STDMETHODIMP_(NTSTATUS) Init
     (
         IN      PRESOURCELIST   ResourceList,
-        IN      PDEVICE_OBJECT  DeviceObject,
-		IN      PDEVICE_OBJECT  PDO
+        IN      PDEVICE_OBJECT  DeviceObject
     );
     STDMETHODIMP_(PINTERRUPTSYNC) GetInterruptSync
     (   void
@@ -498,15 +487,13 @@ CAdapterCommon::
 Init
 (
     IN      PRESOURCELIST   ResourceList,
-    IN      PDEVICE_OBJECT  DeviceObject,
-	IN      PDEVICE_OBJECT  PDO
+    IN      PDEVICE_OBJECT  DeviceObject
 )
 {
     PAGED_CODE();
 
     ASSERT(ResourceList);
     ASSERT(DeviceObject);
-	ASSERT(PDO);
 
 	NTSTATUS ntStatus = STATUS_SUCCESS;
 	PHYSICAL_ADDRESS physAddr = {0};
@@ -517,6 +504,8 @@ Init
 	JackPollingStopping = 0;
 	JackPollWorkQueued = 0;
 	JackPollTimerStarted = FALSE;
+	memLength = 0;
+
 
 	//Make sure cache line size set in FDO device object matches HDA requirement
     DOUT(DBG_SYSINFO, ("Initial FDO align was %d", 
@@ -532,8 +521,8 @@ Init
     // Save the device object
     //
     m_pDeviceObject = DeviceObject;
-    m_pPDO = PDO;
-
+    //m_pPDO = IoGetDeviceAttachmentBaseRef(DeviceObject);
+		
 	//init mutex & spin lock protecting the communication to the codec
 	ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 	ExInitializeFastMutex(&VerbMutex);
@@ -569,223 +558,6 @@ Init
 	for (i = 0; i < 16; i++) {
 		pCodecs[i] = NULL;
 	}
-
-	//send an IRP asking the bus driver to read all of configspace
-	//asking the PnP Config manager does NOT work since we're still in the middle of StartDevice()
-
-	memLength = 0;
-	
-	pConfigMem = (PUCHAR)ExAllocatePoolWithTag(NonPagedPool, 256,'gfcP');
-	if (!pConfigMem) {
-		return STATUS_INSUFFICIENT_RESOURCES;
-	}
-	ntStatus = ReadWriteConfigSpace(
-		m_pDeviceObject,
-		0,			//read
-		pConfigMem,	// Buffer to store the configuration data		
-		0,			// Offset into the configuration space
-		256         // Number of bytes to read
-	);
-
-	if (!NT_SUCCESS (ntStatus)){
-		DbgPrint( "\nPCI Configspace Read Failed! 0x%X\n", ntStatus);
-		ExFreePool(pConfigMem);
-		pConfigMem = NULL;
-        return ntStatus;
-	}
-
-	PUSHORT pConfigMemS = (PUSHORT)pConfigMem;
-	PULONG  pConfigMemD = (PULONG) pConfigMem;
-
-	//VID and PID are first 2 words of configspace
-	pci_id = (ULONG) pConfigMemD[0];
-	pci_ven = (USHORT) pConfigMemS[0];
-	pci_dev = (USHORT) pConfigMemS[1];
-	
-	//Subsystem and Sybsystem Vendor are at 0xB(Dword) or 0x2c(Byte)
-	pci_sid = (ULONG) pConfigMemD[0xB];
-	pci_ssid = (USHORT)(pci_sid >> 16);
-	pci_svid = (USHORT)(pci_sid & 0xFFFF);
-
-	DbgPrint( "\nHDA Controller:  VID:0x%04X  PID:0x%04X ", pci_ven, pci_dev);
-
-	USHORT tmp;
-	
-	//apply device-specific config space patches depending on the VID/PID
-	switch (pci_ven){
-		case 0x15AD: //VMWare
-			DbgPrint( "VMWare\n");
-			//force PIO mode because VMWare works better like this
-			Registry::forcePioMode = true;
-			break;
-		case 0x1002: //ATI
-		case 0x1022: //AMD
-			if ( (pci_dev == 0x437b) || (pci_dev == 0x4383) //ATI SB
-				|| (pci_dev == 0x780d) //Hudson
-				|| (pci_dev == 0x1457) || (pci_dev == 0x1487) //AMD Ryzen
-				|| (pci_dev == 0x157a) || (pci_dev == 0x15e3) //AMD APU
-			){
-				DbgPrint( "ATI/AMD SB450/600/APU Snoop\n");
-				//Enable Snoop
-				ntStatus = WriteConfigSpaceByte(0x42,
-					~0x03, ATI_SB450_HDAUDIO_ENABLE_SNOOP);
-				//should read back & confirm it was set.
-			} else if ( (pci_dev == 0x0002) || (pci_dev == 0x1308)
-				|| (pci_dev == 0x157a) || (pci_dev == 0x15b3)
-			){				
-				DbgPrint( "ATI/AMD HDMI No Snoop\n");
-				//Disable Snoop
-				ntStatus = WriteConfigSpaceByte(0x42,
-					~ATI_SB450_HDAUDIO_ENABLE_SNOOP, 0);
-			} else {
-				DbgPrint( "ATI/AMD Other\n");
-			}
-			break;
-		case 0x10de: //nvidia
-			if ( (pci_dev == 0x026c) || (pci_dev == 0x0371) //MCP5x
-			  || (pci_dev == 0x03e4) || (pci_dev == 0x03f0) //MCP61
-			  || (pci_dev == 0x044a) || (pci_dev == 0x044b) //MCP65
-			  || (pci_dev == 0x055c) || (pci_dev == 0x055d) //MCP67
-			  || (pci_dev == 0x0774) || (pci_dev == 0x0775) //MCP77
-			  || (pci_dev == 0x0776) || (pci_dev == 0x0777) //MCP77
-		  	  || (pci_dev == 0x07fc) || (pci_dev == 0x07fd) //MCP73
-			  || (pci_dev == 0x0ac0) || (pci_dev == 0x0ac1) //MCP79
-			  || (pci_dev == 0x0ac2) || (pci_dev == 0x0ac3) //MCP79
-			  || (pci_dev == 0x0d94) || (pci_dev == 0x0d95) //MCP89
-			  || (pci_dev == 0x0d96) || (pci_dev == 0x0d97) //MCP
-			){
-				DbgPrint( "Nvidia MCP\n");			 
-				ntStatus = WriteConfigSpaceByte(0x4e,
-					~NVIDIA_HDA_ENABLE_COHBITS, NVIDIA_HDA_ENABLE_COHBITS);
-			} else{
-				DbgPrint("Nvidia HDMI\n");
-			}
-			break;
-		case 0x8086: //Intel
-			switch (pci_dev){
-				case 0x2668://ICH6
-				case 0x27D8://ICH7
-					DbgPrint( "Intel ICH6/7\n");
-					//set device 27 function 0 configspace offset 40h bit 0 to 1
-					//to enable HDA link mode (if it isnt already)
-					ntStatus = WriteConfigSpaceByte(0x40, 0xfe, 0x01);
-					break;
-				//ICH
-				case 0x269a:
-				case 0x284b:
-				case 0x2911:
-				case 0x293e:
-				case 0x293f:
-				case 0x3a3e: //ICH8
-				case 0x3a6e: //ICH9
-					DbgPrint( "Intel ICH\n"); //these don't need nosnoop flag changed (?)
-					break;
-				//PCH
-				case 0x1c20: 
-				case 0x1d20:
-				case 0x1e20:
-				case 0x8c20:
-				case 0x8ca0:
-				case 0x8d20:
-				case 0x8d21:
-				case 0xa1f0:
-				case 0xa270:
-				case 0x9c20:
-				case 0x9c21:
-				case 0x9ca0:
-
-				//SKL
-				case 0xa170: 
-				case 0x9d70:
-				case 0xa171:
-				case 0x9d71:
-				case 0xa2f0:
-				case 0xa348:
-				case 0x9dc8:
-				case 0x02c8:
-				case 0x06c8:
-				case 0xf1c8:
-				case 0xa3f0:
-				case 0xf0c8:
-				case 0x34c8:
-				case 0x3dc8:
-				case 0x4dc8:
-				case 0xa0c8:
-				case 0x43c8:
-				case 0x490d:
-				case 0x7da0:
-				case 0x51c8:
-				case 0x51cc:
-				case 0x4b55:
-				case 0x4b58:
-				case 0x5a98:
-				case 0x1a98:
-				case 0x3198:
-				case 0x7a50: //Raptor Lake
-
-				//HDMI
-				case 0x0a0c: 
-				case 0x0c0c:
-				case 0x0d0c:
-				case 0x160c:
-				
-				//SCH
-				case 0x3b56: 
-				case 0x811b:
-				case 0x080a:
-				case 0x0f04:
-				case 0x2284:
-
-				//just in case
-				default:
-
-					DbgPrint( "Intel PCH/SCH/SKL/HDMI\n");
-					//disable no-snoop transaction feature (clear bit 11) if it is set
-					tmp = *((PUSHORT)(pConfigMem + INTEL_SCH_HDA_DEVC));
-					if((tmp & INTEL_SCH_HDA_DEVC_NOSNOOP) != 0){
-						DbgPrint( "0x%X - disabling nosnoop transactions\n", tmp);
-						ntStatus = WriteConfigSpaceWord(INTEL_SCH_HDA_DEVC,
-							~((USHORT)INTEL_SCH_HDA_DEVC_NOSNOOP), 0);
-					} else {
-						DbgPrint( "0x%X - snoop already ok\n", tmp);
-					}
-					break;
-
-			}
-			break;
-		case 0x10b9://ULI M5461
-			DbgPrint( "ULI\n");
-			//disable and zero out BAR1 on this hardware; 
-			//it advertises 64 bit addressing support but can't deliver
-			//not that we can use it anyway in 9x.
-			//this is according to ALSA.
-			//TODO: test this if i can find this rare chipset
-			ntStatus = WriteConfigSpaceWord(0x40,0xffef,0x0010);
-			ntStatus = WriteConfigSpaceWord(0x14,0x0000,0x0000);
-			ntStatus = WriteConfigSpaceWord(0x16,0x0000,0x0000);
-			break;
-		default:
-			DbgPrint( "unknown or no special patches\n");
-			break;
-	}
-	// Set TCSEL (offset 44h in config space, lowest 3 bits) to 0 
-	// to avoid crackling/static on some hardware.
-	// the Watlers and MPXPlay drivers set this byte on all but ATI controllers
-
-	// Traffic class 0 is the default "best effort" priority
-	// but is the only one guaranteed to be set up on non PCIe aware OSes.
-	// some HDA hardware defaults to traffic class 7
-
-	if(pci_ven != 0x1002){
-		ntStatus = WriteConfigSpaceByte(0x44, 0xf8, 0x0);
-	}
-
-	if (!NT_SUCCESS (ntStatus)){
-		DbgPrint( "\nPCI Config Space Write Failed! 0x%X\n", ntStatus);
-        //return ntStatus; //is failure fatal? i dont think so
-	}
-
-	DbgPrint( "     Subsystem: SSID:0x%04X SVID:0x%04X\n\n", pci_ssid, pci_svid);
 
     // Get the memory base address for the HDA controller registers. 
     // note we only want the first BAR
@@ -919,7 +691,7 @@ Init
 	ULONG nMapRegisters = 0;
 
 	DMA_Adapter = IoGetDmaAdapter (
-		PDO, //NOT Optional
+		m_pDeviceObject, //m_pPDO, //NOT Optional on windows xp
 		pDeviceDescription,
 		&nMapRegisters );
 
@@ -1164,11 +936,7 @@ CAdapterCommon::
 		ExFreePool(pDeviceDescription);
 		pDeviceDescription = NULL;
 	}
-	//free device description
-	if (pConfigMem) {
-		ExFreePool(pConfigMem);
-		pConfigMem = NULL;
-	}
+
 	//free PCI BAR space	
     if (m_pHDARegisters) {
 		MmUnmapIoSpace(m_pHDARegisters, memLength);
@@ -1763,7 +1531,12 @@ CAdapterCommon::TryInitializeCodecSlot(
 	if (codecCount < ARRAY_COUNT(pCodecs)) {
 
 		HDA_Codec* pCodec = 
-			new(NonPagedPool) HDA_Codec(Registry::useSPDIF, Registry::useAltOut, codec_number, pci_sid, this);
+			new(NonPagedPool) HDA_Codec(
+			Registry::useSPDIF, 
+			Registry::useAltOut, 
+			codec_number, 
+			0,	//pci_sid, 
+			this);
 
 		if (pCodec) {
 			pCodecs[codecCount++] = pCodec;
@@ -1825,12 +1598,14 @@ CAdapterCommon::WriteHardwareIdsToRegistry(
 	
 	//write controller ven, dev, susbystem IDs;
 	//already in the device key as the device string though
+	/*
 	Status = Registry::WriteDword(DeviceKey, L"ControllerVendorId", pci_ven);
 	if (!NT_SUCCESS(Status)) goto Exit;
 	Status = Registry::WriteDword(DeviceKey, L"ControllerDeviceId", pci_dev);
 	if (!NT_SUCCESS(Status)) goto Exit;
 	Status = Registry::WriteDword(DeviceKey, L"ControllerSubsystemId", pci_sid);
 	if (!NT_SUCCESS(Status)) goto Exit;
+	*/
 
 	Status = Registry::OpenSubKey(DeviceKey, L"Codecs", KEY_ALL_ACCESS, &CodecsKey, &Disposition);
 	if (!NT_SUCCESS(Status)) {
@@ -3085,101 +2860,6 @@ inline STDMETHODIMP_(USHORT) CAdapterCommon::hda_return_sound_data_format(ULONG 
  return data_format;
 }
 
-/* Function to read/write PCI configuration space using IRP
-from this KB article:
-https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/obtaining-device-configuration-information-at-irql---passive-level
-it's the only working example i found.
-*/
-
-STDMETHODIMP_(NTSTATUS)
-CAdapterCommon::ReadWriteConfigSpace(
-    IN PDEVICE_OBJECT  DeviceObject,
-    IN ULONG  ReadOrWrite,  // 0 for read, 1 for write
-    IN PVOID  Buffer, //must be in NONpaged heap
-    IN ULONG  Offset,
-    IN ULONG  Length
-    )
-{
-    KEVENT event;
-    NTSTATUS status;
-    PIRP irp;
-    IO_STATUS_BLOCK ioStatusBlock;
-    PIO_STACK_LOCATION irpStack;
-    PDEVICE_OBJECT targetObject;
-
-    KeInitializeEvent(&event, NotificationEvent, FALSE);
-    if (m_pPDO) {
-        targetObject = m_pPDO;
-        ObReferenceObject(targetObject);
-    } else {
-        targetObject = IoGetAttachedDeviceReference(DeviceObject);
-    }
-    irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
-                                       targetObject,
-                                       NULL,
-                                       0,
-                                       NULL,
-                                       &event,
-                                       &ioStatusBlock);
-    if (irp == NULL) {
-        status = STATUS_INSUFFICIENT_RESOURCES;
-        goto End;
-    }
-    irpStack = IoGetNextIrpStackLocation(irp);
-    if (ReadOrWrite == 0) {
-        irpStack->MinorFunction = IRP_MN_READ_CONFIG;
-    } else {
-        irpStack->MinorFunction = IRP_MN_WRITE_CONFIG;
-    }
-    irpStack->Parameters.ReadWriteConfig.WhichSpace = PCI_WHICHSPACE_CONFIG;
-    irpStack->Parameters.ReadWriteConfig.Buffer = Buffer;
-    irpStack->Parameters.ReadWriteConfig.Offset = Offset;
-    irpStack->Parameters.ReadWriteConfig.Length = Length;
-
-    // Initialize the status to error in case the bus driver does not 
-    // set it correctly.
-    irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-    status = IoCallDriver(targetObject, irp);
-    if (status == STATUS_PENDING) {
-        KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, NULL);
-        status = ioStatusBlock.Status;
-    }
-End:
-    // Done with reference
-    ObDereferenceObject(targetObject);
-    return status;
-}
-
-//set flag in our mirror of configspace and then write it back
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceByte(UCHAR offset, UCHAR andByte, UCHAR orByte){
-	ASSERT(m_pDeviceObject);
-	ASSERT(pConfigMem);
-	pConfigMem[offset] = (pConfigMem[offset] & andByte) | orByte;
-	return ReadWriteConfigSpace(
-		m_pDeviceObject,
-		1,			//write
-		pConfigMem + offset,	// Buffer to store the configuration data		
-		offset,			// Offset into the configuration space
-		1         // Number of bytes to write
-		);
-}
-  
-
-//set flag in our mirror of configspace and then write it back
-STDMETHODIMP_(NTSTATUS) CAdapterCommon::WriteConfigSpaceWord(UCHAR offset, USHORT andWord, USHORT orWord){
-	ASSERT(m_pDeviceObject);
-	ASSERT(pConfigMem);
-	//cast to get a PUSHORT at arbitrary offset
-	PUSHORT ptemp = (PUSHORT)(&pConfigMem[offset]);
-	*ptemp = (*ptemp & andWord) | orWord;
-	return ReadWriteConfigSpace(
-		m_pDeviceObject,
-		1,			//write
-		pConfigMem + offset,	// Buffer to store the configuration data		
-		offset,			// Offset into the configuration space
-		2         // Number of bytes to write
-		);
-}
 
 STDMETHODIMP_(void) CAdapterCommon::CacheLineFlush(PVOID Destination, ULONG ByteCount){
 	// Manual Cache Invalidation for AMD 6xx-9xx Coherency..

@@ -51,18 +51,15 @@ typedef struct _HDA_CODEC_QUIRK_ENTRY {
 	ULONG gpio;
 } HDA_CODEC_QUIRK_ENTRY;
 
-static ULONG hda_lookup_codec_quirks
-(ULONG controller_subsystem_id, ULONG codec_id, ULONG subsystem_id, ULONG *p_gpio = NULL)
+static ULONG hda_lookup_codec_quirks(ULONG codec_id, ULONG subsystem_id, ULONG controller_subsystem_id)
 {
 	static const HDA_CODEC_QUIRK_ENTRY quirk_table[] = {
 		
 	{ HDA_MATCH_ALL, 0x10EC0292, 0x102805CC, HDA_QUIRK_ALC292_DELL_M4800, 0, 0},
 
-	// Dell Latitude E6400 (and others) with IDT 92HD71B7X: enable GPIO 0 for EAPD amplifier power
-	{ HDA_MATCH_ALL, HDA_CODEC_IDT92HD71B7, HDA_MATCH_ALL, 0, 0, HDAA_GPIO_SET(0) },
-
-	//Asus EEE PC 701
-	{ 0x104382A1, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
+	//TODO: need Controller and/or Codec SVID for EEE PC 701 to gate this fix
+	//there are 700+ other motherboards using this codec.
+	//{ HDA_MATCH_ALL, 0x10EC0662, HDA_MATCH_ALL, HDA_QUIRK_EEEPC_701, 0, 0},
 
 	//Remainder of list taken from FreeBSD.
 
@@ -172,7 +169,6 @@ static ULONG hda_lookup_codec_quirks
 	};
 
 	ULONG quirks_sum = 0;
-	ULONG gpio_sum = 0;
 
 	for (ULONG i = 0; quirk_table[i].codec_id != 0; ++i) {
 
@@ -193,11 +189,9 @@ static ULONG hda_lookup_codec_quirks
 			hda_log("\n Applying codec quirk %d\n", i);
 			quirks_sum |= quirk_table[i].quirk_on;
 			quirks_sum &= ~quirk_table[i].quirk_off;
-			gpio_sum |= quirk_table[i].gpio;
 		}
 	}
 
-	if (p_gpio) *p_gpio = gpio_sum;
 	return quirks_sum;
 }
 
@@ -273,7 +267,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 	DbgPrint( "\nCodec #%d VID:0x%04X PID:0x%04X\n", 
 	codec_address, codec_ven, codec_dev);
 
-	//Realtek ALC280 needs a longer delay after reset
+	//Realtek ALC280 may need a delay here
 	//otherwise any read but the codec ID gives an error.
 	KeStallExecutionProcessor(500);
 
@@ -296,7 +290,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 			}
 		}
 	}
-	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found in this codec"));
+	DOUT (DBG_ERROR, ("HDA ERROR: No AFG found"));
 	return STATUS_NOT_FOUND;	
 }
 
@@ -322,54 +316,10 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	//enable power for AFG
 	hda_send_verb(afg_node_number, 0x705, 0x00);
 
-	ULONG codec_gpio_quirk = 0;
 	codec_subsystem_id = hda_send_verb(afg_node_number, VERB_GET_SUBSYSTEM_ID, 0x00);
-	codec_quirks = hda_lookup_codec_quirks(
-		controller_subsystem_id, codec_id, codec_subsystem_id, &codec_gpio_quirk);
+	codec_quirks = hda_lookup_codec_quirks(codec_id, codec_subsystem_id, controller_subsystem_id);
 	DOUT (DBG_SYSINFO, ("Codec subsystem ID: 0x%08x", codec_subsystem_id));
 	DOUT (DBG_SYSINFO, ("Codec quirks: 0x%08x", codec_quirks));
-	DOUT (DBG_SYSINFO, ("Codec GPIO quirks: 0x%08x", codec_gpio_quirk));
-
-	// Query GPIO capabilities on AFG node (Parameter 0x11: bits 7:0 = NumGPIOs)
-	ULONG gpio_count_param = hda_send_verb(afg_node_number, 0xF00, 0x11);
-	ULONG num_gpios = gpio_count_param & 0xFF;
-	DOUT (DBG_SYSINFO, ("AFG GPIO capabilities: 0x%08x (num_gpios=%lu)", gpio_count_param, num_gpios));
-
-	if (num_gpios > 0) {
-		ULONG gmask = hda_send_verb(afg_node_number, 0xF16, 0);
-		ULONG gdir  = hda_send_verb(afg_node_number, 0xF17, 0);
-		ULONG gdata = hda_send_verb(afg_node_number, 0xF15, 0);
-		hda_log("WDMHDA: Initial AFG GPIO mask=%08lX dir=%08lX data=%08lX\n", gmask, gdir, gdata);
-
-		if (codec_gpio_quirk != 0) {
-			for (ULONG b = 0; b < num_gpios; b++) {
-				ULONG act = (codec_gpio_quirk >> (b * 3)) & 0x7;
-				if (act == 1) { // HDAA_GPIO_SET
-					gmask |= (1 << b);
-					gdir  |= (1 << b);
-					gdata |= (1 << b);
-				} else if (act == 2) { // HDAA_GPIO_CLEAR
-					gmask |= (1 << b);
-					gdir  |= (1 << b);
-					gdata &= ~(1 << b);
-				} else if (act == 3) { // HDAA_GPIO_DISABLE
-					gmask &= ~(1 << b);
-				} else if (act == 4) { // HDAA_GPIO_INPUT
-					gmask |= (1 << b);
-					gdir  &= ~(1 << b);
-				}
-			}
-
-			hda_send_verb(afg_node_number, 0x716, gmask);
-			hda_send_verb(afg_node_number, 0x717, gdir);
-			hda_send_verb(afg_node_number, 0x715, gdata);
-
-			ULONG gmask_post = hda_send_verb(afg_node_number, 0xF16, 0);
-			ULONG gdir_post  = hda_send_verb(afg_node_number, 0xF17, 0);
-			ULONG gdata_post = hda_send_verb(afg_node_number, 0xF15, 0);
-			hda_log("WDMHDA: Configured AFG GPIO mask=%08lX dir=%08lX data=%08lX\n", gmask_post, gdir_post, gdata_post);
-		}
-	}
 
 	if (codec_id == 0x10EC0292) {
 		// Linux leaves EAPD under standard verb control on all ALC292 codecs.
@@ -398,7 +348,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	ULONG subordinate_node_count_reponse = hda_send_verb(afg_node_number, 0xF00, 0x04);
 	ULONG pin_alternative_output_node_number = 0, pin_speaker_default_node_number = 0; 
 	ULONG pin_speaker_node_number = 0, pin_headphone_node_number = 0, pin_spdif_node_number = 0;
-	ULONG pin_line_out_node_number = 0;
 
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
@@ -424,9 +373,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 			//disable every audio output (for now) by connecting it to stream 0
 			hda_send_verb(node, 0x706, 0x00);
-			//if initing a path with a pin complex numerically earlier
-			//this will disable it again.
-			//TODO: remove this when moving beyond one-shot parser
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_INPUT) {
 			DbgPrint( ("Input Converter"));
@@ -514,12 +460,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 					DbgPrint( (" (dock)"));
 				}
 	
-				// Save the front/primary line-out node to initialize later after
-				// the pass thru all nodes. Sequence 0 is the front channel in an
-				// association group; prefer it over rear/sub/side (sequence > 0).
-				// If no sequence-0 line-out is found, fall back to the first one seen.
-				if (pin_line_out_node_number == 0 || pin_sequence == 0) {
-					pin_line_out_node_number = node;
+				//try to init ALL line-outs now, not worrying about jack detect yet
+				hda_initialize_output_pin(node, path); //initialize line out
+				pin_output_node_number = node; //save output node number
+
+				//add path to paths list
+				if (out_paths.count < MAX_OUTPUT_PATHS) {
+					out_paths.paths[out_paths.count++] = path;
 				}
 
 			} else if(pin_node_type == HDA_PIN_SPEAKER) {
@@ -530,14 +477,26 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 					pin_speaker_default_node_number = node;
 				}
 
-				//find if device is output capable and connected
-				if(pin_connectivity != 0x1 && (hda_send_verb(node, 0xF00, 0x0C) & 0x10) == 0x10) {
-					DbgPrint( ("connected output device"));
-					if(pin_speaker_node_number==0) {
-						pin_speaker_node_number = node;
+				//find if there is device connected to this PIN
+				if((hda_send_verb(node, 0xF00, 0x09) & 0x4) == 0x4) {
+					//find if it is jack or fixed device
+					if((hda_send_verb(node, 0xF1C, 0x00) >> 30) != 0x1) {
+						//find if is device output capable
+						if((hda_send_verb(node, 0xF00, 0x0C) & 0x10) == 0x10) {
+							//there is connected device
+							DbgPrint( ("connected output device"));
+							//we will use first pin with connected device, so save node number only for first PIN
+							if(pin_speaker_node_number==0) {
+								pin_speaker_node_number = node;
+							}
+						} else {
+							DbgPrint( ("not output capable"));
+						}
+					} else {
+						DbgPrint( ("not jack or fixed device"));
 					}
 				} else {
-					DbgPrint( ("not output capable"));
+					DbgPrint( ("no output device"));
 				}
 			} else if(pin_node_type == HDA_PIN_HEADPHONE_OUT) {
 				DbgPrint( ("Headphone Out"));
@@ -620,8 +579,6 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			hda_send_verb(node, 0x705, 0x00);
 		} else if(type_of_node == HDA_WIDGET_VOLUME_KNOB) {
 			DbgPrint( ("Volume Knob"));
-			// Unmute and set direct software control to max volume (0 dB attenuation)
-			hda_send_verb(node, 0x70F, 0xFF);
 		} else if(type_of_node == HDA_WIDGET_BEEP_GENERATOR) {
 			DbgPrint( ("Beep Generator"));
 		} else if(type_of_node == HDA_WIDGET_VENDOR_DEFINED) {
@@ -687,39 +644,13 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				out_paths.paths[out_paths.count++] = path;
 			}
 		}
-
-		if (dock_lineout_node_number != 0) {
-			DbgPrint("\nDock Line output ");
-			hda_initialize_output_pin(dock_lineout_node_number, path);
-			if (out_paths.count < MAX_OUTPUT_PATHS) {
-				out_paths.paths[out_paths.count++] = path;
-			}
-		}
 	}
-	else if (pin_line_out_node_number != 0) {
-		DbgPrint("\nLine output selected ");
-		hda_initialize_output_pin(pin_line_out_node_number, path);
-		pin_output_node_number = pin_line_out_node_number;
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
-
-		if (pin_headphone_node_number != 0) {
-			DbgPrint("\n\nHeadphone output ");
-			hda_initialize_output_pin(pin_headphone_node_number, path);
-			headphone_node_number = pin_headphone_node_number;
-			if (out_paths.count < MAX_OUTPUT_PATHS) {
-				out_paths.paths[out_paths.count++] = path;
-			}
-		}
-	}
-	else if(pin_headphone_node_number != 0) { //codec do not have speaker or line out, but only headphone output
+	else if(pin_headphone_node_number != 0) { //codec do not have speaker, but only headphone output
 		DbgPrint("\nHeadphone output selected ");
+
 		hda_initialize_output_pin(pin_headphone_node_number, path); //initialize headphone output
 		pin_output_node_number = pin_headphone_node_number; //save headphone node number
-		if (out_paths.count < MAX_OUTPUT_PATHS) {
-			out_paths.paths[out_paths.count++] = path;
-		}
+
 	}
 
 	if (pin_alternative_output_node_number != 0) { //codec has alternative output
@@ -742,7 +673,21 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	}
 
 
+	hda_log("WDMHDA: ---- GPIO scan (mask!=0) ----\n");
 
+	for (ULONG n = ((subordinate_node_count_reponse >> 16) & 0xFF),
+			   last = n + (subordinate_node_count_reponse & 0xFF);
+		 n < last;
+		 n++)
+	{
+		ULONG gmask = hda_send_verb(n, 0xF16, 0);
+		if (gmask != 0 && gmask != 0xFFFFFFFFUL)
+		{
+			ULONG gdir  = hda_send_verb(n, 0xF17, 0);
+			ULONG gdata = hda_send_verb(n, 0xF15, 0);
+			hda_log("WDMHDA: GPIO node=%lu mask=%08lX dir=%08lX data=%08lX\n", n, gmask, gdir, gdata);
+		}
+	}
 	
 	if (codec_quirks & HDA_QUIRK_EEEPC_701)
 		ApplyEeeInit(); 
@@ -1388,8 +1333,7 @@ void HDA_Codec::ApplyEeeInit()
     SetOutAmpLR(4, FALSE, 0x00);
 }
 
-//TODO: support multiple headphone, speaker, & line-out nodes. 
-//currently only handles one of each
+//TODO: multiple headphone & speaker nodes
 
 STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 	//scheduled as a periodic task 
@@ -1439,7 +1383,6 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
         hda_log("HDA_Codec: SwitchOutput -> SPEAKERS\n");
 
         hda_enable_pin_output(pin_output_node_number, FALSE);
-        ForceEapd(pin_output_node_number, TRUE);
 		//don't disable headphone output on unplug event (for now)
     }
 	
@@ -1450,9 +1393,8 @@ STDMETHODIMP_(void) HDA_Codec::hda_check_headphone_connection_change(void) {
 BOOLEAN HDA_Codec::IsDockLineoutPresent()
 {
 	if (InShutdown) return FALSE;
-	if (dock_lineout_node_number == 0) return FALSE;
-	hda_send_verb(dock_lineout_node_number, 0x709, 0x00);
-	return (hda_send_verb(dock_lineout_node_number, VERB_GET_PIN_SENSE, 0x00) & 0x80000000) != 0;
+	return dock_lineout_node_number != 0 &&
+		(hda_send_verb(dock_lineout_node_number, VERB_GET_PIN_SENSE, 0x00) & 0x80000000) != 0;
 }
 
 
@@ -1687,13 +1629,9 @@ STDMETHODIMP_(void) HDA_Codec::hda_disable_pin(ULONG pin_node) {
 STDMETHODIMP_(BOOLEAN) HDA_Codec::hda_is_headphone_connected ( void ) {
 	if (InShutdown) return FALSE;
 
-	if (headphone_node_number != 0) {
-		hda_send_verb(headphone_node_number, 0x709, 0x00);
-		BOOLEAN sense = (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000;
-		if (codec_quirks & HDAA_QUIRK_SENSEINV) {
-			sense = !sense;
-		}
-		return sense;
+	if (headphone_node_number != 0
+    && (hda_send_verb(headphone_node_number, 0xF09, 0x00) & 0x80000000) == 0x80000000) {
+		return TRUE;
 	}
 	else {
 		return FALSE;

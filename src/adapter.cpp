@@ -1,13 +1,17 @@
 /*****************************************************************************
  * adapter.cpp - HDA adapter driver implementation.
  *****************************************************************************
+ * Original Sample Code:
  * Copyright (c) 1997-1999 Microsoft Corporation.  All rights reserved.
+ * Released under MIT license as part of Windows Driver Kit 7.1
+ * HD Audio driver code bt Drew Hoffman. copyright 2025-2026
+ * Released under MIT license, see license file for details
  *
  * This files does setup and resource allocation/verification for the HDA
  * card. It controls which miniports are started and which resources are
  * given to each miniport. It also deals with interrupt sharing between
- * miniports by hooking the interrupt and calling the correct DPC.
- */
+ * miniports by hooking the interrupt  calling the correct DPC.
+ */and
 
 //
 // All the GUIDS for all the miniports end up in this object.
@@ -25,6 +29,7 @@
  * Defines
  */
 #define MAX_MINIPORTS 5
+#define MAX_AUDIO_ADAPTERS 4
 
 #if (DBG)
 #define SUCCEEDS(s) ASSERT(NT_SUCCESS(s))
@@ -33,7 +38,16 @@
 #endif
 
 
-PDEVICE_OBJECT   PDO;
+/*****************************************************************************
+ * Trampoline Registry Structure & Globals
+ */
+typedef struct _ADAPTER_SLOT {
+    BOOLEAN         InUse;
+    PDEVICE_OBJECT  Pdo;
+} ADAPTER_SLOT, *PADAPTER_SLOT;
+
+static ADAPTER_SLOT g_AdapterSlots[MAX_AUDIO_ADAPTERS];
+static KSPIN_LOCK   g_SlotLock;
 
 
 /*****************************************************************************
@@ -57,9 +71,6 @@ CreateMiniportTopologyHDA
 );
 
 
-
-
-
 /*****************************************************************************
  * Referenced forward
  */
@@ -72,11 +83,12 @@ AddDevice
 );
 
 NTSTATUS
-StartDevice
+StartDeviceReal
 (
     IN  PDEVICE_OBJECT  DeviceObject,   // Device object.
     IN  PIRP            Irp,            // IO request packet.
-    IN  PRESOURCELIST   ResourceList    // List of hardware resources.
+    IN  PRESOURCELIST   ResourceList,   // List of hardware resources.
+    IN  PDEVICE_OBJECT  PhysicalDeviceObject // Bound PDO.
 );
 
 BOOLEAN
@@ -109,6 +121,45 @@ AdapterDispatchPnp
 #endif
 
 
+/*****************************************************************************
+ * Indexed StartDevice Trampolines
+ * 
+ * This is the best solution I could come up with to the problem of Portcls
+ * saving the PDO in the device extension but providing no way to access it.
+ * to account for multiple AddDevice's in flight before a StartDevice is called
+ * there are 4 different keyed function pointers so we can associate each
+ * StartDevice with its proper PDO. 
+ *****************************************************************************/
+#define DEFINE_START_DEVICE_WRAPPER(idx)                                    \
+NTSTATUS                                                                    \
+StartDeviceWrapper##idx                                                     \
+(                                                                           \
+    IN PDEVICE_OBJECT DeviceObject,                                         \
+    IN PIRP           Irp,                                                  \
+    IN PRESOURCELIST  ResourceList                                          \
+)                                                                           \
+{                                                                           \
+    KIRQL oldIrql;                                                          \
+    KeAcquireSpinLock(&g_SlotLock, &oldIrql);                               \
+    PDEVICE_OBJECT pdo = g_AdapterSlots[idx].Pdo;                           \
+    g_AdapterSlots[idx].InUse = FALSE;                                      \
+    g_AdapterSlots[idx].Pdo   = NULL;                                       \
+    KeReleaseSpinLock(&g_SlotLock, oldIrql);                                \
+    return StartDeviceReal(DeviceObject, Irp, ResourceList, pdo);           \
+}
+
+DEFINE_START_DEVICE_WRAPPER(0)
+DEFINE_START_DEVICE_WRAPPER(1)
+DEFINE_START_DEVICE_WRAPPER(2)
+DEFINE_START_DEVICE_WRAPPER(3)
+
+static PCPFNSTARTDEVICE g_StartDeviceTable[MAX_AUDIO_ADAPTERS] = {
+    (PCPFNSTARTDEVICE)StartDeviceWrapper0,
+    (PCPFNSTARTDEVICE)StartDeviceWrapper1,
+    (PCPFNSTARTDEVICE)StartDeviceWrapper2,
+    (PCPFNSTARTDEVICE)StartDeviceWrapper3
+};
+
 
 #pragma code_seg("INIT")
 
@@ -116,7 +167,6 @@ AdapterDispatchPnp
  * DriverEntry()
  *****************************************************************************
  * This function is called by the operating system when the driver is loaded.
- * All adapter drivers can use this code without change.
  */
 extern "C"
 NTSTATUS
@@ -127,6 +177,10 @@ DriverEntry
 )
 {
     PAGED_CODE();
+
+    // Initialize global registry spinlock
+    KeInitializeSpinLock(&g_SlotLock);
+    RtlZeroMemory(g_AdapterSlots, sizeof(g_AdapterSlots));
 
     //
     // Tell the class driver to initialize the driver.
@@ -153,7 +207,10 @@ DriverEntry
  * AddDevice()
  *****************************************************************************
  * This function is called by the operating system when the device is added.
- * All adapter drivers can use this code without change.
+ * note that PcAddAdapterDevice takes the PDO but only returns a NTSTATUS
+ * and doesn't let us get at the DeviceExtension on the new DeviceObject
+ * that it created. 
+ * Hence the terrible workaround to allow for more than one in flight
  */
 extern "C"
 NTSTATUS
@@ -165,36 +222,45 @@ AddDevice
 {
     PAGED_CODE();
 
-	ASSERT(PhysicalDeviceObject != NULL);
-    DOUT(DBG_SYSINFO, ("PDO 0x%X", 
-				PhysicalDeviceObject));
-	PDO = PhysicalDeviceObject;
+    ASSERT(PhysicalDeviceObject != NULL);
+    DOUT(DBG_SYSINFO, ("PDO 0x%X", PhysicalDeviceObject));
+    DOUT(DBG_SYSINFO, ("DriverObject 0x%X", DriverObject));
 
+    KIRQL oldIrql;
+    ULONG slotIndex = (ULONG)-1;
 
-	DOUT(DBG_SYSINFO, ("FDO 0x%X", 
-				DriverObject));
+    // Allocate an adapter slot for the incoming PDO
+    KeAcquireSpinLock(&g_SlotLock, &oldIrql);
+    for (ULONG i = 0; i < MAX_AUDIO_ADAPTERS; i++)
+    {
+        if (!g_AdapterSlots[i].InUse)
+        {
+            g_AdapterSlots[i].InUse = TRUE;
+            g_AdapterSlots[i].Pdo   = PhysicalDeviceObject;
+            slotIndex = i;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&g_SlotLock, oldIrql);
+
+    if (slotIndex == (ULONG)-1)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     //
-    // Tell the class driver to add the device.
+    // Pass the slot-bound trampoline to PortCls
     //
-
     return PcAddAdapterDevice( DriverObject,
                                PhysicalDeviceObject,
-                               PCPFNSTARTDEVICE( StartDevice ),
+                               g_StartDeviceTable[slotIndex],
                                MAX_MINIPORTS,
                                0 );
 }
 
 /*****************************************************************************
  * InstallSubdevice()
- *****************************************************************************
- * This function creates and registers a subdevice consisting of a port
- * driver, a minport driver and a set of resources bound together.  It will
- * also optionally place a pointer to an interface on the port driver in a
- * specified location before initializing the port driver.  This is done so
- * that a common ISR can have access to the port driver during initialization,
- * when the ISR might fire.
- */
+ *****************************************************************************/
 NTSTATUS
 InstallSubdevice
 (
@@ -232,9 +298,6 @@ InstallSubdevice
         //
         if (OutPortInterface)
         {
-            //
-            //  Failure here doesn't cause the entire routine to fail.
-            //
             (void) port->QueryInterface
             (
                 PortInterfaceId,
@@ -295,10 +358,6 @@ InstallSubdevice
                 _DbgPrintF(DEBUGLVL_TERSE, ("InstallSubdevice: port->Init failed"));
             }
 
-            //
-            // We don't need the miniport any more.  Either the port has it,
-            // or we've failed, and it should be deleted.
-            //
             miniport->Release();
         }
         else
@@ -308,14 +367,8 @@ InstallSubdevice
 
         if (NT_SUCCESS(ntStatus))
         {
-            //
-            // Deposit the port as an unknown if it's needed.
-            //
             if (OutPortUnknown)
             {
-                //
-                //  Failure here doesn't cause the entire routine to fail.
-                //
                 (void) port->QueryInterface
                 (
                     IID_IUnknown,
@@ -325,9 +378,6 @@ InstallSubdevice
         }
         else
         {
-            //
-            // Retract previously delivered port interface.
-            //
             if (OutPortInterface && (*OutPortInterface))
             {
                 (*OutPortInterface)->Release();
@@ -335,11 +385,6 @@ InstallSubdevice
             }
         }
 
-        //
-        // Release the reference which existed when PcNewPort() gave us the
-        // pointer in the first place.  This is the right thing to do
-        // regardless of the outcome.
-        //
         port->Release();
     }
     else
@@ -351,31 +396,28 @@ InstallSubdevice
 }
 
 /*****************************************************************************
- * StartDevice()
+ * StartDeviceReal()
  *****************************************************************************
- * This function is called by the operating system when the device is started.
- * It is responsible for starting the miniports.  This code is specific to
- * the adapter because it calls out miniports for functions that are specific
- * to the adapter.
+ * Real StartDevice implementation called by trampoline wrappers with explicit PDO.
  */
 NTSTATUS
-StartDevice
+StartDeviceReal
 (
-    IN  PDEVICE_OBJECT  DeviceObject,   // Device object.
-    IN  PIRP            Irp,            // IO request packet.
-    IN  PRESOURCELIST   ResourceList    // List of hardware resources.
+    IN  PDEVICE_OBJECT  DeviceObject,           // Device object.
+    IN  PIRP            Irp,                    // IO request packet.
+    IN  PRESOURCELIST   ResourceList,           // List of hardware resources.
+    IN  PDEVICE_OBJECT  PhysicalDeviceObject    // Physical Device Object.
 )
 {
     PAGED_CODE();
 
-
     ASSERT(DeviceObject);
     ASSERT(Irp);
     ASSERT(ResourceList);
+    ASSERT(PhysicalDeviceObject);
 
     //
-    // These are the sub-lists of resources that will be handed to the
-    // miniports.
+    // These are the sub-lists of resources that will be handed to the miniports.
     //
     PRESOURCELIST   resourceListTopology    = NULL;
     PRESOURCELIST   resourceListWave        = NULL;
@@ -394,8 +436,7 @@ StartDevice
     PUNKNOWN    unknownFmSynth    = NULL;
 
     //
-    // Assign resources to individual miniports.  Each sub-list is a copy
-    // of the resources from the master list. Each sublist must be released.
+    // Assign resources to individual miniports.
     //
     NTSTATUS ntStatus = AssignResources( ResourceList,
                                          &resourceListTopology,
@@ -405,14 +446,8 @@ StartDevice
                                          &resourceListUart,
                                          &resourceListAdapter );
 
-    //
-    // if AssignResources succeeded...
-    //
     if(NT_SUCCESS(ntStatus))
     {
-        //
-        // If the adapter has resources...
-        //
         PADAPTERCOMMON pAdapterCommon = NULL;
         if (resourceListAdapter)
         {
@@ -432,22 +467,21 @@ StartDevice
                                                            (PVOID *)&pAdapterCommon );
                 if (NT_SUCCESS(ntStatus))
                 {
-                    // Initialize the object
+                    // Initialize the object passing the explicit PDO
                     ntStatus = pAdapterCommon->Init( resourceListAdapter,
-                                                     DeviceObject, PDO );
+                                                     DeviceObject, 
+                                                     PhysicalDeviceObject );
                     if (NT_SUCCESS(ntStatus))
                     {
-                        // register with PortCls for power-managment services
+                        // register with PortCls for power-management services
                         ntStatus = PcRegisterAdapterPowerManagement( (PUNKNOWN)pAdapterCommon,
                                                                      DeviceObject );
                     }
                 }
 
-                // release the IUnknown on adapter common
                 pUnknownCommon->Release();
             }
 
-            // release the adapter common resource list
             resourceListAdapter->Release();
         }
 
@@ -462,7 +496,7 @@ StartDevice
                                              Irp,
                                              L"Topology",
                                              CLSID_PortTopology,
-                                             CLSID_PortTopology, // not used
+                                             CLSID_PortTopology,
                                              CreateMiniportTopologyHDA,
                                              pAdapterCommon,
                                              resourceListTopology,
@@ -471,7 +505,6 @@ StartDevice
                                              &unknownTopology );
             }
 
-            // release the topology resource list
             resourceListTopology->Release();
         }
 
@@ -486,7 +519,7 @@ StartDevice
                                              Irp,
                                              L"Wave",
                                              CLSID_PortWaveCyclic,
-                                             CLSID_PortWaveCyclic,   // not used
+                                             CLSID_PortWaveCyclic,
                                              CreateMiniportWaveCyclicHDA,
                                              pAdapterCommon,
                                              resourceListWave,
@@ -495,40 +528,18 @@ StartDevice
                                              &unknownWave );
             }
 
-            // release the wave resource list
             resourceListWave->Release();
         }
 
-		//everything below this line cannot exist now as it was removed from ProcessResources
-
-        // Start the wave table miniport if it exists.
         if (resourceListWaveTable)
         {
-            //
-            // NOTE: The wavetable is not currently supported in this sample driver.
-            //
-
-            // release the wavetable resource list
             resourceListWaveTable->Release();
         }
 
-        //
-        // Start the FM synth miniport if it exists.
-        //
         if (resourceListFmSynth)
         {
-            //
-            // Synth not working yet.
-			// This is supposed to pass an i/o port to the built-in FMSynth miniport
-			// if we don't have hardware FM this cannot work.
-			// TODO: build SBEMUL like driver to trap OPL ports & route to Nuked OPL3
-            //
-
             if (NT_SUCCESS(ntStatus))
             {
-                //
-                // Failure here is not fatal.
-                //
                 InstallSubdevice( DeviceObject,
                                   Irp,
                                   L"FMSynth",
@@ -542,20 +553,13 @@ StartDevice
                                   &unknownFmSynth );
             }
 
-            // release the FM synth resource list
             resourceListFmSynth->Release();
         }
 
-        //
-        // Start the UART miniport if it exists.
-        //
         if (resourceListUart)
         {
             if (NT_SUCCESS(ntStatus))
             {
-                //
-                // Failure here is not fatal.
-                //
                 InstallSubdevice( DeviceObject,
                                   Irp,
                                   L"Uart",
@@ -566,31 +570,16 @@ StartDevice
                                   resourceListUart,
                                   IID_IPortDMus,
                                   pAdapterCommon->MidiPortDriverDest(),
-                                  NULL );   // not physically connected to anything
+                                  NULL );
             }
 
             resourceListUart->Release();
         }
 
-        //
-        // Establish physical connections between filters as shown.
-        //
-        //              +------+    +------+
-        //              | Wave |    | Topo |
-        //  Capture <---|0    1|<===|6    2|<--- CD
-        //              |      |    |      |
-        //   Render --->|2    3|===>|0    3|<--- Line In
-        //              +------+    |      |
-        //              +------+    |     4|<--- Mic
-        //              |  FM  |    |      |
-        //     MIDI --->|0    1|===>|1    5|---> Line Out
-        //              +------+    +------+
-        //
         if (unknownTopology)
         {
             if (unknownWave)
             {
-                // register wave <=> topology connections
                 PcRegisterPhysicalConnection( (PDEVICE_OBJECT)DeviceObject,
                                             unknownTopology,
                                             6,
@@ -605,7 +594,6 @@ StartDevice
 
             if (unknownFmSynth)
             {
-                // register fmsynth <=> topology connection
                 PcRegisterPhysicalConnection( (PDEVICE_OBJECT)DeviceObject,
                                             unknownFmSynth,
                                             1,
@@ -614,18 +602,11 @@ StartDevice
             }
         }
 
-        //
-        // Release the adapter common object.  It either has other references,
-        // or we need to delete it anyway.
-        //
         if (pAdapterCommon)
         {
             pAdapterCommon->Release();
         }
 
-        //
-        // Release the unknowns.
-        //
         if (unknownTopology)
         {
             unknownTopology->Release();
@@ -650,67 +631,51 @@ StartDevice
 
 /*****************************************************************************
  * AssignResources()
- *****************************************************************************
- * This function assigns the list of resources to the various functions on
- * the card.  This code is specific to the adapter.  All the non-NULL resource
- * lists handed back must be released by the caller.
- */
+ *****************************************************************************/
 NTSTATUS
 AssignResources
 (
-    IN      PRESOURCELIST   ResourceList,           // All resources.
-    OUT     PRESOURCELIST * ResourceListTopology,   // Topology resources.
-    OUT     PRESOURCELIST * ResourceListWave,       // Wave resources.
-    OUT     PRESOURCELIST * ResourceListWaveTable,  // Wave table resources.
-    OUT     PRESOURCELIST * ResourceListFmSynth,    // FM synth resources.
-    OUT     PRESOURCELIST * ResourceListUart,       // Uart resources.
-    OUT     PRESOURCELIST * ResourceListAdapter     // For the adapter
+    IN      PRESOURCELIST   ResourceList,
+    OUT     PRESOURCELIST * ResourceListTopology,
+    OUT     PRESOURCELIST * ResourceListWave,
+    OUT     PRESOURCELIST * ResourceListWaveTable,
+    OUT     PRESOURCELIST * ResourceListFmSynth,
+    OUT     PRESOURCELIST * ResourceListUart,
+    OUT     PRESOURCELIST * ResourceListAdapter
 )
 {
     BOOLEAN     detectedWaveTable   = FALSE;
     BOOLEAN     detectedUart        = FALSE;
     BOOLEAN     detectedFmSynth     = FALSE;
 
-    //
-    // Get counts for the types of resources.
-    //
     ULONG countIO  = ResourceList->NumberOfPorts();
     ULONG countIRQ = ResourceList->NumberOfInterrupts();
     ULONG countDMA = ResourceList->NumberOfDmas();
 
-    //
-    // Determine the type of card based on port resources.
-    //
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
     switch (countIO)
     {
-	case 0:
-		//
-        // HD Audio doesn't use IO ports or 8237 DMA. No FM synth or UART.
-		if ((countIO != 0) || (countIRQ > 1) || (countDMA != 0))
-		{
-			DOUT (DBG_ERROR, ("Unknown configuration!\n"
+    case 0:
+        if ((countIO != 0) || (countIRQ > 1) || (countDMA != 0))
+        {
+            DOUT (DBG_ERROR, ("Unknown configuration!\n"
                           "   IO  count: %d\n"
                           "   IRQ count: %d\n"
                           "   DMA count: %d",
                           countIO, countIRQ, countDMA));
-			ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-		} else if (countIRQ == 0){
-			ntStatus = STATUS_INSUFFICIENT_RESOURCES;
-		} else {
-			ntStatus = STATUS_SUCCESS;
-		}
-        //removed other cases
-		break;
+            ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
+        } else if (countIRQ == 0){
+            ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+        } else {
+            ntStatus = STATUS_SUCCESS;
+        }
+        break;
     default:
         ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
         break;
     }
 
-    //
-    // Build list of resources for the topology.
-    //
     *ResourceListTopology = NULL;
     if (NT_SUCCESS(ntStatus))
     {
@@ -731,9 +696,6 @@ AssignResources
         }
     }
 
-    //
-    // Build the resource list for the SB wave I/O.
-    //
     *ResourceListWave = NULL;
     if (NT_SUCCESS(ntStatus))
     {
@@ -751,24 +713,15 @@ AssignResources
         {
             ULONG i;
 
-            //
-            // Add the base address
-            //
             SUCCEEDS((*ResourceListWave)->
                 AddMemoryFromParent(ResourceList,0));
 
-            //
-            // Add the DMA channel(s).
-            //
             for (i = 0; i < countDMA; i++)
             {
                 SUCCEEDS((*ResourceListWave)->
                     AddDmaFromParent(ResourceList,i));
             }
 
-            //
-            // Add the IRQ lines.
-            //
             for (i = 0; i < countIRQ; i++)
             {
                 SUCCEEDS((*ResourceListWave)->
@@ -777,20 +730,12 @@ AssignResources
         }
     }
 
-    //
-    // Build list of resources for wave table.
-    //
     *ResourceListWaveTable = NULL;
     if (NT_SUCCESS(ntStatus) && detectedWaveTable)
     {
-        //
-        // TODO:  Assign wave table resources.
-        //
+        // TODO: Assign wave table resources.
     }
 
-    //
-    // Build list of resources for UART.
-    //
     *ResourceListUart = NULL;
     if (NT_SUCCESS(ntStatus) && detectedUart)
     {
@@ -813,9 +758,6 @@ AssignResources
         }
     }
 
-    //
-    // Build list of resources for FM synth.
-    //
     *ResourceListFmSynth = NULL;
     if (NT_SUCCESS(ntStatus) && detectedFmSynth)
     {
@@ -836,9 +778,6 @@ AssignResources
         }
     }
 
-    //
-    // Build list of resources for the adapter.
-    //
     *ResourceListAdapter = NULL;
     if (NT_SUCCESS(ntStatus))
     {
@@ -854,32 +793,20 @@ AssignResources
 
         if (NT_SUCCESS(ntStatus))
         {
-            //
-            // The interrupt to share.
-            //
             SUCCEEDS((*ResourceListAdapter)->
                 AddInterruptFromParent(ResourceList,0));
 
-            //
-            // The base IO port (to tell who's interrupt it is)
-            //
             SUCCEEDS((*ResourceListAdapter)->
                 AddMemoryFromParent(ResourceList,0));
 
             if (detectedUart)
             {
-                //
-                // The Uart port
-                //
                 SUCCEEDS((*ResourceListAdapter)->
                     AddMemoryFromParent(ResourceList,1));
             }
         }
     }
 
-    //
-    // Clean up if failure occurred.
-    //
     if (! NT_SUCCESS(ntStatus))
     {
         if (*ResourceListWave)
@@ -909,7 +836,6 @@ AssignResources
         }
     }
 
-
     return ntStatus;
 }
 
@@ -918,9 +844,7 @@ AssignResources
 #pragma code_seg("PAGE")
 /*****************************************************************************
  * AdapterDispatchPnp()
- *****************************************************************************
- * Supplying your PnP resource filtering needs.
- */
+ *****************************************************************************/
 extern "C"
 NTSTATUS
 AdapterDispatchPnp
@@ -936,26 +860,15 @@ AdapterDispatchPnp
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    PIO_STACK_LOCATION pIrpStack =
-        IoGetCurrentIrpStackLocation(pIrp);
+    PIO_STACK_LOCATION pIrpStack = IoGetCurrentIrpStackLocation(pIrp);
 
     if( pIrpStack->MinorFunction == IRP_MN_FILTER_RESOURCE_REQUIREMENTS )
     {
-        //
-        // Do your resource requirements filtering here!!
-        //
         _DbgPrintF(DEBUGLVL_VERBOSE,("[AdapterDispatchPnp] - IRP_MN_FILTER_RESOURCE_REQUIREMENTS"));
-
-        // set the return status
         pIrp->IoStatus.Status = ntStatus;
-
     }
 
-    //
-    // Pass the IRPs on to PortCls
-    //
-    ntStatus = PcDispatchIrp( pDeviceObject,
-                              pIrp );
+    ntStatus = PcDispatchIrp( pDeviceObject, pIrp );
 
     return ntStatus;
 }
@@ -966,10 +879,7 @@ AdapterDispatchPnp
 
 /*****************************************************************************
  * _purecall()
- *****************************************************************************
- * The C++ compiler loves me.
- * TODO: Figure out how to put this into portcls.sys
- */
+ *****************************************************************************/
 int __cdecl
 _purecall( void )
 {

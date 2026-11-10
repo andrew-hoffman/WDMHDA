@@ -10,7 +10,7 @@
  * This files does setup and resource allocation/verification for the HDA
  * card. It controls which miniports are started and which resources are
  * given to each miniport. It also deals with interrupt sharing between
- * miniports by hooking the interrupt  calling the correct DPC.
+ * miniports by hooking the interrupt and calling the correct DPC.
  */
 
 //
@@ -29,7 +29,11 @@
  * Defines
  */
 #define MAX_MINIPORTS 5
-#define MAX_AUDIO_ADAPTERS 4
+
+// PortCls reserves device-extension slots 4-7 for adapter-driver use.
+// Store the per-device PDO in slot 4 (offset 16 on i386).
+#define ADAPTER_PDO_SLOT(DeviceObject) \
+    (((PDEVICE_OBJECT *)(DeviceObject)->DeviceExtension)[4])
 
 #if (DBG)
 #define SUCCEEDS(s) ASSERT(NT_SUCCESS(s))
@@ -37,17 +41,6 @@
 #define SUCCEEDS(s) (s)
 #endif
 
-
-/*****************************************************************************
- * Trampoline Registry Structure & Globals
- */
-typedef struct _ADAPTER_SLOT {
-    BOOLEAN         InUse;
-    PDEVICE_OBJECT  Pdo;
-} ADAPTER_SLOT, *PADAPTER_SLOT;
-
-static ADAPTER_SLOT g_AdapterSlots[MAX_AUDIO_ADAPTERS];
-static KSPIN_LOCK   g_SlotLock;
 
 
 /*****************************************************************************
@@ -83,12 +76,11 @@ AddDevice
 );
 
 NTSTATUS
-StartDeviceReal
+StartDevice
 (
     IN  PDEVICE_OBJECT  DeviceObject,   // Device object.
     IN  PIRP            Irp,            // IO request packet.
-    IN  PRESOURCELIST   ResourceList,   // List of hardware resources.
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject // Bound PDO.
+    IN  PRESOURCELIST   ResourceList    // List of hardware resources.
 );
 
 BOOLEAN
@@ -121,46 +113,6 @@ AdapterDispatchPnp
 #endif
 
 
-/*****************************************************************************
- * Indexed StartDevice Trampolines
- * 
- * This is the best solution I could come up with to the problem of Portcls
- * saving the PDO in the device extension but providing no way to access it.
- * to account for multiple AddDevice's in flight before a StartDevice is called
- * there are 4 different keyed function pointers so we can associate each
- * StartDevice with its proper PDO. 
- *****************************************************************************/
-#define DEFINE_START_DEVICE_WRAPPER(idx)                                    \
-NTSTATUS                                                                    \
-StartDeviceWrapper##idx                                                     \
-(                                                                           \
-    IN PDEVICE_OBJECT DeviceObject,                                         \
-    IN PIRP           Irp,                                                  \
-    IN PRESOURCELIST  ResourceList                                          \
-)                                                                           \
-{                                                                           \
-    KIRQL oldIrql;                                                          \
-    KeAcquireSpinLock(&g_SlotLock, &oldIrql);                               \
-    PDEVICE_OBJECT pdo = g_AdapterSlots[idx].Pdo;                           \
-    g_AdapterSlots[idx].InUse = FALSE;                                      \
-    g_AdapterSlots[idx].Pdo   = NULL;                                       \
-    KeReleaseSpinLock(&g_SlotLock, oldIrql);                                \
-    return StartDeviceReal(DeviceObject, Irp, ResourceList, pdo);           \
-}
-
-DEFINE_START_DEVICE_WRAPPER(0)
-DEFINE_START_DEVICE_WRAPPER(1)
-DEFINE_START_DEVICE_WRAPPER(2)
-DEFINE_START_DEVICE_WRAPPER(3)
-
-static PCPFNSTARTDEVICE g_StartDeviceTable[MAX_AUDIO_ADAPTERS] = {
-    (PCPFNSTARTDEVICE)StartDeviceWrapper0,
-    (PCPFNSTARTDEVICE)StartDeviceWrapper1,
-    (PCPFNSTARTDEVICE)StartDeviceWrapper2,
-    (PCPFNSTARTDEVICE)StartDeviceWrapper3
-};
-
-
 #pragma code_seg("INIT")
 
 /*****************************************************************************
@@ -178,9 +130,6 @@ DriverEntry
 {
     PAGED_CODE();
 
-    // Initialize global registry spinlock
-    KeInitializeSpinLock(&g_SlotLock);
-    RtlZeroMemory(g_AdapterSlots, sizeof(g_AdapterSlots));
 
     //
     // Tell the class driver to initialize the driver.
@@ -226,36 +175,31 @@ AddDevice
     DOUT(DBG_SYSINFO, ("PDO 0x%X", PhysicalDeviceObject));
     DOUT(DBG_SYSINFO, ("DriverObject 0x%X", DriverObject));
 
-    KIRQL oldIrql;
-    ULONG slotIndex = (ULONG)-1;
-
-    // Allocate an adapter slot for the incoming PDO
-    KeAcquireSpinLock(&g_SlotLock, &oldIrql);
-    for (ULONG i = 0; i < MAX_AUDIO_ADAPTERS; i++)
+    // Tell the class driver to add the device.
+    NTSTATUS ntStatus = PcAddAdapterDevice( DriverObject,
+                                            PhysicalDeviceObject,
+                                            PCPFNSTARTDEVICE( StartDevice ),
+                                            MAX_MINIPORTS,
+                                            0 );
+    if (NT_SUCCESS(ntStatus))
     {
-        if (!g_AdapterSlots[i].InUse)
+        // PcAddAdapterDevice has attached its FDO to this PDO. Save the PDO
+        // in PortCls' per-device extension for the later StartDevice call.
+        PDEVICE_OBJECT fdo = IoGetAttachedDeviceReference(PhysicalDeviceObject);
+        if (fdo != NULL)
         {
-            g_AdapterSlots[i].InUse = TRUE;
-            g_AdapterSlots[i].Pdo   = PhysicalDeviceObject;
-            slotIndex = i;
-            break;
+            ADAPTER_PDO_SLOT(fdo) = PhysicalDeviceObject;
+            ObDereferenceObject(fdo);
+        }
+        else
+        {
+            ntStatus = STATUS_NO_SUCH_DEVICE;
         }
     }
-    KeReleaseSpinLock(&g_SlotLock, oldIrql);
 
-    if (slotIndex == (ULONG)-1)
-    {
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
+    return ntStatus;
 
-    //
-    // Pass the slot-bound trampoline to PortCls
-    //
-    return PcAddAdapterDevice( DriverObject,
-                               PhysicalDeviceObject,
-                               g_StartDeviceTable[slotIndex],
-                               MAX_MINIPORTS,
-                               0 );
+
 }
 
 /*****************************************************************************
@@ -396,17 +340,15 @@ InstallSubdevice
 }
 
 /*****************************************************************************
- * StartDeviceReal()
+ * StartDevice()
  *****************************************************************************
- * Real StartDevice implementation called by trampoline wrappers with explicit PDO.
  */
 NTSTATUS
-StartDeviceReal
+StartDevice
 (
     IN  PDEVICE_OBJECT  DeviceObject,           // Device object.
     IN  PIRP            Irp,                    // IO request packet.
-    IN  PRESOURCELIST   ResourceList,           // List of hardware resources.
-    IN  PDEVICE_OBJECT  PhysicalDeviceObject    // Physical Device Object.
+    IN  PRESOURCELIST   ResourceList            // List of hardware resources.
 )
 {
     PAGED_CODE();
@@ -414,7 +356,6 @@ StartDeviceReal
     ASSERT(DeviceObject);
     ASSERT(Irp);
     ASSERT(ResourceList);
-    ASSERT(PhysicalDeviceObject);
 
     //
     // These are the sub-lists of resources that will be handed to the miniports.
@@ -466,11 +407,19 @@ StartDeviceReal
                 ntStatus = pUnknownCommon->QueryInterface( IID_IAdapterCommon,
                                                            (PVOID *)&pAdapterCommon );
                 if (NT_SUCCESS(ntStatus))
-                {
-                    // Initialize the object passing the explicit PDO
-                    ntStatus = pAdapterCommon->Init( resourceListAdapter,
-                                                     DeviceObject, 
-                                                     PhysicalDeviceObject );
+                {                    
+                     // Initialize the object
+                     // Retrieve this adapter's PDO from its PortCls extension.
+                    PDEVICE_OBJECT pdo = ADAPTER_PDO_SLOT(DeviceObject);
+                    if (pdo != NULL)
+                    {
+                        ntStatus = pAdapterCommon->Init( resourceListAdapter,
+                                                         DeviceObject, pdo );
+                    }
+                    else
+                    {
+                        ntStatus = STATUS_NO_SUCH_DEVICE;
+                    }
                     if (NT_SUCCESS(ntStatus))
                     {
                         // register with PortCls for power-management services

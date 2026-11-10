@@ -8,11 +8,10 @@
  *
  */
 
-/*
- * THIS IS A BIT BROKEN FOR NOW.  IT USES A SINGLETON OBJECT FOR WHICH THERE
- * IS ONLY ONE INSTANCE PER DRIVER.  THIS MEANS THERE CAN ONLY ONE CARD
- * SUPPORTED IN ANY GIVEN MACHINE.  THIS WILL BE FIXED.
- */
+ /*
+  * Each HDA controller instance gets its own CAdapterCommon object.
+  * Multiple HDA controllers (e.g. onboard audio + dGPU HDMI) are supported.
+  */
 
 #ifndef _COMMON_H_
 #define _COMMON_H_

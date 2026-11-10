@@ -38,6 +38,7 @@ private:
     PUCHAR              PortBase;           // Base port address.
 
     BOOLEAN             BoardNotResponsive; // Indicates dead hardware.
+	BOOL                MasterMuteCache;    // Per-instance mute state cache.
 
     /*************************************************************************
      * CMiniportTopologyHDA methods

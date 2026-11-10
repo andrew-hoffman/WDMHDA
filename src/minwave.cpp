@@ -895,18 +895,11 @@ DataRangeIntersection
                           ((PKSDATARANGE_AUDIO) MatchingDataRange)->MaximumChannels );
         
         //
-        // Check if the pin is still free
+        // Check if the capture pin is still free
         //
         if (!PinId)
         {
             if (AllocatedCapture)
-            {
-                return STATUS_NO_MATCH;
-            }
-        }
-        else
-        {
-            if (AllocatedRender)
             {
                 return STATUS_NO_MATCH;
             }

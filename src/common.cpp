@@ -202,6 +202,8 @@ private:
 	ULONG communication_type;
 
 	ULONG debug_kludge;
+	BOOLEAN m_forcePioMode;  // Per-instance copy (VMware overrides global)
+	BOOLEAN m_useDmaPos;     // Per-instance copy (disabled if DMA pos fails)
 
 	// Codec array - packed array of initialized codecs (not sparse)
 	HDA_Codec* pCodecs[16];
@@ -293,14 +295,6 @@ public:
      * IAdapterCommon methods
      */
 
-	/* TODO: IAdapterCommon is currently a **singleton** 
-	but there may be multiple instances of this driver loaded at once
-	on systems with a dGPU with HDMI display audio support for instance
-	and currently that causes a CRASH.
-
-	There should be one IAdapterCommon object per HDA controller.
-	Each AdapterCommon may access multiple Codecs and that works fine already
-	*/
 
     STDMETHODIMP_(NTSTATUS) Init
     (
@@ -494,8 +488,7 @@ NewAdapterCommon
  * Initialize an adapter common object.
  */
 NTSTATUS
-CAdapterCommon::
-Init
+CAdapterCommon::Init
 (
     IN      PRESOURCELIST   ResourceList,
     IN      PDEVICE_OBJECT  DeviceObject,
@@ -547,6 +540,8 @@ Init
 	
 	//Read settings from registry	
 	Registry::ReadSettings(DeviceObject);
+	m_forcePioMode = Registry::forcePioMode;
+	m_useDmaPos = Registry::useDmaPos;
 	Registry::DetectOsVersion();
 
 	// Check for SSE2 / CLFLUSH support
@@ -616,7 +611,7 @@ Init
 		case 0x15AD: //VMWare
 			DbgPrint( "VMWare\n");
 			//force PIO mode because VMWare works better like this
-			Registry::forcePioMode = true;
+			m_forcePioMode = TRUE;
 			break;
 		case 0x1002: //ATI
 		case 0x1022: //AMD
@@ -1428,7 +1423,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//also other codecs can show up later with docking.
 	//would need to enable WAKEEN interrupts (register 0x0C) to handle later additions
 
-	if (Registry::forcePioMode){
+	if (m_forcePioMode){
 		goto hda_use_pio_interface;
 	}
  
@@ -1561,7 +1556,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		writeULONG (0x74, 0);
 	}
 
-	if (Registry::useDmaPos){
+	if (m_useDmaPos){
 		// turn on dma position transfer
 		writeULONG (0x70, DmaPosBuffer.AlignedLogicalAddress.LowPart | 0x1);
 	}
@@ -2716,7 +2711,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
 	USHORT stream_id = In ? FirstInputStream : FirstOutputStream; // stream 4 for most chipsets	
 	
-	if (Registry::useDmaPos){
+	if (m_useDmaPos){
 		ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosBuffer.AlignedVirtualAddress) + (stream_id * 8));
 		ULONG lpos = readULONG(StreamBase + 0x04);
 
@@ -2730,7 +2725,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 			//LPIB is moving but DMA isn't
 			if (++bad_dpos_count > 9){
 				DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
-				Registry::useDmaPos = FALSE;
+				m_useDmaPos = FALSE;
 				return lpos;
 			}
 			return dpos;

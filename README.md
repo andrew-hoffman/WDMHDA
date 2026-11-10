@@ -2,19 +2,21 @@
 
 This is a High Definition Audio aka Azalia codec and controller driver for retro Windows OSes. It supports the motherboard onboard audio for Intel 915 and later chipsets as well as other manufacturers that conform to the HD Audio standard.
 
-It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows 98(se)/Me/2000/XP, but only Windows 98 SE and ME are officially supported. The driver may load on Windows 98 First Edition but this is not supported due to known issues with sample rate and but depth conversion not working. Microsoft doesn't recommend the use of WDM audio drivers for this version of Windows. 
+It is designed for all versions of Windows with Windows Driver Model (WDM) support which is Windows 98(se)/Me, 2000 and XP.
 
-As Windows 2000/XP already has official HD Audio support through the KB888111 HDA Bus driver update, these versions of Windows will be supported but are not the intended primary target.
+The driver may load on Windows 98 First Edition but this is not supported due to known issues with sample rate and but depth conversion not working. Microsoft doesn't recommend the use of WDM audio drivers for this version of Windows. 
+
+As Windows 2000/XP already has official HD Audio support through the KB888111 HDA Bus driver update, these versions of Windows will be supported but are not the intended primary target of this project.
 
 Current status of this driver: known to function well in VMware, VirtualBox, Intel, Nvidia, AMD & VIA chipset HD Audio controllers with Realtek and VIA codecs; IDT, Analog Devices, and Cirrus Logic codecs are not well supported yet. Further testing is needed to improve support on all real hardware. 
 
-This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience garbled or glitchy audio, possible horrible screeching and popping noises or static, or complete silence, as well as possible hard freezes when the driver is loaded or unloaded. 
+This driver is dependent on the BIOS Pin Configuration defaults for selecting a sensible combination of outputs and there are no overrides yet for buggy BIOSes. You may experience failure to load, complete silence, garbled or glitchy audio, possibly horrible screeching and popping noises or static.
 
 If you want to use this software in some kind of business critical production application, I would highly recommend using a Sound Blaster Live, CMI8738 or any $2 USB Audio dongle instead. (Seriously, almost all of the cheapest USB Audio 1.0 class adapters work perfectly in 98se/Me.)
 
 Windows 9x may need to be patched to function at all on modern hardware and > 512mb of RAM even when virtualized. For Intel 12th gen and newer this is Mandatory. See [JHRobotics' Patcher9x project](https://github.com/JHRobotics/patcher9x) which now includes [Sweetlow's patch for memory resource conflict issues](https://msfn.org/board/topic/186768-bug-fix-vmmvxd-on-handling-4gib-addresses-and-description-of-problems-with-resource-manager-on-newer-bioses/). Or for a prepatched solution, try [Windows 98 QuickInstall from Oerg866](https://github.com/oerg866/win98-quickinstall/releases).
 
-## Installation:
+## Installation
 
 - Install HDA.inf with Device Manager on the HD Audio Controller device.
   - On Windows 98se/Me the device is listed in "Other Devices" as **"PCI Card"** with class code **0403** (you can run `hwinfo /ui` to see the vendor /device info on unknown devices).
@@ -24,25 +26,26 @@ Windows 9x may need to be patched to function at all on modern hardware and > 51
 
 It is recommended but not strictly necessary to install DirectX 8.1 or newer after installing this driver as it contains some improvements to the kernel streaming components. You may also wish to install the WDM Audio Update from Microsoft, which are packages Q242937 and Q269601.
 
-For best sound quality: go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Audio Acceleration to Standard (one notch to the left of Full) and Sample Rate Conversion Quality to Best (all the way to the right).
+For best sound quality: go to the Multimedia control panel, Click the Advanced Properties button for the Playback device, go to the Performance tab and set Sample Rate Conversion Quality to Best (all the way to the right). Audio Acceleration may be set as desired but there is no hardware EAX support. 
 
 To allow playback of Redbook CD Audio, Digital CD Audio must be enabled:
 - On Windows 98SE: go to the Multimedia control panel, the CD Music tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
 - On Windows Me/2000/XP: Go to the properties of your CD-ROM drive in Device Manager, the Properties tab, and check the box for "Enable digital CD audio for this CD-ROM Device"
 
-## Current Limitations:
+## Current Limitations
 
-- Only supports 16-bit stereo audio at 22-48khz sample rates (formats up to 96khz 32-bit could technically be added but 9x doesn't make the best choices about resampling)
-- Playback only, recording is not supported
+- Only supports up to 16-bit stereo audio at 48khz sample rate (formats up to 96khz 32-bit can be enabled by Registry keys but 9x doesn't make the best choices about resampling)
+- Playback only. Recording from line or mic in is not supported yet
 - Single audio stream, no hardware mixing
+- No EAX or other positional sound API support. EAX 2.0 can be done in software by DirectSound
 - Audio latency is ~40 ms at best. This is a kernel limit
 - Volume control is only implemented for the main mix output
-- Jack retasking is not supported, all jacks will be set as outputs if they can be. (Try all outputs, the audio output may only play through the Surround output on your motherboard.)
+- Jack retasking is not supported. All jacks will be set as outputs if they can be. Only Front outputs are currently enabled, Rear and Surround will be silent. Connecting to a headphone output will mute the speaker outputs but line-outs will not be affected.
 - Analog CD audio is not mixed into the audio output. Digital Audio Extraction is supported. Enable this as described above.
-- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL.
-DOSBox can be used to run games with OPL emulation, and there is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
-The Alpha version of VDMSOUND for Windows 9x also works if you can get it set up.
-- May Freeze, crash, fail to start or outputs horrible noises on some real hardware. No guarantees it will work on whatever laptop you may have. There are 22 years of HD Audio hardware out there and it's difficult to prove compatibility. 
+- DOS Sound Blaster emulation is normally provided by Microsoft's WDM emulator `SBEMUL.SYS` which only supports 8-bit stereo digital sound and General MIDI but does not emulate OPL. You can use @sdz_mods 's VOPL3 to add OPL emulation.
+DOSBox can also be used to run games with OPL emulation.
+There is a patched version of SBEMUL available from SweetLow which will support 16-bit digital sound (high DMA the same as low DMA).
+- I cannot guarantee compatibility with all real hardware. This driver may freeze, crash, fail to start or output horrible noises. 
 
 Source Code from [Microsoft's driver samples](https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Driver%20Kit%20Sample/Windows%20Driver%20Kit%20(WDK)%208.1%20Samples/%5BC%2B%2B%5D-windows-driver-kit-81-cpp/WDK%208.1%20C%2B%2B%20Samples/AC97%20Driver%20Sample/C%2B%2B)
 
@@ -58,9 +61,9 @@ For build instructions, see the file `Building.md`
 The release build of the driver is in the buildfre\i386 folder, the debug build is in buildchk\i386.
 
 ## If the driver will not start for you or has other issues here's how you can get a debug log:
- 
-- Find and install Sysinternals Debug View. A version that works on Win98 is here https://www.digiater.nl/openvms/decus/vmslt00a/nt/dbgview.htm
-- Install the debug version of my driver by using the HDA.sys which is in the objchk\i386 folder. you can just copy this into C:\Windows\System32\Drivers if the driver was already installed 
+  
+- Find and install Sysinternals Debug View. A version that works on Win98 is [here](https://www.digiater.nl/openvms/decus/vmslt00a/nt/dbgview.htm). 
+- Install the debug version of my driver by using the HDA.sys which is in the objchk\i386 folder. Copy this into C:\Windows\System32\Drivers if the driver was already installed 
 - Disable the HD audio controller device in Device Manager
 - Restart
 - Open DebugView
@@ -70,15 +73,15 @@ The release build of the driver is in the buildfre\i386 folder, the debug build 
 
 ## Contributing
 
-Testing and feedback from anyone who can run this driver on real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) installed will be appreciated. 
+Testing and feedback from anyone who can run this driver on a variety of real hardware with a [kernel debugger](https://bikodbg.com/blog/2021/08/win98-ddk/) installed will be appreciated. 
 
 Pull requests or issues may be submitted at the project's GitHub page. Please only send pull requests for code that has been built and tested. We reserve the right to review, rework, or reject any and all pull requests.  
 
 ## AI Disclaimer
 
-Though the vast majority of the code in this project is human written, Generative AI (Large Language Models) have been used for research and debugging help, and writing small amounts of the code (C++ class and interface definitions, some memory safety fixes, one refactoring attempt with Copilot that ended in me manually fixing everything anyway).
+Though the vast majority of the code in this project is human written, Generative AI (Large Language Model) tools have been used for research, debugging help, and writing small amounts of the code (C++ class and interface definitions, some memory safety fixes, one refactoring attempt with Copilot that ended in me manually fixing everything anyway).
 
-I do not intend to make this a completely "Vibe Coded" project; all bugs are the fault and responsibility of the humans that submit the code so if you open a pull request, please prove that you understand what you're adding.
+I do not intend to make this a "Vibe Coded" project; all bugs are the fault and responsibility of the humans that submit the code. If you open a pull request, please prove that you understand what you're adding.
 
 ## License
 

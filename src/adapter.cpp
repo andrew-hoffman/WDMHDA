@@ -31,7 +31,7 @@
 #define MAX_MINIPORTS 5
 
 // PortCls reserves device-extension slots 4-7 for adapter-driver use.
-// Store the per-device PDO in slot 4 (offset 16 on i386).
+// Store the per-device PDO in slot 4 (offset 16 on i386, offset 32 on x64).
 #define ADAPTER_PDO_SLOT(DeviceObject) \
     (((PDEVICE_OBJECT *)(DeviceObject)->DeviceExtension)[4])
 
@@ -172,8 +172,9 @@ AddDevice
     PAGED_CODE();
 
     ASSERT(PhysicalDeviceObject != NULL);
-    DOUT(DBG_SYSINFO, ("PDO 0x%X", PhysicalDeviceObject));
+
     DOUT(DBG_SYSINFO, ("DriverObject 0x%X", DriverObject));
+	    DOUT(DBG_SYSINFO, ("PDO 0x%X", PhysicalDeviceObject));
 
     // Tell the class driver to add the device.
     NTSTATUS ntStatus = PcAddAdapterDevice( DriverObject,
@@ -186,9 +187,12 @@ AddDevice
         // PcAddAdapterDevice has attached its FDO to this PDO. Save the PDO
         // in PortCls' per-device extension for the later StartDevice call.
         PDEVICE_OBJECT fdo = IoGetAttachedDeviceReference(PhysicalDeviceObject);
-        if (fdo != NULL)
+        if (   (fdo != NULL)
+			&& (fdo != PhysicalDeviceObject)) //ensure PDO wasn't top of stack
         {
             ADAPTER_PDO_SLOT(fdo) = PhysicalDeviceObject;
+			DOUT(DBG_SYSINFO, ("FDO 0x%X", fdo));
+			//release extra reference to FDO, portcls already has one
             ObDereferenceObject(fdo);
         }
         else

@@ -1,3 +1,10 @@
+# WDMHDA 0.26 2026-11-11
+- support multiple controllers on a single system
+- handle widgets on IDT codecs better in codec parser
+- add quirks for inverted EAPD and inverted jack sense
+- apply GPIO quirks to the correct node
+
+
 # WDMHDA 0.25 2026-10-24
 - fixed higher sample rate support better
 - fixed installation freeze bug

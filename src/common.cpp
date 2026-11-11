@@ -2859,11 +2859,12 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::hda_setup_stream_descriptor(
 
 	// Memory Fence: Ensures all flushes are globally visible 
 	// before the ISR/DPC returns
-	__asm { _emit 0x0F // MFENCE
-		    _emit 0xAE
-		    _emit 0xF0
+	if (g_bHasClFlush) {    
+		__asm { _emit 0x0F // MFENCE
+			    _emit 0xAE
+				_emit 0xF0
+		}
 	}
-
 	// wait for Play state to actually start the stream though.
 	
     return ntStatus;

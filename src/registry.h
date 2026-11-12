@@ -10,22 +10,23 @@ typedef struct _REG_BOOL_SETTING
 		BOOLEAN  DefaultValue;  // Value used if registry entry is missing/invalid
 	} REG_BOOL_SETTING;
 
-namespace Registry {
-	
 	//global settings
-	extern BOOLEAN skipControllerReset;
-	extern BOOLEAN skipCodecReset;
-	extern BOOLEAN useAltOut;
-	extern BOOLEAN useSPDIF;
-	extern BOOLEAN useDisabledPins;
-	extern BOOLEAN useDmaPos;
-	extern BOOLEAN forcePioMode;
-	extern BOOLEAN allowHighRate;
-	extern BOOLEAN allowHighDepth;
-	extern BOOLEAN allowBlindProbe;
+	typedef struct _HDA_SETTINGS {
+		BOOLEAN skipControllerReset;
+		BOOLEAN skipCodecReset;
+		BOOLEAN useAltOut;
+		BOOLEAN useSPDIF;
+		BOOLEAN useDisabledPins;
+		BOOLEAN useDmaPos;
+		BOOLEAN forcePioMode;
+		BOOLEAN allowHighRate;
+		BOOLEAN allowHighDepth;
+		BOOLEAN allowBlindProbe;
+		BOOLEAN isWin2kOrLater;
+		//BOOLEAN hasSSE2;
+	} HDA_SETTINGS, *PHDA_SETTINGS;
 
-	// OS version detection (cached at driver load)
-	extern BOOLEAN isWin2kOrLater;
+namespace Registry {
 
     NTSTATUS OpenDeviceKey(
 		OUT PREGISTRYKEY* RegistryKey, 
@@ -40,7 +41,7 @@ namespace Registry {
 		OUT PREGISTRYKEY* RegistryKey,
 		OUT PULONG Disposition OPTIONAL
 		);
-	VOID	 ReadSettings(
+	HDA_SETTINGS ReadSettings(
 		IN PDEVICE_OBJECT DeviceObject
 		);
 	NTSTATUS ReadValue(
@@ -66,7 +67,7 @@ namespace Registry {
 		IN PCWSTR ValueName,
 		IN ULONG Value
 		);
-	VOID     DetectOsVersion();
+	BOOLEAN  DetectOsVersion();
 }
 
 #endif

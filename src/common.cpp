@@ -202,8 +202,8 @@ private:
 	ULONG communication_type;
 
 	ULONG debug_kludge;
-	BOOLEAN m_forcePioMode;  // Per-instance copy (VMware overrides global)
-	BOOLEAN m_useDmaPos;     // Per-instance copy (disabled if DMA pos fails)
+
+	HDA_SETTINGS Settings; //registry settings for this device instance
 
 	// Codec array - packed array of initialized codecs (not sparse)
 	HDA_Codec* pCodecs[16];
@@ -342,6 +342,8 @@ public:
     STDMETHODIMP SaveMixerSettingsToRegistry
     (   void
     );
+
+	STDMETHODIMP_(HDA_SETTINGS) GetSettings (void);
 
 	STDMETHODIMP_(NTSTATUS) ProgramDataFormat
     (
@@ -539,10 +541,7 @@ CAdapterCommon::Init
 	ResetCommonBufferDescriptor(&DmaPosBuffer);
 	
 	//Read settings from registry	
-	Registry::ReadSettings(DeviceObject);
-	m_forcePioMode = Registry::forcePioMode;
-	m_useDmaPos = Registry::useDmaPos;
-	Registry::DetectOsVersion();
+	Settings = Registry::ReadSettings(DeviceObject);
 
 	// Check for SSE2 / CLFLUSH support
 	ULONG edx_feat;
@@ -611,7 +610,7 @@ CAdapterCommon::Init
 		case 0x15AD: //VMWare
 			DbgPrint( "VMWare\n");
 			//force PIO mode because VMWare works better like this
-			m_forcePioMode = TRUE;
+			Settings.forcePioMode = TRUE;
 			break;
 		case 0x1002: //ATI
 		case 0x1022: //AMD
@@ -1347,7 +1346,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//maybe skip controller reset if flag is set and there's
 	//already a codec in statests
 
-	if ((statests != 0) && Registry::skipControllerReset) {
+	if ((statests != 0) && Settings.skipControllerReset) {
 		DOUT(DBG_SYSINFO, ("Skipping reset"));
 	} else {
 		
@@ -1423,7 +1422,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 	//also other codecs can show up later with docking.
 	//would need to enable WAKEEN interrupts (register 0x0C) to handle later additions
 
-	if (m_forcePioMode){
+	if (Settings.forcePioMode){
 		goto hda_use_pio_interface;
 	}
  
@@ -1556,7 +1555,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		writeULONG (0x74, 0);
 	}
 
-	if (m_useDmaPos){
+	if (Settings.useDmaPos){
 		// turn on dma position transfer
 		writeULONG (0x70, DmaPosBuffer.AlignedLogicalAddress.LowPart | 0x1);
 	}
@@ -1596,7 +1595,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 
 	//TODO: rewrite without the gotos!
 	if(statests == 0) {
-		if (Registry::allowBlindProbe) {
+		if (Settings.allowBlindProbe) {
 			goto blind_probe;
 		} else {
 			DOUT (DBG_SYSINFO, ("STATESTS reported 0 codecs and AllowBlindProbe is 0, trying PIO"));
@@ -1623,7 +1622,7 @@ STDMETHODIMP_(NTSTATUS) CAdapterCommon::InitHDAController (void)
 		return STATUS_SUCCESS;
     }
 
-	if (!Registry::allowBlindProbe) {
+	if (!Settings.allowBlindProbe) {
 		DOUT (DBG_SYSINFO, ("No codecs initialized from STATESTS, skipping blind probe on CORB/RIRB"));
 		goto hda_use_pio_interface;
 	}
@@ -1703,7 +1702,7 @@ hda_use_pio_interface:
 	}
 
 	//Otherwise probe codecs blindly if allowed
-	if (!Registry::allowBlindProbe) {
+	if (!Settings.allowBlindProbe) {
 		DOUT (DBG_SYSINFO, ("Skipping blind probe on PIO (AllowBlindProbe is 0)"));
 		return STATUS_UNSUCCESSFUL;
 	}
@@ -1758,7 +1757,7 @@ CAdapterCommon::TryInitializeCodecSlot(
 	if (codecCount < ARRAY_COUNT(pCodecs)) {
 
 		HDA_Codec* pCodec = 
-			new(NonPagedPool) HDA_Codec(Registry::useSPDIF, Registry::useAltOut, codec_number, pci_sid, this);
+			new(NonPagedPool) HDA_Codec(Settings.useSPDIF, Settings.useAltOut, codec_number, pci_sid, this);
 
 		if (pCodec) {
 			pCodecs[codecCount++] = pCodec;
@@ -2322,6 +2321,10 @@ SaveMixerSettingsToRegistry
     return ntStatus;
 }
 
+STDMETHODIMP_(HDA_SETTINGS) CAdapterCommon::GetSettings (void) {
+		return Settings;
+}
+
 /*****************************************************************************
  * CAdapterCommon::ProgramDataFormat
  *****************************************************************************
@@ -2711,7 +2714,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 	USHORT StreamBase = In ? InputStreamBase : OutputStreamBase;
 	USHORT stream_id = In ? FirstInputStream : FirstOutputStream; // stream 4 for most chipsets	
 	
-	if (m_useDmaPos){
+	if (Settings.useDmaPos){
 		ULONG dpos = *(ULONG *)(((UCHAR *)DmaPosBuffer.AlignedVirtualAddress) + (stream_id * 8));
 		ULONG lpos = readULONG(StreamBase + 0x04);
 
@@ -2725,7 +2728,7 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 			//LPIB is moving but DMA isn't
 			if (++bad_dpos_count > 9){
 				DOUT (DBG_ERROR, ("DMA position buffer not working, falling back to LPIB"));
-				m_useDmaPos = FALSE;
+				Settings.useDmaPos = FALSE;
 				return lpos;
 			}
 			return dpos;

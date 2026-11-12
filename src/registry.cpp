@@ -11,34 +11,6 @@
 
 #define ARRAY_COUNT(x) (sizeof(x) / sizeof((x)[0]))
 
-namespace Registry {
-	//driver global settings read via registry keys
-	BOOLEAN skipControllerReset;
-	BOOLEAN skipCodecReset;
-	BOOLEAN useAltOut;
-	BOOLEAN useSPDIF;
-	BOOLEAN useDisabledPins;
-	BOOLEAN useDmaPos;
-	BOOLEAN forcePioMode;
-	BOOLEAN allowHighRate;
-	BOOLEAN allowHighDepth;
-	BOOLEAN allowBlindProbe;
-	BOOLEAN isWin2kOrLater;
-
-	static REG_BOOL_SETTING g_BooleanSettings[] =
-	{
-		{ L"SkipControllerReset", &skipControllerReset, FALSE },
-		{ L"SkipCodecReset",      &skipCodecReset,      FALSE },
-		{ L"UseAltOut",           &useAltOut,           FALSE },
-		{ L"UseSPDIF",            &useSPDIF,            TRUE  },
-		{ L"UseDisabledPins",     &useDisabledPins,     FALSE },
-		{ L"UseDmaPos",           &useDmaPos,           FALSE },
-		{ L"ForcePioMode",        &forcePioMode,        FALSE },
-		{ L"AllowHighRate",       &allowHighRate,       FALSE },
-		{ L"AllowHighDepth",      &allowHighDepth,      FALSE },
-		{ L"AllowBlindProbe",     &allowBlindProbe,     FALSE }
-	};
-}
 
 #pragma code_seg("PAGE") //all registry code must be called at PASSIVE_LEVEL
 
@@ -103,12 +75,25 @@ Registry::OpenSubKey(
 		Disposition ? Disposition : &LocalDisposition);
 }
 
-VOID Registry::ReadSettings (IN PDEVICE_OBJECT DeviceObject){
-	for (ULONG i = 0; i < ARRAY_COUNT(g_BooleanSettings); ++i){
-		*g_BooleanSettings[i].Variable =
-            ReadBoolean(DeviceObject, g_BooleanSettings[i].ValueName, 
-			g_BooleanSettings[i].DefaultValue);
-    }
+HDA_SETTINGS Registry::ReadSettings (IN PDEVICE_OBJECT Fdo){
+
+	PAGED_CODE();
+	HDA_SETTINGS settings;
+
+	// Helper lambda or local logic to read individual values using 'Fdo'
+    settings.skipControllerReset = ReadBoolean(Fdo, L"SkipControllerReset", FALSE);
+    settings.skipCodecReset      = ReadBoolean(Fdo, L"SkipCodecReset",      FALSE);
+    settings.useAltOut           = ReadBoolean(Fdo, L"UseAltOut",           FALSE);
+    settings.useSPDIF            = ReadBoolean(Fdo, L"UseSPDIF",            TRUE);
+    settings.useDisabledPins     = ReadBoolean(Fdo, L"UseDisabledPins",     FALSE);
+    settings.useDmaPos           = ReadBoolean(Fdo, L"UseDmaPos",           FALSE);
+    settings.forcePioMode        = ReadBoolean(Fdo, L"ForcePioMode",        FALSE);
+    settings.allowHighRate       = ReadBoolean(Fdo, L"AllowHighRate",       FALSE);
+    settings.allowHighDepth      = ReadBoolean(Fdo, L"AllowHighDepth",      FALSE);
+    settings.allowBlindProbe     = ReadBoolean(Fdo, L"AllowBlindProbe",     FALSE);
+	settings.isWin2kOrLater		 = DetectOsVersion();
+
+    return settings;
 }
 
 NTSTATUS
@@ -235,11 +220,12 @@ Registry::WriteDword(
  * Windows 2000 = NT 5.0, Windows 98 = 4.x
  * Win98/ME cannot handle >16 bit audio in the pin data ranges.
  */
-VOID Registry::DetectOsVersion()
+BOOLEAN Registry::DetectOsVersion()
 {
 	PAGED_CODE();
 
 	//WDM 1.10 available = Windows 2000 and later
 	//todo: check service pack as well
-	isWin2kOrLater = IoIsWdmVersionAvailable(1, 0x10);
+	return IoIsWdmVersionAvailable(1, 0x10);
 }
+

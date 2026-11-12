@@ -13,7 +13,6 @@
 
 
 
-
  
 /*****************************************************************************
  * Classes
@@ -48,6 +47,7 @@ private:
 	PADAPTER_OBJECT     AdapterObject;
 
     PSERVICEGROUP       ServiceGroup;               // For notification.
+	HDA_SETTINGS		Settings;					// Registry settings
 
     //
     // Dynamic topology descriptor members.

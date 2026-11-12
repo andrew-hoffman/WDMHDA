@@ -22,9 +22,10 @@
 #include "DMusicKS.h"
 
 //level for debug prints: blab > verbose > terse > none
-#define DEBUG_LEVEL DEBUGLVL_BLAB
+#define DEBUG_LEVEL DEBUGLVL_VERBOSE
 #include "ksdebug.h"
 #include "debug.h"
+#include "registry.h"
 
 /*****************************************************************************
  * Constants
@@ -304,6 +305,10 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
     )   PURE;
 
     STDMETHOD(SaveMixerSettingsToRegistry)
+    (   THIS
+    )   PURE;
+
+	STDMETHOD_(HDA_SETTINGS,GetSettings)
     (   THIS
     )   PURE;
 

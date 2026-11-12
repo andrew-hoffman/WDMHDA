@@ -236,7 +236,7 @@ ValidateFormat
 
     _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::ValidateFormat]"));
 	//_DbgPrintF(DEBUGLVL_VERBOSE,("rate %d, depth %d",
-	//	Registry::allowHighRate, Registry::allowHighDepth));
+	//	Registry::allowHighRate, Settings.allowHighDepth));
     NTSTATUS ntStatus;
 
     //
@@ -268,7 +268,7 @@ ValidateFormat
         &&  (waveFormat->wFormatTag == WAVE_FORMAT_PCM)
         &&  (   (waveFormat->wBitsPerSample == 8) 
 				|| (waveFormat->wBitsPerSample == 16)
-				|| (Registry::allowHighDepth 
+				|| (Settings.allowHighDepth 
 					&& waveFormat->wBitsPerSample == 32) 
             )
         &&  (   (waveFormat->nChannels == 1) ||
@@ -276,7 +276,7 @@ ValidateFormat
 				
             )
         &&  (waveFormat->nSamplesPerSec >= 8000)
-		&&  (   Registry::allowHighRate ?
+		&&  (   Settings.allowHighRate ?
 					(waveFormat->nSamplesPerSec <= 96000)
 				  : 
 					(waveFormat->nSamplesPerSec <= 48000)
@@ -410,7 +410,7 @@ Init
     ASSERT(ResourceList);
     ASSERT(Port_);
 
-    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::init]"));
+    _DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::Init]"));
 
     //
     // AddRef() is required because we are keeping this pointer.
@@ -418,8 +418,6 @@ Init
     Port = Port_;
     Port->AddRef();
 
-	//build the data range tables
-	BuildPinDataRanges();
 
     //
     // We want the IAdapterCommon interface on the adapter common object,
@@ -432,6 +430,8 @@ Init
             IID_IAdapterCommon,
             (PVOID *) &AdapterCommon
         );
+
+	Settings = AdapterCommon->GetSettings();
 
     //
     // We need a service group for notifications.  We will bind all the
@@ -587,15 +587,18 @@ PCCONNECTION_DESCRIPTOR MiniportConnections[] =
  * dynamically based on registry settings and OS version.
  *
  * Gates:
- *   - 32-bit depth requires BOTH Registry::allowHighDepth AND
- *     Registry::isWin2kOrLater (Win98 cannot handle >16 bit in pin ranges)
- *   - 96 kHz rate requires Registry::allowHighRate
+ *   - 32-bit depth requires BOTH Settings.allowHighDepth AND
+ *     Settings.isWin2kOrLater (Win98 cannot handle >16 bit in pin ranges)
+ *   - 96 kHz rate requires Settings.allowHighRate
  *     (avoids format negotiation lag when hardware only supports 48 kHz)
  */
 void
 CMiniportWaveCyclicHDA::BuildPinDataRanges()
 {
     PAGED_CODE();
+
+	_DbgPrintF(DEBUGLVL_VERBOSE,("[CMiniportWaveCyclicHDA::BuildPinDataRanges]"));
+
 
     //
     // Step 1: Build the streaming pin data range from the template,
@@ -604,20 +607,20 @@ CMiniportWaveCyclicHDA::BuildPinDataRanges()
     DynPinDataRangesStream[0] = PinDataRangesStreamTemplate;
 
     // 32-bit depth: requires both the registry key AND Windows 2000+
-    if (Registry::allowHighDepth && Registry::isWin2kOrLater) {
+    if (Settings.allowHighDepth && Settings.isWin2kOrLater) {
         DynPinDataRangesStream[0].MaximumBitsPerSample = 32;
         _DbgPrintF(DEBUGLVL_VERBOSE,
             ("BuildPinDataRanges: 32-bit depth enabled (OS is Win2K+)"));
     } else {
         DynPinDataRangesStream[0].MaximumBitsPerSample = 16;
-        if (Registry::allowHighDepth && !Registry::isWin2kOrLater) {
+        if (Settings.allowHighDepth && !Settings.isWin2kOrLater) {
             _DbgPrintF(DEBUGLVL_TERSE,
                 ("BuildPinDataRanges: 32-bit depth requested but OS is Win9x, clamped to 16"));
         }
     }
 
     // 96 kHz rate: requires only the registry key
-    if (Registry::allowHighRate) {
+    if (Settings.allowHighRate) {
         DynPinDataRangesStream[0].MaximumSampleFrequency = 96000;
         _DbgPrintF(DEBUGLVL_VERBOSE,
             ("BuildPinDataRanges: 96 kHz max rate enabled"));

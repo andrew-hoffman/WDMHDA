@@ -283,11 +283,24 @@ DECLARE_INTERFACE_(IAdapterCommon,IUnknown)
         IN      BYTE    Value
     )   PURE;
 
-    STDMETHOD_(void,hda_set_volume)
+    STDMETHOD_(void,hda_set_gain)
     (   THIS_
-        IN      ULONG   Volume,
-        IN      UCHAR   Channel,
-        IN      BOOLEAN Mute
+        IN      BOOLEAN isInput,
+        IN      ULONG   pathType,
+        IN      ULONG   gain,
+        IN      UCHAR   channel,
+        IN      BOOLEAN mute
+    )   PURE;
+
+    STDMETHOD_(void,hda_set_input_source)
+    (   THIS_
+        IN      ULONG   pathType
+    )   PURE;
+
+    STDMETHOD_(void,hda_set_analog_cd_passthrough)
+    (   THIS_
+        IN      BOOLEAN enable,
+        IN      UCHAR   gain
     )   PURE;
     
     STDMETHOD_(BYTE,MixerRegRead)

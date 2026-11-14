@@ -7,6 +7,11 @@
 #ifndef _HDATOPO_TABLES_H_
 #define _HDATOPO_TABLES_H_
 
+#ifndef KSAUDFNAME_STEREO_MIX
+DEFINE_GUID(KSAUDFNAME_STEREO_MIX,
+0x0dd25201, 0x3d30, 0x11d1, 0x81, 0xaa, 0x0, 0x0, 0xf8, 0x75, 0x57, 0xdb);
+#endif
+
 /*****************************************************************************
  * The topology
  *****************************************************************************
@@ -90,7 +95,7 @@ MiniportPins[] =
         }
     },
 
-    // SYNTH_SOURCE
+    // SYNTH_SOURCE (Stereo Mix)
     {
         0,0,0,  // InstanceCount
         NULL,   // AutomationTable
@@ -103,8 +108,8 @@ MiniportPins[] =
             PinDataRangePointersBridge,                 // DataRanges
             KSPIN_DATAFLOW_IN,                          // DataFlow
             KSPIN_COMMUNICATION_NONE,                   // Communication
-            &KSNODETYPE_SYNTHESIZER,                    // Category
-            &KSAUDFNAME_MIDI,                           // Name
+            &KSNODETYPE_LEGACY_AUDIO_CONNECTOR,         // Category
+            &KSAUDFNAME_STEREO_MIX,                     // Name
             0                                           // Reserved
         }
     },
@@ -390,20 +395,20 @@ PCNODE_DESCRIPTOR TopologyNodes[] =
         &KSAUDFNAME_WAVE_VOLUME // Name
     },
 
-    // SYNTH_VOLUME
+    // SYNTH_VOLUME (Stereo Mix)
     {
         0,                      // Flags
         &AutomationVolume,      // AutomationTable
         &KSNODETYPE_VOLUME,     // Type
-        &KSAUDFNAME_MIDI_VOLUME // Name
+        &KSAUDFNAME_STEREO_MIX  // Name
     },
 
-    // SYNTH_WAVEIN_SUPERMIX
+    // SYNTH_WAVEIN_SUPERMIX (Stereo Mix)
     {
         0,                      // Flags
         &AutomationSupermix,    // AutomationTable
         &KSNODETYPE_SUPERMIX,   // Type
-        &KSAUDFNAME_MIDI_MUTE   // Name
+        &KSAUDFNAME_STEREO_MIX  // Name
     },
 
     // CD_VOLUME

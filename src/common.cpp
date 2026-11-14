@@ -361,7 +361,9 @@ public:
 	STDMETHODIMP_(UCHAR)	hda_get_node_type(ULONG codec, ULONG node);
 	STDMETHODIMP_(ULONG)	hda_get_node_connection_entries(ULONG codec, ULONG node, ULONG connection_entries_number);
 	STDMETHODIMP_(BOOLEAN)	hda_is_headphone_connected (void);
-	STDMETHODIMP_(void)		hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void)		hda_set_gain(BOOLEAN isInput, ULONG pathType, ULONG gain, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void)		hda_set_input_source(ULONG pathType);
+	STDMETHODIMP_(void)		hda_set_analog_cd_passthrough(BOOLEAN enable, UCHAR gain);
 	STDMETHODIMP_(void)		hda_start_sound (IN BOOLEAN In);
 	STDMETHODIMP_(void)		hda_stop_sound (IN BOOLEAN In);
 
@@ -2032,12 +2034,75 @@ MixerRegWrite
 
     // only hit the hardware if we're in an acceptable power state
     if( m_PowerState <= PowerDeviceD1 ) {
-		if (index == 0 || index == 1) { //left or right channel respectively
-			DOUT (DBG_PRINT, ("Set volume of %d to 0x%x", index, Value));
-			//volume values for the master channels are 5-bit (<< by 3)
-			//and mute in the LSB
-			hda_set_volume(Value & 0xF8, index + 1, Value & 1);
-		}
+        switch(index) {
+        case DSP_MIX_MASTERVOLIDX_L:
+        case DSP_MIX_MASTERVOLIDX_R:
+            // Volume values for the master channels are 5-bit (<< by 3) and mute in the LSB
+            hda_set_gain(FALSE, 0, Value & 0xF8, (index - DSP_MIX_MASTERVOLIDX_L) + 1, Value & 1);
+            break;
+
+        case DSP_MIX_VOICEVOLIDX_L:
+        case DSP_MIX_VOICEVOLIDX_R:
+            // Wave/PCM playback volume
+            hda_set_gain(FALSE, HDA_OUTPUT_NODE, Value & 0xF8, (index - DSP_MIX_VOICEVOLIDX_L) + 1, Value & 1);
+            break;
+
+        case DSP_MIX_CDVOLIDX_L:
+        case DSP_MIX_CDVOLIDX_R:
+            // CD Audio volume
+            hda_set_gain(TRUE, HDA_PIN_CD, Value & 0xF8, (index - DSP_MIX_CDVOLIDX_L) + 1, Value & 1);
+            hda_set_analog_cd_passthrough(TRUE, (Value & 0xF8) >> 1);
+            break;
+
+        case DSP_MIX_LINEVOLIDX_L:
+        case DSP_MIX_LINEVOLIDX_R:
+            // Line In volume
+            hda_set_gain(TRUE, HDA_PIN_LINE_IN, Value & 0xF8, (index - DSP_MIX_LINEVOLIDX_L) + 1, Value & 1);
+            break;
+
+        case DSP_MIX_MICVOLIDX:
+            // Microphone volume (mono, ch 3 = both channels)
+            hda_set_gain(TRUE, HDA_PIN_MIC_IN, Value & 0xF8, 3, Value & 1);
+            break;
+
+        case DSP_MIX_INGAINIDX_L:
+        case DSP_MIX_INGAINIDX_R:
+            // Master record gain (InGain: 2 bits 0..3 scaled to 0..255)
+            hda_set_gain(TRUE, 0, (Value & 0x03) * 85, (index - DSP_MIX_INGAINIDX_L) + 1, FALSE);
+            break;
+
+        case DSP_MIX_OUTGAINIDX_L:
+        case DSP_MIX_OUTGAINIDX_R:
+            // Master output gain
+            hda_set_gain(FALSE, 0, (Value & 0x03) * 85, (index - DSP_MIX_OUTGAINIDX_L) + 1, FALSE);
+            break;
+
+        case DSP_MIX_OUTMIXIDX:
+            // Analog passthrough into lineout mixer
+            // Bit 1: CD Right, Bit 2: CD Left
+            {
+                BOOLEAN cd_enable = (Value & ((1 << MIXBIT_CD_LINEOUT_R) | (1 << MIXBIT_CD_LINEOUT_L))) != 0;
+                hda_set_analog_cd_passthrough(cd_enable, 0x40);
+            }
+            break;
+
+        case DSP_MIX_ADCMIXIDX_L:
+        case DSP_MIX_ADCMIXIDX_R:
+            // Recording Source Selection
+            if (Value & (1 << MIXBIT_MIC_WAVEIN)) {
+                hda_set_input_source(HDA_PIN_MIC_IN);
+            } else if (Value & ((1 << MIXBIT_LINEIN_WAVEIN_L) | (1 << MIXBIT_LINEIN_WAVEIN_R))) {
+                hda_set_input_source(HDA_PIN_LINE_IN);
+            } else if (Value & ((1 << MIXBIT_CD_WAVEIN_L) | (1 << MIXBIT_CD_WAVEIN_R))) {
+                hda_set_input_source(HDA_PIN_CD);
+            } else if (Value & ((1 << MIXBIT_SYNTH_WAVEIN_L) | (1 << MIXBIT_SYNTH_WAVEIN_R))) {
+                hda_set_input_source(HDA_INPUT_TYPE_STEREOMIX);
+            }
+            break;
+
+        default:
+            break;
+        }
 #if (DBG)
 		if ((index == 20) && (debug_kludge == 1)){
 			//Terrible Kludge to reset the codec
@@ -2738,11 +2803,27 @@ STDMETHODIMP_(ULONG) CAdapterCommon::hda_get_actual_stream_position(BOOLEAN In) 
 	}
 }
 
-// Set volume & mute for all audio codecs
-STDMETHODIMP_(void) CAdapterCommon::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
+// Set gain for all audio codecs
+STDMETHODIMP_(void) CAdapterCommon::hda_set_gain(BOOLEAN isInput, ULONG pathType, ULONG gain, UCHAR ch, BOOLEAN mute) {
 	for (int i = 0; i < codecCount; i++) {
 		if (pCodecs[i] != NULL) {
-			pCodecs[i]->hda_set_volume(volume, ch, mute);
+			pCodecs[i]->hda_set_gain(isInput, pathType, gain, ch, mute);
+		}
+	}
+}
+
+STDMETHODIMP_(void) CAdapterCommon::hda_set_input_source(ULONG pathType) {
+	for (int i = 0; i < codecCount; i++) {
+		if (pCodecs[i] != NULL) {
+			pCodecs[i]->hda_set_input_source(pathType);
+		}
+	}
+}
+
+STDMETHODIMP_(void) CAdapterCommon::hda_set_analog_cd_passthrough(BOOLEAN enable, UCHAR gain) {
+	for (int i = 0; i < codecCount; i++) {
+		if (pCodecs[i] != NULL) {
+			pCodecs[i]->hda_set_analog_cd_passthrough(enable, gain);
 		}
 	}
 }

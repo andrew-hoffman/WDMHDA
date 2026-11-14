@@ -226,7 +226,12 @@ HDA_Codec::HDA_Codec(BOOLEAN spdif, BOOLEAN altOut, UCHAR address, ULONG pci_sid
       afg_node_input_amp_capabilities(0),
       afg_node_output_amp_capabilities(0),
 	  prev_data_format(0),
-	  dock_lineout_node_number(0)
+	  prev_input_data_format(0),
+	  dock_lineout_node_number(0),
+	  pin_cd_node_number(0),
+	  analog_mixer_node_number(0),
+	  analog_cd_mixer_index(0xFF),
+	  active_input_source(0)
 {
 
 }
@@ -253,8 +258,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::InitializeCodec()
 
 	if (InShutdown) return STATUS_UNSUCCESSFUL;
 
-	// Initialize output paths
+	// Initialize output and input paths
 	RtlZeroMemory(&out_paths, sizeof(HDA_OUTPUT_LIST));
+	RtlZeroMemory(&in_paths, sizeof(HDA_INPUT_LIST));
 
 	//test if this codec exists
 	codec_id = hda_send_verb(0, 0xF00, 0);
@@ -399,10 +405,16 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	ULONG pin_alternative_output_node_number = 0, pin_speaker_default_node_number = 0; 
 	ULONG pin_speaker_node_number = 0, pin_headphone_node_number = 0, pin_spdif_node_number = 0;
 	ULONG pin_line_out_node_number = 0;
+	ULONG pin_mic_in_node_number = 0;
+	ULONG pin_line_in_node_number = 0;
+	ULONG pin_cd_in_node_number = 0;
 
 	pin_output_node_number = 0;
 	pin_headphone_node_number = 0;
 	dock_lineout_node_number = 0;
+	pin_cd_node_number = 0;
+	analog_mixer_node_number = 0;
+	analog_cd_mixer_index = 0xFF;
 
 	//For all nodes in this AFG
 	//very simple one-shot topology parser, inits as it goes
@@ -436,6 +448,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_MIXER) {
 			DbgPrint( ("Audio Mixer"));
+			if (analog_mixer_node_number == 0) {
+				analog_mixer_node_number = node;
+			}
 		}
 		else if(type_of_node == HDA_WIDGET_AUDIO_SELECTOR) {
 			DbgPrint( ("Audio Selector"));
@@ -548,6 +563,8 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 
 			} else if(pin_node_type == HDA_PIN_CD) {
 				DbgPrint( ("CD"));
+				pin_cd_in_node_number = node;
+				pin_cd_node_number = node;
 	
 				//save this node, this variable contain number of last alternative output
 				if (useAltOut){
@@ -597,10 +614,16 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				}
 			} else if(pin_node_type == HDA_PIN_LINE_IN) {
 				DbgPrint( ("Line In"));
+				if (pin_line_in_node_number == 0 || pin_sequence == 0) {
+					pin_line_in_node_number = node;
+				}
 			} else if(pin_node_type == HDA_PIN_AUX) {
 				DbgPrint( ("AUX"));
 			} else if(pin_node_type == HDA_PIN_MIC_IN) {
 				DbgPrint( ("Mic In"));
+				if (pin_mic_in_node_number == 0 || pin_sequence == 0) {
+					pin_mic_in_node_number = node;
+				}
 			} else if(pin_node_type == HDA_PIN_TELEPHONY) {
 				DbgPrint( ("Telephony"));
 			} else if(pin_node_type == HDA_PIN_SPDIF_IN) {
@@ -741,9 +764,83 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 		return STATUS_UNSUCCESSFUL;
 	}
 
+	//initialize input PINs
+	HDA_INPUT_PATH in_path;
+	DbgPrint( ("\n Init these input PINs: \n"));
 
+	if (pin_mic_in_node_number != 0) {
+		DbgPrint("\nMic In input ");
+		RtlZeroMemory(&in_path, sizeof(HDA_INPUT_PATH));
+		if (NT_SUCCESS(hda_initialize_input_pin(pin_mic_in_node_number, in_path))) {
+			if (in_paths.count < MAX_INPUT_PATHS) {
+				in_paths.paths[in_paths.count++] = in_path;
+			}
+		}
+	}
 
-	
+	if (pin_line_in_node_number != 0) {
+		DbgPrint("\nLine In input ");
+		RtlZeroMemory(&in_path, sizeof(HDA_INPUT_PATH));
+		if (NT_SUCCESS(hda_initialize_input_pin(pin_line_in_node_number, in_path))) {
+			if (in_paths.count < MAX_INPUT_PATHS) {
+				in_paths.paths[in_paths.count++] = in_path;
+			}
+		}
+	}
+
+	if (pin_cd_in_node_number != 0) {
+		DbgPrint("\nCD In input ");
+		RtlZeroMemory(&in_path, sizeof(HDA_INPUT_PATH));
+		if (NT_SUCCESS(hda_initialize_input_pin(pin_cd_in_node_number, in_path))) {
+			if (in_paths.count < MAX_INPUT_PATHS) {
+				in_paths.paths[in_paths.count++] = in_path;
+			}
+		}
+	}
+
+	// Find CD pin index on analog mixer for analog passthrough
+	if (analog_mixer_node_number != 0 && pin_cd_node_number != 0) {
+		ULONG mixer_conn_count = hda_send_verb(analog_mixer_node_number, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < mixer_conn_count; ci++) {
+			if (hda_get_node_connection_entries(analog_mixer_node_number, ci) == pin_cd_node_number) {
+				analog_cd_mixer_index = ci;
+				DbgPrint("\nAnalog CD input found on mixer 0x%x (conn idx %d)", analog_mixer_node_number, ci);
+				break;
+			}
+		}
+	}
+
+	// Discover and initialize Stereo Mix input path
+	if (in_paths.count > 0 && in_paths.count < MAX_INPUT_PATHS && analog_mixer_node_number != 0) {
+		ULONG adc_node = in_paths.paths[0].audio_input_node_number;
+		ULONG adc_conn_count = hda_send_verb(adc_node, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < adc_conn_count; ci++) {
+			if (hda_get_node_connection_entries(adc_node, ci) == analog_mixer_node_number) {
+				RtlZeroMemory(&in_path, sizeof(HDA_INPUT_PATH));
+				in_path.path_type = HDA_INPUT_TYPE_STEREOMIX;
+				in_path.pin_node_number = analog_mixer_node_number;
+				in_path.audio_input_node_number = adc_node;
+				in_path.connection_index = ci;
+				in_path.input_amp_node_number = adc_node;
+				in_path.input_amp_node_capabilities = hda_send_verb(adc_node, 0xF00, 0x0D);
+				in_path.audio_input_node_sample_capabilities = in_paths.paths[0].audio_input_node_sample_capabilities;
+				in_path.audio_input_node_stream_format_capabilities = in_paths.paths[0].audio_input_node_stream_format_capabilities;
+				in_paths.paths[in_paths.count++] = in_path;
+				DbgPrint("\nStereo Mix input path initialized (ADC 0x%x, conn idx %d)", adc_node, ci);
+				break;
+			}
+		}
+	}
+
+	DbgPrint("\n%d Input paths found\n", in_paths.count);
+
+	// Set default active input source (prefer Mic In, else first found)
+	if (pin_mic_in_node_number != 0) {
+		hda_set_input_source(HDA_PIN_MIC_IN);
+	} else if (in_paths.count > 0) {
+		hda_set_input_source(in_paths.paths[0].path_type);
+	}
+
 	if (codec_quirks & HDA_QUIRK_EEEPC_701)
 		ApplyEeeInit(); 
 	
@@ -1075,6 +1172,247 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 }
 
 /*****************************************************************************
+ * HDA_Codec::hda_initialize_input_pin
+ *****************************************************************************
+ * Initialises an input pin complex and walks the connection list to reach
+ * the Audio Input (ADC) converter, recording path information as it goes.
+ */
+STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_input_pin(ULONG pin_nid, HDA_INPUT_PATH& path)
+{
+	PAGED_CODE();
+
+	// Save pin type and node number
+	ULONG pin_config = hda_send_verb(pin_nid, VERB_GET_CONFIG_DEFAULT, 0x00);
+	path.path_type    = (pin_config >> 20) & 0xF;
+	path.pin_node_number = pin_nid;
+	path.connection_index = 0;
+
+	DOUT(DBG_PRINT, ("[HDA_Codec::hda_initialize_input_pin] 0x%x", pin_nid));
+
+	BOOLEAN is_mic = (path.path_type == HDA_PIN_MIC_IN);
+
+	// Power on and configure pin
+	if (!isRealtek) {
+		hda_send_verb(pin_nid, 0x705, 0x00); // power on first
+	}
+	hda_send_verb(pin_nid, 0x708, 0x00); // disable unsolicited responses
+	hda_send_verb(pin_nid, 0x703, 0x00); // disable processing
+	hda_send_verb(pin_nid, 0x200, 0x11); // 16-bit stereo format
+	if (isRealtek) {
+		hda_send_verb(pin_nid, 0x705, 0x00); // power on after format for Realtek
+	}
+
+	hda_enable_pin_input(pin_nid, is_mic);
+
+	// Walk the first connection (pins source from their connection list entry 0 normally)
+	ULONG first_connected = hda_get_node_connection_entries(pin_nid, 0);
+	if (first_connected == 0) {
+		DOUT(DBG_PRINT, ("HDA INPUT ERROR: pin 0x%x has no connections", pin_nid));
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	ULONG node_type = hda_get_node_type(first_connected);
+
+	if (node_type == HDA_WIDGET_AUDIO_INPUT) {
+		// Direct pin -> ADC path (common on simple codecs)
+		ULONG adc_conn_count = hda_send_verb(first_connected, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < adc_conn_count; ci++) {
+			if (hda_get_node_connection_entries(first_connected, ci) == pin_nid) {
+				hda_send_verb(first_connected, VERB_SET_CONNECT_SEL, ci);
+				path.connection_index = ci;
+				break;
+			}
+		}
+		hda_initialize_audio_input_node(first_connected, path);
+	} else if (node_type == HDA_WIDGET_AUDIO_MIXER) {
+		ULONG mixer_conn_count = hda_send_verb(first_connected, 0xF00, 0x0E) & 0x7F;
+		ULONG src_index = 0;
+		for (ULONG ci = 0; ci < mixer_conn_count; ci++) {
+			if (hda_get_node_connection_entries(first_connected, ci) == pin_nid) {
+				src_index = ci;
+				path.connection_index = ci;
+				break;
+			}
+		}
+		hda_initialize_mixer_for_input(first_connected, src_index, path, 0);
+	} else if (node_type == HDA_WIDGET_AUDIO_SELECTOR) {
+		ULONG sel_conn_count = hda_send_verb(first_connected, 0xF00, 0x0E) & 0x7F;
+		ULONG src_index = 0;
+		for (ULONG ci = 0; ci < sel_conn_count; ci++) {
+			if (hda_get_node_connection_entries(first_connected, ci) == pin_nid) {
+				src_index = ci;
+				path.connection_index = ci;
+				break;
+			}
+		}
+		hda_initialize_selector_for_input(first_connected, src_index, path, 0);
+	} else {
+		DOUT(DBG_PRINT, ("HDA INPUT ERROR: pin 0x%x connects to unsupported node 0x%x type 0x%x",
+			pin_nid, first_connected, node_type));
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	if (path.audio_input_node_number == 0) {
+		return STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return STATUS_SUCCESS;
+}
+
+/*****************************************************************************
+ * HDA_Codec::hda_initialize_mixer_for_input
+ *****************************************************************************
+ * Traverses a mixer node on the way from a pin to an ADC.
+ * source_index = which of the mixer's connection list entries is our pin.
+ */
+STDMETHODIMP_(void) HDA_Codec::hda_initialize_mixer_for_input(
+	ULONG mixer_nid, ULONG source_index, HDA_INPUT_PATH& path, ULONG depth)
+{
+	PAGED_CODE();
+	if (depth >= 10) {
+		DOUT(DBG_PRINT, ("HDA INPUT ERROR: mixer input path too long"));
+		return;
+	}
+	DOUT(DBG_PRINT, ("Input Mixer 0x%x (src idx %d)", mixer_nid, source_index));
+
+	// Power on
+	hda_send_verb(mixer_nid, 0x705, 0x00);
+	hda_send_verb(mixer_nid, 0x708, 0x00);
+
+	// Unmute the input amp at source_index
+	ULONG input_amp_caps = hda_send_verb(mixer_nid, 0xF00, 0x0D);
+	if (input_amp_caps != 0) {
+		UnmuteInAmp(mixer_nid, (UCHAR)source_index,
+			(UCHAR)((input_amp_caps >> 8) & 0x7F));
+		path.input_amp_node_number      = mixer_nid;
+		path.input_amp_node_capabilities = input_amp_caps;
+	}
+
+	// Continue walking to ADC via the mixer's first output connection
+	ULONG next_nid  = hda_get_node_connection_entries(mixer_nid, 0);
+	if (next_nid == 0) return;
+	ULONG next_type = hda_get_node_type(next_nid);
+
+	if (next_type == HDA_WIDGET_AUDIO_INPUT) {
+		ULONG adc_conn_count = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < adc_conn_count; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == mixer_nid) {
+				hda_send_verb(next_nid, VERB_SET_CONNECT_SEL, ci);
+				break;
+			}
+		}
+		hda_initialize_audio_input_node(next_nid, path);
+	} else if (next_type == HDA_WIDGET_AUDIO_MIXER) {
+		ULONG si2 = 0;
+		ULONG cnt2 = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < cnt2; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == mixer_nid) { si2 = ci; break; }
+		}
+		hda_initialize_mixer_for_input(next_nid, si2, path, depth + 1);
+	} else if (next_type == HDA_WIDGET_AUDIO_SELECTOR) {
+		ULONG si2 = 0;
+		ULONG cnt2 = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < cnt2; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == mixer_nid) { si2 = ci; break; }
+		}
+		hda_initialize_selector_for_input(next_nid, si2, path, depth + 1);
+	}
+}
+
+/*****************************************************************************
+ * HDA_Codec::hda_initialize_selector_for_input
+ *****************************************************************************
+ * Traverses a selector node on the input path towards an ADC.
+ */
+STDMETHODIMP_(void) HDA_Codec::hda_initialize_selector_for_input(
+	ULONG sel_nid, ULONG source_index, HDA_INPUT_PATH& path, ULONG depth)
+{
+	PAGED_CODE();
+	if (depth >= 10) {
+		DOUT(DBG_PRINT, ("HDA INPUT ERROR: selector input path too long"));
+		return;
+	}
+	DOUT(DBG_PRINT, ("Input Selector 0x%x (src idx %d)", sel_nid, source_index));
+
+	hda_send_verb(sel_nid, 0x705, 0x00);
+	hda_send_verb(sel_nid, 0x708, 0x00);
+	hda_send_verb(sel_nid, VERB_SET_CONNECT_SEL, source_index);
+
+	ULONG next_nid  = hda_get_node_connection_entries(sel_nid, source_index);
+	if (next_nid == 0) return;
+	ULONG next_type = hda_get_node_type(next_nid);
+
+	if (next_type == HDA_WIDGET_AUDIO_INPUT) {
+		ULONG adc_conn_count = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < adc_conn_count; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == sel_nid) {
+				hda_send_verb(next_nid, VERB_SET_CONNECT_SEL, ci);
+				break;
+			}
+		}
+		hda_initialize_audio_input_node(next_nid, path);
+	} else if (next_type == HDA_WIDGET_AUDIO_MIXER) {
+		ULONG si2 = 0;
+		ULONG cnt2 = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < cnt2; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == sel_nid) { si2 = ci; break; }
+		}
+		hda_initialize_mixer_for_input(next_nid, si2, path, depth + 1);
+	} else if (next_type == HDA_WIDGET_AUDIO_SELECTOR) {
+		ULONG si2 = 0;
+		ULONG cnt2 = hda_send_verb(next_nid, 0xF00, 0x0E) & 0x7F;
+		for (ULONG ci = 0; ci < cnt2; ci++) {
+			if (hda_get_node_connection_entries(next_nid, ci) == sel_nid) { si2 = ci; break; }
+		}
+		hda_initialize_selector_for_input(next_nid, si2, path, depth + 1);
+	}
+}
+
+/*****************************************************************************
+ * HDA_Codec::hda_initialize_audio_input_node
+ *****************************************************************************
+ * Initialises an Audio Input (ADC) converter node and records its capabilities.
+ */
+STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_input_node(ULONG adc_nid, HDA_INPUT_PATH& path)
+{
+	PAGED_CODE();
+	DOUT(DBG_PRINT, ("Initializing Audio Input 0x%x", adc_nid));
+	path.audio_input_node_number = adc_nid;
+
+	if (isRealtek) {
+		hda_send_verb(adc_nid, 0x200, 0x11);
+		hda_send_verb(adc_nid, 0x705, 0x00);
+		hda_send_verb(adc_nid, 0x708, 0x00);
+		hda_send_verb(adc_nid, 0x703, 0x00);
+		hda_send_verb(adc_nid, 0x706, (HDA_INPUT_STREAM_TAG << 4) | 0x0);
+	} else {
+		hda_send_verb(adc_nid, 0x705, 0x00);
+		hda_send_verb(adc_nid, 0x706, (HDA_INPUT_STREAM_TAG << 4) | 0x0);
+		hda_send_verb(adc_nid, 0x708, 0x00);
+		hda_send_verb(adc_nid, 0x703, 0x00);
+		hda_send_verb(adc_nid, 0x200, 0x11);
+	}
+
+	ULONG sample_caps = hda_send_verb(adc_nid, 0xF00, 0x0A);
+	path.audio_input_node_sample_capabilities =
+		(sample_caps != 0) ? sample_caps : afg_node_sample_capabilities;
+
+	ULONG format_caps = hda_send_verb(adc_nid, 0xF00, 0x0B);
+	path.audio_input_node_stream_format_capabilities =
+		(format_caps != 0) ? format_caps : afg_node_stream_format_capabilities;
+
+	ULONG input_amp_caps = hda_send_verb(adc_nid, 0xF00, 0x0D);
+	if (input_amp_caps != 0 && path.input_amp_node_number == 0) {
+		UnmuteInAmp(adc_nid, (UCHAR)path.connection_index,
+			(UCHAR)((input_amp_caps >> 8) & 0x7F));
+		path.input_amp_node_number      = adc_nid;
+		path.input_amp_node_capabilities = input_amp_caps;
+	}
+
+	DOUT(DBG_PRINT, ("Input Sample Caps: 0x%x", path.audio_input_node_sample_capabilities));
+	DOUT(DBG_PRINT, ("Input Format Caps: 0x%x", path.audio_input_node_stream_format_capabilities));
+}
+
+/*****************************************************************************
  * HDA_Codec::ProgramDataFormat
  *****************************************************************************
  * Programs the sample rate for all outputs paths in the codec 
@@ -1096,8 +1434,49 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::ProgramDataFormat
 	if (InShutdown) return STATUS_UNSUCCESSFUL;
 
 	if (Input) {
-		DOUT (DBG_PRINT, ("input is not this far yet"));
-		return STATUS_UNSUCCESSFUL;
+		if (in_paths.count == 0) {
+			DOUT(DBG_ERROR, ("No input paths inited yet!"));
+			return STATUS_UNSUCCESSFUL;
+		}
+
+		USHORT in_format = hda_return_sound_data_format(dwSampleRate, Channels, BitDepth);
+		DOUT(DBG_VSR, ("Input sound data format 0x%X", in_format));
+
+		if (in_format == prev_input_data_format) {
+			return STATUS_SUCCESS;
+		}
+
+		if ((Channels == 0) || (Channels > 2)) {
+			DOUT(DBG_PRINT, ("bad channels (input)"));
+			return STATUS_UNSUCCESSFUL;
+		}
+		if ((BitDepth != 8) && (BitDepth != 16) && (BitDepth != 32)) {
+			DOUT(DBG_PRINT, ("bad bit depth (input)"));
+			return STATUS_UNSUCCESSFUL;
+		}
+
+		ULONG in_successes = 0;
+		for (ULONG i = 0; i < in_paths.count; ++i) {
+			ULONG st = hda_send_verb(in_paths.paths[i].audio_input_node_number, 0x200, in_format);
+			if (st == 0xFFFFFFFF) {
+				DOUT(DBG_ERROR, ("Input path %d node 0x%x rejected format 0x%X",
+					i, in_paths.paths[i].audio_input_node_number, in_format));
+			}
+			st = hda_send_verb(in_paths.paths[i].audio_input_node_number, 0xA00, 0x0);
+			if (st == in_format) {
+				++in_successes;
+			} else {
+				DOUT(DBG_ERROR, ("Input path %d node 0x%x readback 0x%X expected 0x%X",
+					i, in_paths.paths[i].audio_input_node_number, st, in_format));
+			}
+		}
+		if (in_successes == 0) {
+			DOUT(DBG_ERROR, ("No input codec paths accepted that sample rate"));
+			return STATUS_UNSUCCESSFUL;
+		}
+		DOUT(DBG_VSR, ("Set input format successfully"));
+		prev_input_data_format = in_format;
+		return STATUS_SUCCESS;
 	}
 
     WORD     wOldRateReg, wCodecReg;
@@ -1525,33 +1904,118 @@ STDMETHODIMP_(UCHAR) HDA_Codec::hda_is_supported_sample_rate(ULONG sample_rate) 
 }
 
 
-STDMETHODIMP_(void) HDA_Codec::hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute) {
-
+STDMETHODIMP_(void) HDA_Codec::hda_set_gain(BOOLEAN isInput, ULONG pathType, ULONG gain, UCHAR ch, BOOLEAN mute) {
 	if (InShutdown) return;
 
-	//Set volume on the selected gain amp and mute on a separate mute-capable
-	//amp when the codec path uses different widgets for those controls.
-	for (ULONG i = 0; i < out_paths.count; ++i){
-		HDA_NODE_PATH& path = out_paths.paths[i];
-		hda_set_node_gain(
-			path.output_amp_node_number,
-			HDA_OUTPUT_NODE,
-			path.output_amp_node_capabilities,
-			volume,
-			ch,
-			mute
-		);
-
-		if(path.mute_amp_node_number != 0 &&
-			path.mute_amp_node_number != path.output_amp_node_number) {
+	if (!isInput) {
+		// Output gain: Master/All (0) or specific output node
+		for (ULONG i = 0; i < out_paths.count; ++i) {
+			HDA_NODE_PATH& path = out_paths.paths[i];
 			hda_set_node_gain(
-				path.mute_amp_node_number,
+				path.output_amp_node_number,
 				HDA_OUTPUT_NODE,
-				path.mute_amp_node_capabilities,
-				250,
+				path.output_amp_node_capabilities,
+				gain,
 				ch,
 				mute
 			);
+
+			if(path.mute_amp_node_number != 0 &&
+				path.mute_amp_node_number != path.output_amp_node_number) {
+				hda_set_node_gain(
+					path.mute_amp_node_number,
+					HDA_OUTPUT_NODE,
+					path.mute_amp_node_capabilities,
+					250,
+					ch,
+					mute
+				);
+			}
+		}
+	} else {
+		// Input gain
+		if (pathType == 0) {
+			// Master In / Wave In: set gain on the active ADC(s)
+			for (ULONG i = 0; i < in_paths.count; ++i) {
+				HDA_INPUT_PATH& path = in_paths.paths[i];
+				if (path.audio_input_node_number != 0) {
+					ULONG caps = hda_send_verb(path.audio_input_node_number, 0xF00, 0x0D);
+					if (caps != 0) {
+						hda_set_node_gain(
+							path.audio_input_node_number,
+							HDA_INPUT_NODE,
+							caps,
+							gain,
+							ch,
+							mute
+						);
+					}
+				}
+			}
+		} else {
+			// Specific input path (Mic, Line In, CD, Stereo Mix)
+			for (ULONG i = 0; i < in_paths.count; ++i) {
+				HDA_INPUT_PATH& path = in_paths.paths[i];
+				if (path.path_type == pathType) {
+					if (path.input_amp_node_number != 0) {
+						hda_set_node_gain(
+							path.input_amp_node_number,
+							HDA_INPUT_NODE,
+							path.input_amp_node_capabilities,
+							gain,
+							ch,
+							mute
+						);
+					}
+					if (path.pin_node_number != 0) {
+						ULONG pin_amp_caps = hda_send_verb(path.pin_node_number, 0xF00, 0x0D);
+						if (pin_amp_caps != 0) {
+							hda_set_node_gain(
+								path.pin_node_number,
+								HDA_INPUT_NODE,
+								pin_amp_caps,
+								gain,
+								ch,
+								mute
+							);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+STDMETHODIMP_(void) HDA_Codec::hda_set_input_source(ULONG path_type) {
+	if (InShutdown) return;
+
+	for (ULONG i = 0; i < in_paths.count; ++i) {
+		HDA_INPUT_PATH& path = in_paths.paths[i];
+		if (path.path_type == path_type) {
+			hda_log("WDMHDA: Select input source 0x%lX (pin=0x%lX, adc=0x%lX, idx=%lu)\n",
+			        path_type, path.pin_node_number, path.audio_input_node_number, path.connection_index);
+			hda_send_verb(path.audio_input_node_number, VERB_SET_CONNECT_SEL, path.connection_index);
+			if (path.input_amp_node_number != 0) {
+				UnmuteInAmp(path.input_amp_node_number, (UCHAR)path.connection_index, 0x40);
+			}
+			active_input_source = path_type;
+			return;
+		}
+	}
+
+	hda_log("WDMHDA: Input source 0x%lX not found in in_paths\n", path_type);
+}
+
+STDMETHODIMP_(void) HDA_Codec::hda_set_analog_cd_passthrough(BOOLEAN enable, UCHAR gain) {
+	if (InShutdown) return;
+
+	if (analog_mixer_node_number != 0 && analog_cd_mixer_index != 0xFF) {
+		hda_log("WDMHDA: CD passthrough mixer=0x%lX idx=%lu enable=%d gain=0x%x\n",
+		        analog_mixer_node_number, analog_cd_mixer_index, enable, gain);
+		if (enable) {
+			UnmuteInAmp(analog_mixer_node_number, (UCHAR)analog_cd_mixer_index, gain ? gain : 0x40);
+		} else {
+			MutePinInAmp(analog_mixer_node_number, (UCHAR)analog_cd_mixer_index);
 		}
 	}
 }

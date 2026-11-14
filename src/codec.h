@@ -49,6 +49,7 @@ struct IAdapterCommon;
 typedef ULONG (*HDA_SEND_VERB_FUNC)(IAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 
 #define MAX_OUTPUT_PATHS 8
+#define MAX_INPUT_PATHS  4
 
 typedef struct
 {	
@@ -66,6 +67,24 @@ typedef struct _HDA_OUTPUT_LIST {
     ULONG count;
     HDA_NODE_PATH paths[MAX_OUTPUT_PATHS];
 } HDA_OUTPUT_LIST;
+
+// Input path – records one pin→[mixer/selector→]ADC signal chain.
+typedef struct
+{
+    ULONG path_type;                    // HDA_PIN_MIC_IN, HDA_PIN_LINE_IN, etc.
+    ULONG pin_node_number;              // Input pin complex NID
+    ULONG connection_index;            // Index selected on the ADC/mixer connection list
+    ULONG audio_input_node_number;     // ADC (audio-input converter) NID
+    ULONG audio_input_node_sample_capabilities;
+    ULONG audio_input_node_stream_format_capabilities;
+    ULONG input_amp_node_number;        // Node used for record level
+    ULONG input_amp_node_capabilities;
+} HDA_INPUT_PATH, *PHDA_INPUT_PATH;
+
+typedef struct _HDA_INPUT_LIST {
+    ULONG count;
+    HDA_INPUT_PATH paths[MAX_INPUT_PATHS];
+} HDA_INPUT_LIST;
 
 /*****************************************************************************
  * Constants for HD Audio Codec
@@ -100,6 +119,7 @@ typedef struct _HDA_OUTPUT_LIST {
 #define HDA_PIN_DIGITAL_OTHER_IN 0xD
 #define HDA_PIN_RESERVED 0xE
 #define HDA_PIN_OTHER 0xF
+#define HDA_INPUT_TYPE_STEREOMIX 0x10
 
 // Node types
 #define HDA_OUTPUT_NODE 0x1
@@ -233,13 +253,21 @@ private:
     ULONG afg_node_output_amp_capabilities;
 
 	USHORT prev_data_format;
+	USHORT prev_input_data_format;
 
 	//Codec output paths
 	HDA_OUTPUT_LIST out_paths;
 
+	//Codec input paths
+	HDA_INPUT_LIST in_paths;
+
     ULONG pin_output_node_number;
     ULONG headphone_node_number;
 	ULONG dock_lineout_node_number;
+	ULONG pin_cd_node_number;
+	ULONG analog_mixer_node_number;
+	ULONG analog_cd_mixer_index;
+	ULONG active_input_source;
 	
 	LONG HpPollingEnabled;
     LONG InShutdown;
@@ -287,10 +315,17 @@ public:
 	STDMETHODIMP_(void) hda_initialize_audio_mixer(ULONG audio_mixer_node_number, HDA_NODE_PATH& path);
 	STDMETHODIMP_(void) hda_initialize_audio_selector(ULONG audio_selector_node_number, HDA_NODE_PATH& path);
 
+	STDMETHODIMP_(NTSTATUS) hda_initialize_input_pin(ULONG pin_node_number, HDA_INPUT_PATH& path);
+	STDMETHODIMP_(void) hda_initialize_audio_input_node(ULONG adc_node_number, HDA_INPUT_PATH& path);
+	STDMETHODIMP_(void) hda_initialize_mixer_for_input(ULONG mixer_nid, ULONG source_index, HDA_INPUT_PATH& path, ULONG depth);
+	STDMETHODIMP_(void) hda_initialize_selector_for_input(ULONG sel_nid, ULONG source_index, HDA_INPUT_PATH& path, ULONG depth);
+
 	STDMETHODIMP_(BOOLEAN) hda_is_headphone_connected(void);
 	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
 
-	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void) hda_set_gain(BOOLEAN isInput, ULONG pathType, ULONG gain, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void) hda_set_input_source(ULONG path_type);
+	STDMETHODIMP_(void) hda_set_analog_cd_passthrough(BOOLEAN enable, UCHAR gain);
 	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
 
 	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size);

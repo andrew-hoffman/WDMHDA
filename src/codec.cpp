@@ -505,6 +505,9 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				break;
 			}
 
+			hda_log("Assoc:%d Seq:%d ",
+				pin_association, pin_sequence);
+
 			if(pin_node_type == HDA_PIN_LINE_OUT) {
 				DbgPrint( ("Line Out"));
 
@@ -526,7 +529,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				DbgPrint( ("Speaker "));
 
 				//first speaker node is default speaker
-				if(pin_speaker_default_node_number==0) {
+				if(pin_speaker_default_node_number == 0) {
 					pin_speaker_default_node_number = node;
 				}
 
@@ -542,9 +545,11 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 			} else if(pin_node_type == HDA_PIN_HEADPHONE_OUT) {
 				DbgPrint( ("Headphone Out"));
 
-				//save node number
-				//TODO: handle if there are multiple HP nodes
-				pin_headphone_node_number = node;
+				//save 1st headphone node number
+				//TODO: handle multiple HP nodes, put in a list
+				if(pin_headphone_node_number == 0) {
+					pin_headphone_node_number = node;
+				}
 
 			} else if(pin_node_type == HDA_PIN_CD) {
 				DbgPrint( ("CD"));
@@ -561,8 +566,17 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	
 				//save this node, this variable contain number of last alternative output
 				if (useSpdif){
-					pin_spdif_node_number = node;
-					DbgPrint( (" used"));
+
+					// Sequence 0 is the front channel in an
+					// association group; prefer it over rear/sub/side (sequence > 0).
+					// If no sequence-0 output is found, fall back to the first one seen.
+					if (pin_line_out_node_number == 0 || pin_sequence == 0) {
+						pin_spdif_node_number = node;
+						DbgPrint( (" used"));
+					} else {
+						DbgPrint( (" not used"));
+					}
+					
 				} else {
 					DbgPrint( (" not considered"));
 				}
@@ -570,8 +584,17 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				DbgPrint( ("Digital Other Out"));
 				//save this node, this variable contain number of last alternative output
 				if (useSpdif){
-					pin_alternative_output_node_number = node;
-					DbgPrint( (" used"));
+
+					// Sequence 0 is the front channel in an
+					// association group; prefer it over rear/sub/side (sequence > 0).
+					// If no sequence-0 output is found, fall back to the first one seen.
+					if (pin_line_out_node_number == 0 || pin_sequence == 0) {
+						pin_alternative_output_node_number = node;
+						DbgPrint( (" used"));
+					} else {
+						DbgPrint( (" not used"));
+					}
+					
 				} else {
 					DbgPrint( (" not considered"));
 				}

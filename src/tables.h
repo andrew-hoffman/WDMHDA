@@ -7,10 +7,6 @@
 #ifndef _HDATOPO_TABLES_H_
 #define _HDATOPO_TABLES_H_
 
-#ifndef KSAUDFNAME_STEREO_MIX
-DEFINE_GUID(KSAUDFNAME_STEREO_MIX,
-0x0dd25201, 0x3d30, 0x11d1, 0x81, 0xaa, 0x0, 0x0, 0xf8, 0x75, 0x57, 0xdb);
-#endif
 
 /*****************************************************************************
  * The topology

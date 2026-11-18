@@ -800,7 +800,7 @@ STDMETHODIMP_(ULONG) HDA_Codec::hda_get_node_connection_entries (ULONG node, ULO
 	}
 }
 
-
+//Initialize an output pin widget, then everything else in its path
 STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_number, HDA_NODE_PATH& path) {
     PAGED_CODE ();
 
@@ -810,6 +810,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	ULONG pin_config = hda_send_verb(pin_node_number, 0xF1C, 0x00);
 	path.path_type = (pin_config >> 20) & 0xF;
 	BOOLEAN is_headphone = ( ((pin_config >> 20) & 0xF) == HDA_PIN_HEADPHONE_OUT);
+	ULONG caps = hda_send_verb(pin_node_number, 0xF00, 0x09);
 
     DOUT (DBG_PRINT, ("[HDA_Codec::hda_initialize_output_pin] 0x%x", pin_node_number));
 	//reset variables of first path
@@ -832,6 +833,12 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	hda_send_verb(pin_node_number, 0x703, 0x00);
 	//set 16-bit stereo format
 	hda_send_verb(pin_node_number, 0x200, 0x11);
+	
+	//if Digital output type (bit 9)
+	if (caps & 0x100){
+		//set DIGEN
+		hda_send_verb(pin_node_number, 0x70D, 0x01);
+	}
 
 	if (isRealtek){
 		//turn on power for PIN Last
@@ -893,34 +900,40 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	return ntStatus;
 }
 
+//Initialize an Audio Output Converter (DAC)
 STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_output(ULONG output_node_number, HDA_NODE_PATH& path) {
 	PAGED_CODE ();
 	DOUT (DBG_PRINT, ("Initializing Audio Output 0x%x", output_node_number));
 	path.audio_output_node_number = output_node_number;
 
-	if(isRealtek){
-		//disable unsolicited responses
-		hda_send_verb(output_node_number, 0x708, 0x00);
-		//disable any processing
-		hda_send_verb(output_node_number, 0x703, 0x00);
-		//set 16-bit stereo format before turning on power so it sticks
-		hda_send_verb(output_node_number, 0x200, 0x11);
-		//turn on power for Audio Output
+	ULONG caps = hda_send_verb(output_node_number, 0xF00, 0x09);
+	ULONG chanCount = ((caps >> 13) & 0x07) * 2 + (caps & 0x01) + 1; 
+
+	if (!isRealtek){
+		//turn on power for Audio Output first
 		hda_send_verb(output_node_number, 0x705, 0x00);
 		//connect Audio Output to appropriate stream, channel 0
 		hda_send_verb(output_node_number, 0x706, (HDA_OUTPUT_STREAM_TAG << 4) | 0x0);
-	} else {
-		//turn on power for Audio Output
-		hda_send_verb(output_node_number, 0x705, 0x00);
-		//connect Audio Output to appropriate stream, channel 0
-		hda_send_verb(output_node_number, 0x706, (HDA_OUTPUT_STREAM_TAG << 4) | 0x0);
-		//disable unsolicited responses
-		hda_send_verb(output_node_number, 0x708, 0x00);
-		//disable any processing
-		hda_send_verb(output_node_number, 0x703, 0x00);
-		//set 16-bit stereo format after turning on power so it isn't rejected
-		hda_send_verb(output_node_number, 0x200, 0x11);
 	}
+
+	//disable unsolicited responses
+	hda_send_verb(output_node_number, 0x708, 0x00);
+	//disable any processing
+	hda_send_verb(output_node_number, 0x703, 0x00);
+	//set 16-bit stereo format after turning on power so it isn't rejected
+	hda_send_verb(output_node_number, 0x200, 0x11);
+	//if converter is >2 channels, set for Stereo
+	if (chanCount > 2){
+		hda_send_verb(output_node_number, 0x72d, 0x01);
+	}
+
+	if (isRealtek){
+		//turn on power for Audio Output last
+		hda_send_verb(output_node_number, 0x705, 0x00);
+		//connect Audio Output to appropriate stream, channel 0
+		hda_send_verb(output_node_number, 0x706, (HDA_OUTPUT_STREAM_TAG << 4) | 0x0);
+	}
+
 
 	//set maximum volume for Audio Output
 	ULONG audio_output_amp_capabilities = hda_send_verb(output_node_number, 0xF00, 0x12);
@@ -982,16 +995,16 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 		hda_send_verb(audio_mixer_node_number, 0x200, 0x11);
 		//turn on power for Audio Mixer
 		hda_send_verb(audio_mixer_node_number, 0x705, 0x00);
-		//disable unsolicited responses
-		hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
+
 	} else {
 		//turn on power for Audio Mixer
 		hda_send_verb(audio_mixer_node_number, 0x705, 0x00);
 		//set 16-bit stereo format
 		hda_send_verb(audio_mixer_node_number, 0x200, 0x11);
-		//disable unsolicited responses
-		hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
 	}
+
+	//disable unsolicited responses
+	hda_send_verb(audio_mixer_node_number, 0x708, 0x00);
 
 	//set maximal volume for Audio Mixer
 	ULONG audio_mixer_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x12);
@@ -1046,20 +1059,17 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_selector(ULONG audio_selecto
 	if(isRealtek){
 		//set 16-bit stereo format before turning on power so it sticks
 		hda_send_verb(audio_selector_node_number, 0x200, 0x11);
-		//turn on power for Audio Selector
-		hda_send_verb(audio_selector_node_number, 0x705, 0x00);
-		//disable unsolicited responses
-		hda_send_verb(audio_selector_node_number, 0x708, 0x00);
-		//disable any processing
-		hda_send_verb(audio_selector_node_number, 0x703, 0x00);
-	} else {
-		//turn on power for Audio Selector
-		hda_send_verb(audio_selector_node_number, 0x705, 0x00);
-		//disable unsolicited responses
-		hda_send_verb(audio_selector_node_number, 0x708, 0x00);
-		//disable any processing
-		hda_send_verb(audio_selector_node_number, 0x703, 0x00);
-		//set 16-bit stereo format
+	}
+
+	//turn on power for Audio Selector
+	hda_send_verb(audio_selector_node_number, 0x705, 0x00);
+	//disable unsolicited responses
+	hda_send_verb(audio_selector_node_number, 0x708, 0x00);
+	//disable any processing
+	hda_send_verb(audio_selector_node_number, 0x703, 0x00);
+
+	if(!isRealtek){
+		//set 16-bit stereo format last
 		hda_send_verb(audio_selector_node_number, 0x200, 0x11);
 	}
 

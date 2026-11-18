@@ -835,7 +835,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_output_pin ( ULONG pin_node_nu
 	hda_send_verb(pin_node_number, 0x200, 0x11);
 	
 	//if Digital output type (bit 9)
-	if (caps & 0x100){
+	if (caps & 0x200){
 		//set DIGEN
 		hda_send_verb(pin_node_number, 0x70D, 0x01);
 	}

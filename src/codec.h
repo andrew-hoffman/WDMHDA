@@ -236,9 +236,13 @@ private:
 
 	//Codec output paths
 	HDA_OUTPUT_LIST out_paths;
-
-    ULONG pin_output_node_number;
-    ULONG headphone_node_number;
+	
+	// Saved path nodes
+	
+	
+    ULONG speaker_node_number; // Speaker will be muted when headphones are plugged in
+    ULONG headphone_node_number; // Line Out(s) will not be
+	ULONG lineout_node_number;
 	ULONG dock_lineout_node_number;
 	
 	LONG HpPollingEnabled;

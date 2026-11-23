@@ -1061,6 +1061,7 @@ STDMETHODIMP_(void) HDA_Codec::hda_initialize_audio_mixer(ULONG audio_mixer_node
 	}
 
 	// if there is an input amp on the mixer, unmute it
+	// TODO: this only gets the first input amp on the mixer which may not be the one on the path!
 	ULONG input_amp_capabilities = hda_send_verb(audio_mixer_node_number, 0xF00, 0x0D);
 		if (input_amp_capabilities != 0) {
 			hda_set_node_gain(audio_mixer_node_number, HDA_INPUT_NODE,

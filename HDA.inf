@@ -32,12 +32,6 @@ HDA.sys=222
 [ControlFlags]
 ExcludeFromSelect = *EXCLUDE
 
-[*PNPB003.Det]
-AddReg=PreCopySection
-
-[PreCopySection]
-HKR,,NoSetupUI,,1
-
 [STUB_DEVICE]
 
 [STUB_DEVICE.NT]
@@ -54,8 +48,6 @@ AddService=,0x2
 %Creative.DeviceDesc%=HDA_Creative, PCI\VEN_1102&DEV_0009
 ;; Creative Generic Class Match
 %Creative.GenericDesc%=HDA_Creative, , PCI\VEN_1102&CC_0403
-%*CTL0051.DeviceDesc%=STUB_DEVICE, , *CTL0051
-%*CTL7FFF.DeviceDesc%=STUB_DEVICE, , *CTL7FFF
 %SBAWE_Virtual_Mpu.DeviceDesc%=STUB_DEVICE, , VIRTUAL\SBAWE-MPUEmulation
 
 ;;============================================================================
@@ -710,11 +702,8 @@ Generic.DeviceDesc="HD Audio Controller (WDM)"
 Generic.Wave.szPname="HD Audio"
 Generic.Topology.szPname="HD Audio"
 
-*CTL0051.DeviceDesc="WDM Sample Driver for 3D Stereo Enhancement Technology (inactive)"
-*CTL7FFF.DeviceDesc="WDM Sample Driver for Plug and Play Device (Reserved) (inactive)"
 SBAWE_Virtual_Mpu.DeviceDesc="WDM Sample Driver for MPU401 Emulation (inactive)"
 
-MediaCategories="SYSTEM\CurrentControlSet\Control\MediaCategories"
 WDM_MIDI="WDM-based Device"
 
 Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"

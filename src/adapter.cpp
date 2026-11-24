@@ -597,36 +597,68 @@ AssignResources
     OUT     PRESOURCELIST * ResourceListAdapter
 )
 {
-    BOOLEAN     detectedWaveTable   = FALSE;
-    BOOLEAN     detectedUart        = FALSE;
-    BOOLEAN     detectedFmSynth     = FALSE;
+    ULONG countMemory = ResourceList->NumberOfMemories();
+    ULONG countIO     = ResourceList->NumberOfPorts();
+    ULONG countIRQ    = ResourceList->NumberOfInterrupts();
+    ULONG countDMA    = ResourceList->NumberOfDmas();
 
-    ULONG countIO  = ResourceList->NumberOfPorts();
-    ULONG countIRQ = ResourceList->NumberOfInterrupts();
-    ULONG countDMA = ResourceList->NumberOfDmas();
+    DOUT (DBG_SYSINFO, ("AssignResources: Resources in List:\n"
+                        "   Memory count: %d\n"
+                        "   IO     count: %d\n"
+                        "   IRQ    count: %d\n"
+                        "   DMA    count: %d",
+                        countMemory, countIO, countIRQ, countDMA));
 
     NTSTATUS ntStatus = STATUS_SUCCESS;
 
-    switch (countIO)
+    // Find the 16KB memory BAR for HD Audio registers (0x4000 bytes)
+    ULONG hdaMemIndex = (ULONG)-1;
+
+    for (ULONG i = 0; i < countMemory; i++)
     {
-    case 0:
-        if ((countIO != 0) || (countIRQ > 1) || (countDMA != 0))
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, i);
+        if (desc)
         {
-            DOUT (DBG_ERROR, ("Unknown configuration!\n"
-                          "   IO  count: %d\n"
-                          "   IRQ count: %d\n"
-                          "   DMA count: %d",
-                          countIO, countIRQ, countDMA));
-            ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-        } else if (countIRQ == 0){
-            ntStatus = STATUS_INSUFFICIENT_RESOURCES;
-        } else {
-            ntStatus = STATUS_SUCCESS;
+            DOUT (DBG_SYSINFO, ("AssignResources: Memory %d: Phys = 0x%08lX%08lX, Length = 0x%lX (%d KB)",
+                                i, desc->u.Memory.Start.HighPart, desc->u.Memory.Start.LowPart,
+                                desc->u.Memory.Length, desc->u.Memory.Length / 1024));
+
+            if (desc->u.Memory.Length == 0x4000)
+            {
+                hdaMemIndex = i;
+            }
         }
-        break;
-    default:
-        ntStatus = STATUS_DEVICE_CONFIGURATION_ERROR;
-        break;
+    }
+
+    // If only one memory BAR is present and >= 16KB, accept it as fallback
+    if (hdaMemIndex == (ULONG)-1 && countMemory == 1)
+    {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR desc = ResourceList->FindTranslatedEntry(CmResourceTypeMemory, 0);
+        if (desc && desc->u.Memory.Length >= 0x4000)
+        {
+            hdaMemIndex = 0;
+        }
+    }
+
+    if (hdaMemIndex == (ULONG)-1)
+    {
+        DOUT (DBG_ERROR, ("AssignResources: Insufficient resources - no 16KB HDA memory BAR found!"));
+        ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else if (countIRQ < 1)
+    {
+        DOUT (DBG_ERROR, ("AssignResources: Insufficient resources - no IRQ found!"));
+        ntStatus = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    else
+    {
+        DOUT (DBG_SYSINFO, ("AssignResources: Selected Memory %d (16KB) and IRQ 0 for subdevices", hdaMemIndex));
+        if (countMemory > 1 || countIO > 0)
+        {
+            DOUT (DBG_SYSINFO, ("AssignResources: Filtering out extra resources (Memory: %d, IO: %d)",
+                                countMemory, countIO));
+        }
+        ntStatus = STATUS_SUCCESS;
     }
 
     *ResourceListTopology = NULL;
@@ -639,13 +671,13 @@ AssignResources
                 NULL,
                 PagedPool,
                 ResourceList,
-                countIRQ + countDMA + 1
+                1
             );
 
         if (NT_SUCCESS(ntStatus))
         {
             SUCCEEDS((*ResourceListTopology)->
-                AddMemoryFromParent(ResourceList,0));
+                AddMemoryFromParent(ResourceList, hdaMemIndex));
         }
     }
 
@@ -659,77 +691,22 @@ AssignResources
                 NULL,
                 PagedPool,
                 ResourceList,
-                countDMA + countIRQ + 1
-            );
-
-        if (NT_SUCCESS(ntStatus))
-        {
-            ULONG i;
-
-            SUCCEEDS((*ResourceListWave)->
-                AddMemoryFromParent(ResourceList,0));
-
-            for (i = 0; i < countDMA; i++)
-            {
-                SUCCEEDS((*ResourceListWave)->
-                    AddDmaFromParent(ResourceList,i));
-            }
-
-            for (i = 0; i < countIRQ; i++)
-            {
-                SUCCEEDS((*ResourceListWave)->
-                    AddInterruptFromParent(ResourceList,i));
-            }
-        }
-    }
-
-    *ResourceListWaveTable = NULL;
-    if (NT_SUCCESS(ntStatus) && detectedWaveTable)
-    {
-        // TODO: Assign wave table resources.
-    }
-
-    *ResourceListUart = NULL;
-    if (NT_SUCCESS(ntStatus) && detectedUart)
-    {
-        ntStatus =
-            PcNewResourceSublist
-            (
-                ResourceListUart,
-                NULL,
-                PagedPool,
-                ResourceList,
                 2
             );
 
         if (NT_SUCCESS(ntStatus))
         {
-            SUCCEEDS((*ResourceListUart)->
-                AddMemoryFromParent(ResourceList,1));
-            SUCCEEDS((*ResourceListUart)->
-                AddInterruptFromParent(ResourceList,0));
+            SUCCEEDS((*ResourceListWave)->
+                AddMemoryFromParent(ResourceList, hdaMemIndex));
+
+            SUCCEEDS((*ResourceListWave)->
+                AddInterruptFromParent(ResourceList, 0));
         }
     }
 
-    *ResourceListFmSynth = NULL;
-    if (NT_SUCCESS(ntStatus) && detectedFmSynth)
-    {
-        ntStatus =
-            PcNewResourceSublist
-            (
-                ResourceListFmSynth,
-                NULL,
-                PagedPool,
-                ResourceList,
-                1
-            );
-
-        if (NT_SUCCESS(ntStatus))
-        {
-            SUCCEEDS((*ResourceListFmSynth)->
-                AddMemoryFromParent(ResourceList,detectedUart ? 2 : 1));
-        }
-    }
+    *ResourceListWaveTable = NULL;
+    *ResourceListUart      = NULL;
+    *ResourceListFmSynth   = NULL;
 
     *ResourceListAdapter = NULL;
     if (NT_SUCCESS(ntStatus))
@@ -741,27 +718,26 @@ AssignResources
                 NULL,
                 PagedPool,
                 ResourceList,
-                3
+                2
             );
 
         if (NT_SUCCESS(ntStatus))
         {
             SUCCEEDS((*ResourceListAdapter)->
-                AddInterruptFromParent(ResourceList,0));
+                AddMemoryFromParent(ResourceList, hdaMemIndex));
 
             SUCCEEDS((*ResourceListAdapter)->
-                AddMemoryFromParent(ResourceList,0));
-
-            if (detectedUart)
-            {
-                SUCCEEDS((*ResourceListAdapter)->
-                    AddMemoryFromParent(ResourceList,1));
-            }
+                AddInterruptFromParent(ResourceList, 0));
         }
     }
 
     if (! NT_SUCCESS(ntStatus))
     {
+        if (*ResourceListTopology)
+        {
+            (*ResourceListTopology)->Release();
+            *ResourceListTopology = NULL;
+        }
         if (*ResourceListWave)
         {
             (*ResourceListWave)->Release();
@@ -782,7 +758,7 @@ AssignResources
             (*ResourceListFmSynth)->Release();
             *ResourceListFmSynth = NULL;
         }
-        if(*ResourceListAdapter)
+        if (*ResourceListAdapter)
         {
             (*ResourceListAdapter)->Release();
             *ResourceListAdapter = NULL;

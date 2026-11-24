@@ -400,7 +400,7 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 	// pin_* are local to this function
 	ULONG subordinate_node_count_reponse = hda_send_verb(afg_node_number, 0xF00, 0x04);
 	ULONG pin_speaker_default_node_number = 0, pin_speaker_node_number = 0;
-	ULONG pin_headphone_node_number = 0, pin_lineout_node_number = 0;
+  ULONG pin_headphone_node_number = 0, pin_lineout_node_number = 0;
 	
 	//clear all stored nodes
 	speaker_node_number = 0;
@@ -736,6 +736,17 @@ STDMETHODIMP_(NTSTATUS) HDA_Codec::hda_initialize_audio_function_group(ULONG afg
 				out_paths.paths[out_paths.count++] = path;
 			}
 		}	
+		
+		if (pin_lineout_node_number != 0) {
+			DbgPrint("\nLine output ");
+			hda_initialize_output_pin(pin_lineout_node_number, path);
+			lineout_node_number = pin_lineout_node_number;
+			
+			if (out_paths.count < MAX_OUTPUT_PATHS) {
+				out_paths.paths[out_paths.count++] = path;
+			}
+		}
+		
 		
 		if (pin_lineout_node_number != 0) {
 			DbgPrint("\nLine output ");

@@ -20,22 +20,17 @@ DriverVer=11/11/2026,5.00.2195.26
 HDA.sys=222
 
 [Manufacturer]
-%MfgName%=SiriusCybernetics
+%MfgCreative%=Creative
+%MfgIntel%=Intel
+%MfgAMD%=AMD
+%MfgNVIDIA%=NVIDIA
+%MfgVIA%=VIA
+%MfgVMware%=VMware
+%MfgULi%=ULi
+%MfgGeneric%=Generic
 
-;;
-;; Mechanism for excluding drivers from the "Add New Hardware" list.
-;;
 [ControlFlags]
-;; *EXCLUDE is a made up ID to prevent rank 1 drivers from showing in list.
 ExcludeFromSelect = *EXCLUDE
-
-;; HDA miniport
-[SiriusCybernetics]
-;Generic PCI class. use at your own risk
-%*WDM_HDA.DeviceDesc%=WDM_HDA,            , PCI\CC_0403
-%*CTL0051.DeviceDesc%=STUB_DEVICE,          , *CTL0051
-%*CTL7FFF.DeviceDesc%=STUB_DEVICE,          , *CTL7FFF
-%SBAWE_Virtual_Mpu.DeviceDesc%=STUB_DEVICE, , VIRTUAL\SBAWE-MPUEmulation
 
 [*PNPB003.Det]
 AddReg=PreCopySection
@@ -45,49 +40,575 @@ HKR,,NoSetupUI,,1
 
 [STUB_DEVICE]
 
-[WDM_HDA]
+[STUB_DEVICE.NT]
+[STUB_DEVICE.NT.SERVICES]
+AddService=,0x2
+
+;;============================================================================
+;; Creative
+;;============================================================================
+[Creative]
+;; Sound Blaster X-Fi SB0770 OEM (EMU20K1 + CA0112)
+%Creative.DeviceDesc%=HDA_Creative, PCI\VEN_1102&DEV_0005
+;; Sound Blaster X-Fi Xtreme Audio (CA0110)
+%Creative.DeviceDesc%=HDA_Creative, PCI\VEN_1102&DEV_0009
+;; Creative Generic Class Match
+%Creative.GenericDesc%=HDA_Creative, , PCI\VEN_1102&CC_0403
+%*CTL0051.DeviceDesc%=STUB_DEVICE, , *CTL0051
+%*CTL7FFF.DeviceDesc%=STUB_DEVICE, , *CTL7FFF
+%SBAWE_Virtual_Mpu.DeviceDesc%=STUB_DEVICE, , VIRTUAL\SBAWE-MPUEmulation
+
+;;============================================================================
+;; Intel
+;;============================================================================
+[Intel]
+;; ICH6
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_2668
+;; ICH7
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_27D8
+;; 631xESB/632xESB
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_269A
+;; ICH8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_284B
+;; ICH9
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_2911
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_293E
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_293F
+;; ICH10
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_3A3E
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_3A6E
+;; 5 Series / 3400 Series
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_3B56
+;; SCH / Poulsbo / Atom
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_811B
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_080A
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_0F04
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_2284
+;; 6 Series / C200 / Cougar Point
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_1C20
+;; C600 / X79
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_1D20
+;; 7 Series / Panther Point
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_1E20
+;; 8 Series / Lynx Point
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_8C20
+;; 9 Series / Wildcat Point
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_8CA0
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9C20
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9C21
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9CA0
+;; Wellsburg / X99
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_8D20
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_8D21
+;; 100/200/300/400/500/600/700 Series / Skylake / Kaby / Coffee / Comet / Alder / Raptor Lake
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A170
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9D70
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A171
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9D71
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A1F0
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A270
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A2F0
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A348
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_9DC8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_02C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_06C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_F1C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A3F0
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_F0C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_34C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_3DC8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_4DC8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_A0C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_43C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_490D
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_7DA0
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_51C8
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_51CC
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_4B55
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_4B58
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_5A98
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_1A98
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_3198
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_7A50
+;; Intel HDMI Audio
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_0A0C
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_0C0C
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_0D0C
+%Intel.DeviceDesc%=HDA_Intel, PCI\VEN_8086&DEV_160C
+;; Intel Generic Class Match
+%Intel.GenericDesc%=HDA_Intel, , PCI\VEN_8086&CC_0403
+
+;;============================================================================
+;; AMD / ATI
+;;============================================================================
+[AMD]
+;; ATI SB450
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_437B
+;; ATI SB600 / SB700 / SB800
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_4383
+;; AMD Hudson
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1022&DEV_780D
+;; AMD Ryzen
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1022&DEV_1457
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1022&DEV_1487
+;; AMD APU
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1022&DEV_157A
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1022&DEV_15E3
+;; ATI / AMD HDMI Audio
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_0002
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_1308
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_157A
+%AMD.DeviceDesc%=HDA_AMD, PCI\VEN_1002&DEV_15B3
+;; AMD / ATI Generic Class Match
+%AMD.GenericDesc%=HDA_AMD, , PCI\VEN_1002&CC_0403
+%AMD.GenericDesc%=HDA_AMD, , PCI\VEN_1022&CC_0403
+
+;;============================================================================
+;; NVIDIA
+;;============================================================================
+[NVIDIA]
+;; MCP51
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_026C
+;; MCP55
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0371
+;; MCP61
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_03E4
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_03F0
+;; MCP65
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_044A
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_044B
+;; MCP67
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_055C
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_055D
+;; MCP77
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0774
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0775
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0776
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0777
+;; MCP73
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_07FC
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_07FD
+;; MCP79
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0AC0
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0AC1
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0AC2
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0AC3
+;; MCP89
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0D94
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0D95
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0D96
+%NVIDIA.DeviceDesc%=HDA_NVIDIA, PCI\VEN_10DE&DEV_0D97
+;; NVIDIA Generic Class Match
+%NVIDIA.GenericDesc%=HDA_NVIDIA, , PCI\VEN_10DE&CC_0403
+
+;;============================================================================
+;; VIA
+;;============================================================================
+[VIA]
+;; VT8237A / VT8251 / CX700 / VX700 / VT1708
+%VIA.DeviceDesc%=HDA_VIA, PCI\VEN_1106&DEV_3288
+;; VIA Generic Class Match
+%VIA.GenericDesc%=HDA_VIA, , PCI\VEN_1106&CC_0403
+
+;;============================================================================
+;; VMware
+;;============================================================================
+[VMware]
+;; VMware HD Audio Controller
+%VMware.DeviceDesc%=HDA_VMware, PCI\VEN_15AD&DEV_1977
+
+;;============================================================================
+;; ULi
+;;============================================================================
+[ULi]
+%ULi.DeviceDesc%=HDA_ULi, PCI\VEN_10B9&DEV_5461
+%ULi.GenericDesc%=HDA_ULi, , PCI\VEN_10B9&CC_0403
+
+;;============================================================================
+;; Generic / Fallback
+;;============================================================================
+[Generic]
+%Generic.DeviceDesc%=HDA_Generic, , PCI\CC_0403
+
+;;============================================================================
+;; Driver Installation Sections - Creative
+;;============================================================================
+[HDA_Creative]
 AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
 CopyFiles=HDA.CopyList
-AddReg=WDM_HDA.AddReg
+AddReg=WDM_HDA.AddReg, HDA_Creative.AddReg
 
-[WDM_HDA.Interfaces]
-AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,WDM_HDA.Interface.Topology
-;;AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_RENDER%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_FMSynth%,WDM.Interface.FMSynth
-;;AddInterface=%KSCATEGORY_RENDER%,%KSNAME_FMSynth%,WDM.Interface.FMSynth
+[HDA_Creative.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Creative.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Creative.Topo
 
-[WDM_HDA.Interface.Wave]
-AddReg=WDM_HDA.Interface.Wave.AddReg
-[WDM_HDA.Interface.Wave.AddReg]
+[HDA_Creative.Wave]
+AddReg=HDA_Creative.Wave.AddReg
+[HDA_Creative.Wave.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
-HKR,,FriendlyName,,%WDM_HDA.Wave.szPname%
+HKR,,FriendlyName,,%Creative.Wave.szPname%
 
-[WDM_HDA.Interface.Topology]
-AddReg=WDM_HDA.Interface.Topo.AddReg
-;; warning!! must be "Topo" because "Topology" is too long
-[WDM_HDA.Interface.Topo.AddReg]
+[HDA_Creative.Topo]
+AddReg=HDA_Creative.Topo.AddReg
+[HDA_Creative.Topo.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
-HKR,,FriendlyName,,%WDM_HDA.Topology.szPname%
+HKR,,FriendlyName,,%Creative.Topology.szPname%
 
-[WDM.Interface.UART]
-AddReg=WDM.Interface.UART.AddReg
-[WDM.Interface.UART.AddReg]
+[HDA_Creative.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%Creative.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%Creative.DeviceDesc%
+
+[HDA_Creative.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_Creative.AddReg
+
+[HDA_Creative.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Creative.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Creative.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Creative.Topo
+
+[HDA_Creative.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - Intel
+;;============================================================================
+[HDA_Intel]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_Intel.AddReg
+
+[HDA_Intel.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Intel.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Intel.Topo
+
+[HDA_Intel.Wave]
+AddReg=HDA_Intel.Wave.AddReg
+[HDA_Intel.Wave.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
-HKR,,FriendlyName,,%WDM.UART.szPname%
+HKR,,FriendlyName,,%Intel.Wave.szPname%
 
-[WDM.Interface.FMSynth]
-AddReg=WDM.Interface.FMSynth.AddReg
-[WDM.Interface.FMSynth.AddReg]
+[HDA_Intel.Topo]
+AddReg=HDA_Intel.Topo.AddReg
+[HDA_Intel.Topo.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
-HKR,,FriendlyName,,%WDM.FMSynth.szPname%
+HKR,,FriendlyName,,%Intel.Topology.szPname%
 
-;;Registry keys to add
+[HDA_Intel.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%Intel.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%Intel.DeviceDesc%
 
+[HDA_Intel.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_Intel.AddReg
+
+[HDA_Intel.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Intel.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Intel.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Intel.Topo
+
+[HDA_Intel.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - AMD / ATI
+;;============================================================================
+[HDA_AMD]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_AMD.AddReg
+
+[HDA_AMD.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_AMD.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_AMD.Topo
+
+[HDA_AMD.Wave]
+AddReg=HDA_AMD.Wave.AddReg
+[HDA_AMD.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AMD.Wave.szPname%
+
+[HDA_AMD.Topo]
+AddReg=HDA_AMD.Topo.AddReg
+[HDA_AMD.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AMD.Topology.szPname%
+
+[HDA_AMD.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%AMD.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%AMD.DeviceDesc%
+
+[HDA_AMD.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_AMD.AddReg
+
+[HDA_AMD.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_AMD.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_AMD.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_AMD.Topo
+
+[HDA_AMD.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - NVIDIA
+;;============================================================================
+[HDA_NVIDIA]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_NVIDIA.AddReg
+
+[HDA_NVIDIA.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_NVIDIA.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_NVIDIA.Topo
+
+[HDA_NVIDIA.Wave]
+AddReg=HDA_NVIDIA.Wave.AddReg
+[HDA_NVIDIA.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NVIDIA.Wave.szPname%
+
+[HDA_NVIDIA.Topo]
+AddReg=HDA_NVIDIA.Topo.AddReg
+[HDA_NVIDIA.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%NVIDIA.Topology.szPname%
+
+[HDA_NVIDIA.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%NVIDIA.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%NVIDIA.DeviceDesc%
+
+[HDA_NVIDIA.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_NVIDIA.AddReg
+
+[HDA_NVIDIA.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_NVIDIA.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_NVIDIA.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_NVIDIA.Topo
+
+[HDA_NVIDIA.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - VIA
+;;============================================================================
+[HDA_VIA]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_VIA.AddReg
+
+[HDA_VIA.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_VIA.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_VIA.Topo
+
+[HDA_VIA.Wave]
+AddReg=HDA_VIA.Wave.AddReg
+[HDA_VIA.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%VIA.Wave.szPname%
+
+[HDA_VIA.Topo]
+AddReg=HDA_VIA.Topo.AddReg
+[HDA_VIA.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%VIA.Topology.szPname%
+
+[HDA_VIA.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%VIA.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%VIA.DeviceDesc%
+
+[HDA_VIA.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_VIA.AddReg
+
+[HDA_VIA.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_VIA.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_VIA.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_VIA.Topo
+
+[HDA_VIA.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - VMware
+;;============================================================================
+[HDA_VMware]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_VMware.AddReg
+
+[HDA_VMware.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_VMware.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_VMware.Topo
+
+[HDA_VMware.Wave]
+AddReg=HDA_VMware.Wave.AddReg
+[HDA_VMware.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%VMware.Wave.szPname%
+
+[HDA_VMware.Topo]
+AddReg=HDA_VMware.Topo.AddReg
+[HDA_VMware.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%VMware.Topology.szPname%
+
+[HDA_VMware.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%VMware.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%VMware.DeviceDesc%
+
+[HDA_VMware.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_VMware.AddReg
+
+[HDA_VMware.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_VMware.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_VMware.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_VMware.Topo
+
+[HDA_VMware.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - ULi
+;;============================================================================
+[HDA_ULi]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_ULi.AddReg
+
+[HDA_ULi.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_ULi.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_ULi.Topo
+
+[HDA_ULi.Wave]
+AddReg=HDA_ULi.Wave.AddReg
+[HDA_ULi.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%ULi.Wave.szPname%
+
+[HDA_ULi.Topo]
+AddReg=HDA_ULi.Topo.AddReg
+[HDA_ULi.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%ULi.Topology.szPname%
+
+[HDA_ULi.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%ULi.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%ULi.DeviceDesc%
+
+[HDA_ULi.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_ULi.AddReg
+
+[HDA_ULi.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_ULi.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_ULi.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_ULi.Topo
+
+[HDA_ULi.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Driver Installation Sections - Generic / Fallback
+;;============================================================================
+[HDA_Generic]
+AlsoInstall=KS.Registration(ks.inf),WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_Generic.AddReg
+
+[HDA_Generic.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Generic.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Generic.Topo
+
+[HDA_Generic.Wave]
+AddReg=HDA_Generic.Wave.AddReg
+[HDA_Generic.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Generic.Wave.szPname%
+
+[HDA_Generic.Topo]
+AddReg=HDA_Generic.Topo.AddReg
+[HDA_Generic.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Generic.Topology.szPname%
+
+[HDA_Generic.AddReg]
+HKR,Drivers\wave\wdmaud.drv,Description,,%Generic.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%Generic.DeviceDesc%
+
+[HDA_Generic.NT]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration, WDMAUDIO.Registration
+CopyFiles=HDA.CopyList
+AddReg=WDM_HDA.AddReg, HDA_Generic.AddReg
+
+[HDA_Generic.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,HDA_Generic.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,HDA_Generic.Topo
+AddInterface=%KSCATEGORY_TOPOLOGY%,%KSNAME_Topology%,HDA_Generic.Topo
+
+[HDA_Generic.NT.Services]
+AddService = HDA, 0x00000002, sndblst_Service_Inst
+
+;;============================================================================
+;; Common Registry Entries
+;;============================================================================
 [WDM_HDA.AddReg]
 HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
 HKR,,Driver,,HDA.SYS
@@ -99,9 +620,7 @@ HKR,Drivers\wave\wdmaud.drv, Driver,,wdmaud.drv
 HKR,Drivers\midi\wdmaud.drv, Driver,,wdmaud.drv
 HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
 
-HKR,Drivers\wave\wdmaud.drv,Description,,%*WDM_HDA.DeviceDesc%
 HKR,Drivers\midi\wdmaud.drv,Description,,%WDM_MIDI%
-HKR,Drivers\mixer\wdmaud.drv,Description,,%*WDM_HDA.DeviceDesc%
 
 ;; Configuration Options
 ;; Edit the last number to 0 or 1 to switch options on and off
@@ -127,33 +646,9 @@ HDA.CopyList      = 10,system32\drivers ; %SystemRoot%\system32\drivers
 [HDA.CopyList]
 HDA.sys
 
-
-;;**************** NT Install ****************
-
-[STUB_DEVICE.NT]
-[STUB_DEVICE.NT.SERVICES]
-AddService=,0x2
-
-[WDM_HDA.NT]
-Include=ks.inf, wdmaudio.inf
-Needs=KS.Registration, WDMAUDIO.Registration
-CopyFiles=HDA.CopyList
-AddReg=WDM_HDA.AddReg
-
-[WDM_HDA.NT.Interfaces]
-AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,WDM_HDA.Interface.Wave
-AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,WDM_HDA.Interface.Topology
-;;AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_RENDER%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_UART%,WDM.Interface.UART
-;;AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_FMSynth%,WDM.Interface.FMSynth
-;;AddInterface=%KSCATEGORY_RENDER%,%KSNAME_FMSynth%,WDM.Interface.FMSynth
-
-[WDM_HDA.NT.Services]
-AddService = HDA,    0x00000002, sndblst_Service_Inst
-
+;;============================================================================
+;; NT Service Installation
+;;============================================================================
 [sndblst_Service_Inst]
 DisplayName    = %sndblst.SvcDesc%
 ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
@@ -161,33 +656,73 @@ StartType      = 3                  ; SERVICE_DEMAND_START
 ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
 ServiceBinary  = %10%\system32\drivers\HDA.sys
 
+;;============================================================================
+;; Strings
+;;============================================================================
 [Strings]
 MFG="DrewHoffman"
-MfgName="Sirius Cybernetics"
 DiskDescription="HD Audio WDM Driver Package"
-*WDM_HDA.DeviceDesc="HD Audio Controller (WDM)"
-*CTL0051.DeviceDesc = "WDM Sample Driver for 3D Stereo Enhancement Technology (inactive)"
-*CTL7FFF.DeviceDesc = "WDM Sample Driver for Plug and Play Device (Reserved) (inactive)"
+
+MfgCreative="Creative Labs"
+MfgIntel="Intel Corporation"
+MfgAMD="AMD / ATI"
+MfgNVIDIA="NVIDIA Corporation"
+MfgVIA="VIA Technologies"
+MfgVMware="VMware"
+MfgULi="ULi Electronics"
+MfgGeneric="Sirius Cybernetics"
+
+Creative.DeviceDesc="Creative Sound Blaster HD Audio"
+Creative.GenericDesc="Creative Sound Blaster HD Audio (Generic)"
+Creative.Wave.szPname="Creative Sound Blaster HD Audio"
+Creative.Topology.szPname="Creative Sound Blaster HD Audio"
+
+Intel.DeviceDesc="Intel HD Audio Controller"
+Intel.GenericDesc="Intel HD Audio (Generic)"
+Intel.Wave.szPname="Intel HD Audio"
+Intel.Topology.szPname="Intel HD Audio"
+
+AMD.DeviceDesc="AMD High Definition Audio Controller"
+AMD.GenericDesc="AMD HD Audio (Generic)"
+AMD.Wave.szPname="AMD HD Audio"
+AMD.Topology.szPname="AMD HD Audio"
+
+NVIDIA.DeviceDesc="NVIDIA High Definition Audio"
+NVIDIA.GenericDesc="NVIDIA HD Audio (Generic)"
+NVIDIA.Wave.szPname="NVIDIA HD Audio"
+NVIDIA.Topology.szPname="NVIDIA HD Audio"
+
+VIA.DeviceDesc="VIA High Definition Audio Controller"
+VIA.GenericDesc="VIA HD Audio (Generic)"
+VIA.Wave.szPname="VIA HD Audio"
+VIA.Topology.szPname="VIA HD Audio"
+
+VMware.DeviceDesc="VMware HD Audio Controller"
+VMware.Wave.szPname="VMware HD Audio"
+VMware.Topology.szPname="VMware HD Audio"
+
+ULi.DeviceDesc="ULi HD Audio Controller"
+ULi.GenericDesc="ULi HD Audio (Generic)"
+ULi.Wave.szPname="ULi HD Audio"
+ULi.Topology.szPname="ULi HD Audio"
+
+Generic.DeviceDesc="HD Audio Controller (WDM)"
+Generic.Wave.szPname="HD Audio"
+Generic.Topology.szPname="HD Audio"
+
+*CTL0051.DeviceDesc="WDM Sample Driver for 3D Stereo Enhancement Technology (inactive)"
+*CTL7FFF.DeviceDesc="WDM Sample Driver for Plug and Play Device (Reserved) (inactive)"
 SBAWE_Virtual_Mpu.DeviceDesc="WDM Sample Driver for MPU401 Emulation (inactive)"
-WDM_HDA.Wave.szPname="HD Audio"
-WDM_HDA.Topology.szPname="HD Audio"
 
 MediaCategories="SYSTEM\CurrentControlSet\Control\MediaCategories"
 WDM_MIDI="WDM-based Device"
 
-;;TODO: change these GUIDs or this will conflict with an actual Sound Blaster in the PC
-
-Proxy.CLSID=        "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
 KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
 KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
 KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_TOPOLOGY="{DDA54A40-1E4C-11D1-A050-405705C10000}"
 KSNAME_Wave="Wave"
-KSNAME_UART="UART"
-KSNAME_FMSynth="FMSynth"
 KSNAME_Topology="Topology"
 
-WDM.UART.szPname="HDA MPU-401"
-WDM.FMSynth.szPname="HDA FM Synthesizer"
-
-sndblst.SvcDesc = "HD Audio Driver Service"
-
+sndblst.SvcDesc="HD Audio Driver Service"

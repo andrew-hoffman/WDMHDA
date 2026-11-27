@@ -48,7 +48,14 @@ struct IAdapterCommon;
  */
 typedef ULONG (*HDA_SEND_VERB_FUNC)(IAdapterCommon* adapter, ULONG codec, ULONG node, ULONG verb, ULONG command);
 
-#define MAX_OUTPUT_PATHS 8
+#define MAX_OUTPUT_PATHS 16
+
+typedef enum _HDA_OUTPUT_MODE {
+    HDA_OUTPUT_MODE_NONE = 0,
+    HDA_OUTPUT_MODE_SPEAKER,
+    HDA_OUTPUT_MODE_HEADPHONE,
+    HDA_OUTPUT_MODE_DOCK
+} HDA_OUTPUT_MODE;
 
 typedef struct
 {	
@@ -224,7 +231,7 @@ private:
     BOOLEAN useSpdif;                   // Use SPDIF flag
     BOOLEAN useAltOut;                  // Use alternate output flag
     
-    ULONG selected_output_node;
+    HDA_OUTPUT_MODE selected_output_mode;
     ULONG length_of_node_path;
 
     ULONG afg_node_sample_capabilities;
@@ -240,33 +247,26 @@ private:
 	// Saved path nodes
 	
 	
-    ULONG speaker_node_number; // Speaker will be muted when headphones are plugged in
-    ULONG headphone_node_number; // Line Out(s) will not be
-	ULONG lineout_node_number;
-	ULONG dock_lineout_node_number;
+    ULONG speaker_nodes[MAX_OUTPUT_PATHS]; // Speakers will be muted when headphones are plugged in
+    ULONG speaker_count;
+    ULONG headphone_nodes[MAX_OUTPUT_PATHS];
+    ULONG headphone_count;
+    ULONG lineout_nodes[MAX_OUTPUT_PATHS];
+    ULONG lineout_count;
+    ULONG dock_lineout_nodes[MAX_OUTPUT_PATHS];
+    ULONG dock_lineout_count;
 	
 	LONG HpPollingEnabled;
     LONG InShutdown;
 
-    void ForcePinOut(ULONG pinNid, BOOLEAN enable);
     void ForceEapd(ULONG pinNid, BOOLEAN enable);
 
-    void SwitchOutput(BOOLEAN hpPresent);
-    void UnmutePinOutAmp(ULONG pinNid);
-    void MutePinOutAmp(ULONG pinNid);   
-    void UnmutePinInAmp(ULONG pinNid, UCHAR inIndex);
-    void MutePinInAmp(ULONG pinNid, UCHAR inIndex); 
-    void ForceConnSel(ULONG nid, UCHAR sel);
-    //void WakeSpeakerPath();
     ULONG ReadCoef(USHORT node, USHORT idx);
     void WriteCoef(USHORT node, USHORT idx, USHORT val);
     void ApplyAlc292HeadphoneMode();
 	BOOLEAN IsDockLineoutPresent();
     void SetOutAmpLR(ULONG nid, BOOLEAN mute, UCHAR gain);
     void ApplyEeeInit();
-    //void ForcePlaybackChain();
-    void UnmuteInAmp(ULONG nid, UCHAR inIndex, UCHAR gain);
-    void UnmuteOutAmp(ULONG nid, UCHAR gain);
 
 
 public:
@@ -279,8 +279,6 @@ public:
         ULONG Verb,
         ULONG Payload
     );
-
-	STDMETHODIMP_(ULONG) SendVerbLogged(ULONG node, ULONG verb, ULONG command, const char* tag);
 
 	STDMETHODIMP_(NTSTATUS) hda_initialize_audio_function_group(ULONG afg_node_number); 
 	STDMETHODIMP_(UCHAR) hda_get_node_type(ULONG node);
@@ -295,7 +293,7 @@ public:
 	STDMETHODIMP_(void) hda_check_headphone_connection_change(void);
 
 	STDMETHODIMP_(void) hda_set_volume(ULONG volume, UCHAR ch, BOOLEAN mute);
-	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute);
+	STDMETHODIMP_(void) hda_set_node_gain(ULONG node, ULONG node_type, ULONG capabilities, ULONG gain, UCHAR ch, BOOLEAN mute, UCHAR index = 0);
 
 	STDMETHODIMP_(UCHAR) hda_is_supported_channel_size(UCHAR size);
 	STDMETHODIMP_(UCHAR) hda_is_supported_sample_rate(ULONG sample_rate);

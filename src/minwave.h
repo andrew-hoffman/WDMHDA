@@ -134,6 +134,8 @@ private:
 	USHORT						FormatBitDepth;	  //sample bit depth (only 8 or 16 bits valid)
 	USHORT						FormatChannels;   //number of channels (only 1-2 valid yet)
 	USHORT						BdlEntries;
+	ULONG						BdlBufferSize;
+	ULONG						BdlNotificationInterval;
 
     KSSTATE                     State;          // Stop, pause, run.
 

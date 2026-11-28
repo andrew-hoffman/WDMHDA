@@ -178,7 +178,8 @@ public:
 		return m_RealDmaChannel->BufferSize();
 	}
 	STDMETHODIMP_(void) SetBufferSize(ULONG BufferSize) {
-		m_RequestedBufferSize = BufferSize;
+		DbgPrint("MyDMA: Buffer resize fom %lu to %lu)\n", m_RequestedBufferSize, BufferSize);
+		m_RequestedBufferSize = BufferSize;	
 		m_RealDmaChannel->SetBufferSize(BufferSize);
 	}
     STDMETHODIMP_(PHYSICAL_ADDRESS) PhysicalAddress() {

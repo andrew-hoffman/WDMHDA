@@ -1230,6 +1230,8 @@ Init
     FormatChannels		= 0;
     FormatBitDepth		= 0;
 	BdlEntries			= 0;	
+	BdlBufferSize		= 0;
+	BdlNotificationInterval = 0;
 
 	// Default to 10 ms notification interval in case SetNotificationFreq
 	// is not called before SetFormat / stream start.
@@ -1282,10 +1284,15 @@ SetNotificationFreq
 	DOUT(DBG_ERROR, ("target chunk bytes %d", target_chunk_bytes));
 
 	//write frame size to out pointer
+	//Portcls may (sometimes?) resize the buffer
+	//to an exact multiple of FramingSize 
     *FramingSize = target_chunk_bytes;
 	
 	//Alignment to actual chunk sizes is not needed. the notification method can deal with
 	//up to 2x slop on the actual vs requested rate of interrupts
+	
+	//Invalidate any existing descriptor
+	StreamDescriptorValid = FALSE;
 
 	//we could recalculate the actual interval in terms of our aligned chunk sizes but it is not used
     return Miniport->NotificationInterval;
@@ -1352,6 +1359,8 @@ SetFormat
 						);
 
 				if (BdlEntries) {				
+					BdlBufferSize = DmaChannel->BufferSize();
+					BdlNotificationInterval = Miniport->NotificationInterval;
 
 					ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
 						waveFormat->nSamplesPerSec,
@@ -1471,6 +1480,28 @@ CMiniportWaveCyclicStreamHDA::SetupStreamDescriptor()
 
     if (StreamDescriptorValid) {
         return STATUS_SUCCESS;
+    }
+
+    // Rebuild the BDL if PortCls changed DmaChannel->BufferSize() or
+    // NotificationInterval after SetFormat() ran in Init().
+    if (!BdlEntries ||
+        BdlBufferSize != DmaChannel->BufferSize() ||
+        BdlNotificationInterval != Miniport->NotificationInterval)
+    {
+        BdlEntries = Miniport->AdapterCommon->hda_setup_bdl(
+            DmaChannel,
+            isCapture,
+            FormatSampleRate,
+            FormatBitDepth,
+            FormatChannels,
+            Miniport->NotificationInterval);
+
+        if (!BdlEntries) {
+            return STATUS_UNSUCCESSFUL;
+        }
+
+        BdlBufferSize = DmaChannel->BufferSize();
+        BdlNotificationInterval = Miniport->NotificationInterval;
     }
 
     NTSTATUS ntStatus = Miniport->AdapterCommon->ProgramDataFormat(

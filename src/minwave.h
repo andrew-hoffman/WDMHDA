@@ -145,6 +145,8 @@ private:
     BOOLEAN                     RestoreInputMixer;  // Restore input mixer.
     UCHAR                       InputMixerLeft; // Cache for left input mixer.
 
+    NTSTATUS SetupStreamDescriptor();
+
 public:
     /*************************************************************************
      * The following two macros are from STDUNK.H.  DECLARE_STD_UNKNOWN()

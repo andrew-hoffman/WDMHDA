@@ -1230,6 +1230,11 @@ Init
     FormatChannels		= 0;
     FormatBitDepth		= 0;
 	BdlEntries			= 0;	
+
+	// Default to 10 ms notification interval in case SetNotificationFreq
+	// is not called before SetFormat / stream start.
+	ULONG framingSize = 0;
+	SetNotificationFreq(10, &framingSize);
 	
 	/* even if this format setting fails,
 	 we need to return success from this function
@@ -1455,6 +1460,41 @@ Return:
 #pragma code_seg("PAGE")
 
 /*****************************************************************************
+ * CMiniportWaveCyclicStreamHDA::SetupStreamDescriptor()
+ *****************************************************************************
+ * Programs the data format and stream descriptor for the hardware stream.
+ */
+NTSTATUS
+CMiniportWaveCyclicStreamHDA::SetupStreamDescriptor()
+{
+    PAGED_CODE();
+
+    if (StreamDescriptorValid) {
+        return STATUS_SUCCESS;
+    }
+
+    NTSTATUS ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
+        FormatSampleRate,
+        FormatChannels,
+        FormatBitDepth,
+        isCapture);
+
+    if (!NT_SUCCESS(ntStatus)) {
+        return ntStatus;
+    }
+
+    ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
+        DmaChannel, BdlEntries, isCapture);
+
+    if (!NT_SUCCESS(ntStatus)) {
+        return ntStatus;
+    }
+
+    StreamDescriptorValid = TRUE;
+    return STATUS_SUCCESS;
+}
+
+/*****************************************************************************
  * CMiniportWaveCyclicStreamHDA::SetState()
  *****************************************************************************
  * Sets the state of the channel
@@ -1536,26 +1576,12 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
                         break;
                     }
 					
-					//reset the data format
+					//reset the data format and descriptor
 					//descriptor loses this on a reset
-					ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
-						FormatSampleRate,
-						FormatChannels,
-						FormatBitDepth,
-						isCapture);
-
-					if (!NT_SUCCESS(ntStatus)) {
-                        break;
-                    }
-
-                    ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
-						DmaChannel,	BdlEntries,	isCapture);
-
+                    ntStatus = SetupStreamDescriptor();
                     if (!NT_SUCCESS(ntStatus)) {
                         break;
                     }
-
-					StreamDescriptorValid = TRUE;
 
                 } else {
                     // Stop DMA but keep the programmed descriptor
@@ -1584,28 +1610,10 @@ CMiniportWaveCyclicStreamHDA::SetState (IN KSSTATE NewState){
 
 			// create stream descriptor
 			// if it was invalidated by a change while in Pause
-			
-			if (!StreamDescriptorValid) {
-
-				ntStatus = Miniport->AdapterCommon->ProgramDataFormat(
-					FormatSampleRate,
-					FormatChannels,
-					FormatBitDepth,
-					isCapture);
-
-				if (!NT_SUCCESS(ntStatus)) {
-                    break;
-                }
-
-				ntStatus = Miniport->AdapterCommon->hda_setup_stream_descriptor(
-					DmaChannel, BdlEntries, isCapture);
-
-                if (!NT_SUCCESS(ntStatus)) {
-                    break;
-                }
-
-				StreamDescriptorValid = TRUE;
-			}
+			ntStatus = SetupStreamDescriptor();
+            if (!NT_SUCCESS(ntStatus)) {
+                break;
+            }
 
 			// Start DMA.
 			Miniport->AdapterCommon->hda_start_sound(isCapture);
